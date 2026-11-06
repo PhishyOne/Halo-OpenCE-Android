@@ -249,6 +249,7 @@ symbols in this file:
 
 #include "cseries.h"
 #include "game_modes.h" /* port: port/linux/game/game_modes.c */
+#include "port_config.h" /* LAN-only unicast discovery replies */
 #include "network_chat.h" /* port: port/linux/game/network_chat.c */
 #include "bungie_net/common/message_header.h"
 #include "bungie_net/network/transport.h"
@@ -1736,14 +1737,17 @@ static boolean network_game_server_handle_message_client_broadcast_game_search(
 	struct message_client_broadcast_game_search *client_message)
 {
 	boolean result = TRUE;
-	/* port: the advertisement is broadcast (to every internet play peer
-	too): one each so often answers every machine searching, and a flood of
-	searches no more. A searcher not on the client port hears no broadcast,
-	so it is answered directly every time. */
+	/* The broadcast advertisement is throttled to once per interval.
+	Searches from nonstandard ports need a direct reply. LAN-only mode also
+	answers the standard client port directly, without changing online play. */
 	static unsigned long last_advertised_time = 0;
 	unsigned long now = system_milliseconds();
 	boolean broadcast_due = !last_advertised_time || now - last_advertised_time >= GAME_ADVERTISEMENT_INTERVAL;
-	boolean answer_directly = source_address && source_address->port != NETWORK_GAME_CLIENT_PORT;
+	/* When internet play is disabled, reply directly as well as broadcasting.
+	Android hotspots sometimes deliver a unicast discovery request but drop
+	the broadcast reply to the normal client port (UDP 5151). */
+	boolean off_client_port = source_address && source_address->port != NETWORK_GAME_CLIENT_PORT;
+	boolean answer_directly = source_address && (off_client_port || !config_boolean("network.online"));
 
 	match_assert(
 		"c:\\halo\\SOURCE\\networking\\network_server_message_handler.c",
@@ -1755,7 +1759,9 @@ static boolean network_game_server_handle_message_client_broadcast_game_search(
 
 		/* (the time taken only by a search answered; port: one off the client
 		port is always answered) */
-		if (game && !broadcast_due && !answer_directly)
+		/* LAN-only direct replies use the same advertisement rate limit.
+		   Off-port clients retain their original immediate response. */
+		if (game && !broadcast_due && !off_client_port)
 			return TRUE;
 		if (game)
 		{

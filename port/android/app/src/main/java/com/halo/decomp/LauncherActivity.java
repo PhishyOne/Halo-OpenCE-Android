@@ -10,12 +10,21 @@ import android.os.Looper;
 import android.os.ParcelFileDescriptor;
 import android.provider.Settings;
 import android.util.TypedValue;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
+
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.util.Enumeration;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -53,7 +62,13 @@ public class LauncherActivity extends Activity {
         passOnHardwareId();
         passOnInvite(getIntent());
         if (haveData()) {
-            startGame();
+            // Opening an existing internet invite must not stall at LAN setup.
+            Intent intent = getIntent();
+            if (intent != null && Intent.ACTION_VIEW.equals(intent.getAction()) &&
+                intent.getData() != null)
+                startGame();
+            else
+                buildLanInterface();
             return;
         }
         buildInterface();
@@ -125,6 +140,112 @@ public class LauncherActivity extends Activity {
             getResources().getDisplayMetrics());
     }
 
+    /** Hints only: mobile data or a VPN can also have a private address. */
+    private String possibleLanAddresses() {
+        StringBuilder addresses = new StringBuilder();
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces != null && interfaces.hasMoreElements()) {
+                NetworkInterface network = interfaces.nextElement();
+                String name = network.getName();
+                if (network.isLoopback() || !network.isUp() ||
+                    !(name.startsWith("wlan") || name.startsWith("swlan") ||
+                      name.startsWith("ap") || name.startsWith("eth")))
+                    continue;
+                Enumeration<InetAddress> ips = network.getInetAddresses();
+                while (ips.hasMoreElements()) {
+                    InetAddress ip = ips.nextElement();
+                    if (ip instanceof Inet4Address && !ip.isLoopbackAddress()) {
+                        if (addresses.length() != 0)
+                            addresses.append("  ");
+                        addresses.append(name).append(": ").append(ip.getHostAddress());
+                    }
+                }
+            }
+        } catch (java.net.SocketException e) {
+            // Android does not expose every hotspot interface on every phone.
+        }
+        return addresses.length() == 0
+            ? "Check Wi-Fi or hotspot settings to find each phone's IP address."
+            : addresses.toString();
+    }
+
+    private TextView lanText(String message, int size) {
+        TextView text = new TextView(this);
+        text.setText(message);
+        text.setTextColor(Color.rgb(225, 230, 235));
+        text.setTextSize(TypedValue.COMPLEX_UNIT_SP, size);
+        text.setPadding(0, 0, 0, dp(7));
+        return text;
+    }
+
+    /** A phone-friendly System Link screen; no external text editor required. */
+    private void buildLanInterface() {
+        LanConfig.Settings settings = new LanConfig.Settings();
+        String warning = "";
+        try {
+            settings = LanConfig.load(new File(dataRoot, "config.toml"));
+        } catch (java.io.IOException e) {
+            warning = "Could not read the current settings: " + e.getMessage();
+        }
+
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(dp(22), dp(16), dp(22), dp(16));
+        layout.setBackgroundColor(Color.rgb(12, 16, 20));
+        scroll.addView(layout);
+
+        layout.addView(lanText("Halo • System Link", 23));
+        layout.addView(lanText("Configure local multiplayer, then start Halo. "
+            + "Both phones need the same build. Leave an IP blank to use automatic detection.", 14));
+        layout.addView(lanText("Possible local IP: " + possibleLanAddresses(), 13));
+
+        layout.addView(lanText("This phone's LAN IP (optional)", 15));
+        EditText local = new EditText(this);
+        local.setSingleLine(true);
+        local.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        local.setHint("Automatic");
+        local.setText(settings.local);
+        layout.addView(local);
+
+        layout.addView(lanText("Other phone's LAN IP (optional)", 15));
+        EditText peer = new EditText(this);
+        peer.setSingleLine(true);
+        peer.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        peer.setHint("Example: 10.18.179.225");
+        peer.setText(settings.peer);
+        layout.addView(peer);
+
+        CheckBox offline = new CheckBox(this);
+        offline.setText("LAN only (disable internet matchmaking)");
+        offline.setTextColor(Color.WHITE);
+        offline.setChecked(settings.lanOnly);
+        layout.addView(offline);
+
+        TextView status = lanText(warning, 13);
+        status.setTextColor(Color.rgb(255, 170, 120));
+        layout.addView(status);
+        layout.addView(lanText("Ports: host UDP/TCP 5150; client UDP 5151. "
+            + "Use each phone's current hotspot IP. This screen saves the values "
+            + "before Halo initializes its sockets.", 13));
+
+        Button play = new Button(this);
+        play.setText("Save LAN settings & Play");
+        play.setOnClickListener(view -> {
+            try {
+                LanConfig.save(new File(dataRoot, "config.toml"),
+                    local.getText().toString(), peer.getText().toString(), offline.isChecked());
+            } catch (java.io.IOException e) {
+                status.setText("Could not save: " + e.getMessage());
+                return;
+            }
+            startGame();
+        });
+        layout.addView(play);
+        setContentView(scroll);
+    }
+
     private void buildInterface() {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
@@ -186,8 +307,10 @@ public class LauncherActivity extends Activity {
     protected void onResume() {
         super.onResume();
         // data pushed with adb while this screen was open
-        if (pick != null && pick.isEnabled() && haveData())
-            startGame();
+        if (pick != null && pick.isEnabled() && haveData()) {
+            pick = null;
+            buildLanInterface();
+        }
     }
 
     @Override
@@ -232,7 +355,8 @@ public class LauncherActivity extends Activity {
             }
             handler.post(() -> {
                 if (haveData()) {
-                    startGame();
+                    pick = null;
+                    buildLanInterface();
                 } else {
                     fail("The extraction finished but maps/ui.map is missing.");
                 }
