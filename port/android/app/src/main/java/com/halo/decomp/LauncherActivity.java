@@ -1,6 +1,8 @@
 package com.halo.decomp;
 
 import android.app.Activity;
+import android.app.ActivityManager;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
@@ -62,13 +64,7 @@ public class LauncherActivity extends Activity {
         passOnHardwareId();
         passOnInvite(getIntent());
         if (haveData()) {
-            // Opening an existing internet invite must not stall at LAN setup.
-            Intent intent = getIntent();
-            if (intent != null && Intent.ACTION_VIEW.equals(intent.getAction()) &&
-                intent.getData() != null)
-                startGame();
-            else
-                buildLanInterface();
+            buildLanInterface();
             return;
         }
         buildInterface();
@@ -170,6 +166,31 @@ public class LauncherActivity extends Activity {
             : addresses.toString();
     }
 
+    /** A halo://join invite needs online play; keep it pending through import. */
+    private boolean hasInternetInvite() {
+        Intent intent = getIntent();
+        return intent != null && Intent.ACTION_VIEW.equals(intent.getAction()) &&
+            intent.getData() != null && "halo".equals(intent.getData().getScheme()) &&
+            "join".equals(intent.getData().getHost());
+    }
+
+    /** Checks only processes belonging to this application, not other apps. */
+    private boolean gameProcessRunning() {
+        ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+        if (manager == null)
+            return false;
+        java.util.List<ActivityManager.RunningAppProcessInfo> processes = manager.getRunningAppProcesses();
+        if (processes == null)
+            return false;
+        String gameProcess = getPackageName() + ":game";
+        int ownUid = android.os.Process.myUid();
+        for (ActivityManager.RunningAppProcessInfo process : processes) {
+            if (process.uid == ownUid && gameProcess.equals(process.processName))
+                return true;
+        }
+        return false;
+    }
+
     private TextView lanText(String message, int size) {
         TextView text = new TextView(this);
         text.setText(message);
@@ -220,8 +241,13 @@ public class LauncherActivity extends Activity {
         CheckBox offline = new CheckBox(this);
         offline.setText("LAN only (disable internet matchmaking)");
         offline.setTextColor(Color.WHITE);
-        offline.setChecked(settings.lanOnly);
+        final boolean invitePending = hasInternetInvite();
+        offline.setChecked(invitePending ? false : settings.lanOnly);
         layout.addView(offline);
+
+        if (invitePending)
+            layout.addView(lanText("Internet invite received. LAN-only has been turned off for this launch. "
+                + "Press Save & Play to join the invitation.", 14));
 
         TextView status = lanText(warning, 13);
         status.setTextColor(Color.rgb(255, 170, 120));
@@ -230,9 +256,26 @@ public class LauncherActivity extends Activity {
             + "Use each phone's current hotspot IP. This screen saves the values "
             + "before Halo initializes its sockets.", 13));
 
+        Button appSettings = new Button(this);
+        appSettings.setText("Open Android App Settings");
+        appSettings.setVisibility(View.GONE);
+        appSettings.setOnClickListener(next -> startActivity(
+            new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:" + getPackageName()))));
+
         Button play = new Button(this);
         play.setText("Save LAN settings & Play");
         play.setOnClickListener(view -> {
+            if (invitePending && offline.isChecked()) {
+                status.setText("This invite needs internet play. Uncheck LAN only and save again.");
+                return;
+            }
+            if (gameProcessRunning()) {
+                status.setText("Halo is still running with its previous network settings. "
+                    + "Force-stop Halo in Android App Settings, then reopen to save and apply LAN settings.");
+                appSettings.setVisibility(View.VISIBLE);
+                return;
+            }
             try {
                 LanConfig.save(new File(dataRoot, "config.toml"),
                     local.getText().toString(), peer.getText().toString(), offline.isChecked());
@@ -243,6 +286,7 @@ public class LauncherActivity extends Activity {
             startGame();
         });
         layout.addView(play);
+        layout.addView(appSettings);
         setContentView(scroll);
     }
 

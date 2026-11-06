@@ -14,7 +14,7 @@ No new permissions, internet services, game assets, or extra native libraries ar
 
 Use the **same candidate APK** on both phones. The APK does not include Halo game data; each phone must import its own lawful Xbox Halo disc image after uninstalling the differently signed stock APK.
 
-1. Connect both phones via one phone's hotspot; verify current IPs under Android Wi-Fi/hotspot settings. The observed 2026-11-04 IPs were hotspot `10.18.179.225` and client `10.18.179.126`, but leases can change.
+1. Force-stop Halo on both phones **before changing LAN settings**, then connect both phones via one phone's hotspot; verify current IPs under Android Wi-Fi/hotspot settings. The observed 2026-11-04 IPs were hotspot `10.18.179.225` and client `10.18.179.126`, but leases can change.
 2. Open the new **System Link** launcher on both phones. Check **LAN only** on both.
 3. Leave **This phone's LAN IP** empty for auto detection first.
 4. On the joining phone, enter the host phone's current IP in **Other phone's LAN IP**; the host may leave peer empty.
@@ -23,6 +23,8 @@ Use the **same candidate APK** on both phones. The APK does not include Halo gam
 7. Repeat with the roles reversed, preserving the same hotspot ownership. Keep the games foregrounded.
 
 If discovery still fails, upload both devices' `debug.txt` files and the effective `[network]` sections, plus the current IP addresses. An earlier direct UDP test to port 5150 succeeded, but did not verify broadcast or the reverse discovery reply on UDP 5151. A device-to-device match lasting at least several minutes is required before claiming success.
+
+**Lifecycle and invites:** The game reads its network settings on startup. If the launcher detects a running `:game` process before Save, it refuses to overwrite settings or start a potentially stale session, and offers Android App Settings. Use **Force stop** there, then reopen Halo. An incoming `halo://join/...` invite stays pending through first-time disc import; the launcher unchecks LAN-only to permit the internet invite, and requires **Save & Play**. If a previously running instance receives an invite, stop/relaunch it to apply the online setting. A source review and physical-device checks must verify this behavior; no Android runtime success is claimed.
 
 ## Build
 
