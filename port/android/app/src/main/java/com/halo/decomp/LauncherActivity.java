@@ -71,26 +71,83 @@ public class LauncherActivity extends Activity {
     }
 
     /**
-     * An internet play invite link the app was opened with: the game
-     * (port/linux/src/p2p.c) picks it up from join_link.txt, whether it is
-     * starting now or already running.
+     * Stage an internet invite for the launcher, not for native P2P yet.
+     * A running :game process must not consume an invite before the player
+     * can force-stop it and change network.online.
      */
     private void passOnInvite(Intent intent) {
-        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction()) || intent.getData() == null
-            || dataRoot == null)
+        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction()) ||
+            intent.getData() == null || dataRoot == null)
             return;
-        // written whole under another name, then renamed: the game never
-        // reads it half written
-        File partial = new File(dataRoot, "join_link.txt.tmp");
-        try (OutputStream out = new FileOutputStream(partial)) {
-            out.write(intent.getData().toString().getBytes("UTF-8"));
+        String link = intent.getData().toString();
+        if (!validInvite(link))
+            return;
+        try {
+            atomicWrite(new File(dataRoot, "pending_invite.txt"),
+                link.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         } catch (java.io.IOException e) {
-            // the link is lost; the player can copy it instead
-            partial.delete();
-            return;
+            // Do not touch an older valid pending invite if staging fails.
+            inviteError = "Unable to save the new invitation. Retry opening its link.";
         }
-        if (!partial.renameTo(new File(dataRoot, "join_link.txt")))
-            partial.delete();
+    }
+
+    private String inviteError;
+
+    private static boolean validInvite(String link) {
+        return link != null && link.matches("halo://join/[a-fA-F0-9]{64}");
+    }
+
+    /** Atomic replacement without overwriting existing state on write failure. */
+    private static void atomicWrite(File destination, byte[] data) throws java.io.IOException {
+        File temporary = new File(destination.getParentFile(), destination.getName() + ".tmp");
+        try {
+            try (OutputStream out = new FileOutputStream(temporary)) {
+                out.write(data);
+            }
+            try {
+                java.nio.file.Files.move(temporary.toPath(), destination.toPath(),
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                java.nio.file.Files.move(temporary.toPath(), destination.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            java.nio.file.Files.deleteIfExists(temporary.toPath());
+        }
+    }
+
+    /** File deliberately unreadable by Halo's native join_link.txt polling. */
+    private String pendingInvite() {
+        if (dataRoot == null)
+            return null;
+        File pending = new File(dataRoot, "pending_invite.txt");
+        if (!pending.isFile() || pending.length() > 256)
+            return null;
+        try {
+            String link = new String(java.nio.file.Files.readAllBytes(pending.toPath()),
+                java.nio.charset.StandardCharsets.UTF_8);
+            return validInvite(link) ? link : null;
+        } catch (java.io.IOException e) {
+            return null;
+        }
+    }
+
+    /** Only publish the pending invite after saving online mode and verifying
+     * that the previous game process is no longer running. */
+    private void publishPendingInvite() throws java.io.IOException {
+        File pending = new File(dataRoot, "pending_invite.txt");
+        if (pendingInvite() == null)
+            throw new java.io.IOException("The pending invitation is no longer valid.");
+        File ready = new File(dataRoot, "join_link.txt");
+        try {
+            java.nio.file.Files.move(pending.toPath(), ready.toPath(),
+                java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+            java.nio.file.Files.move(pending.toPath(), ready.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     /**
@@ -166,29 +223,31 @@ public class LauncherActivity extends Activity {
             : addresses.toString();
     }
 
-    /** A halo://join invite needs online play; keep it pending through import. */
+    /** The file remains after an Android Force stop/reopen with a MAIN intent. */
     private boolean hasInternetInvite() {
-        Intent intent = getIntent();
-        return intent != null && Intent.ACTION_VIEW.equals(intent.getAction()) &&
-            intent.getData() != null && "halo".equals(intent.getData().getScheme()) &&
-            "join".equals(intent.getData().getHost());
+        return pendingInvite() != null;
     }
 
-    /** Checks only processes belonging to this application, not other apps. */
-    private boolean gameProcessRunning() {
+    /** 0: not running; 1: own game process running; -1: unknown, fail closed. */
+    private int gameProcessStatus() {
         ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
         if (manager == null)
-            return false;
-        java.util.List<ActivityManager.RunningAppProcessInfo> processes = manager.getRunningAppProcesses();
+            return -1;
+        java.util.List<ActivityManager.RunningAppProcessInfo> processes;
+        try {
+            processes = manager.getRunningAppProcesses();
+        } catch (RuntimeException e) {
+            return -1;
+        }
         if (processes == null)
-            return false;
+            return -1;
         String gameProcess = getPackageName() + ":game";
         int ownUid = android.os.Process.myUid();
         for (ActivityManager.RunningAppProcessInfo process : processes) {
-            if (process.uid == ownUid && gameProcess.equals(process.processName))
-                return true;
+            if (process != null && process.uid == ownUid && gameProcess.equals(process.processName))
+                return 1;
         }
-        return false;
+        return 0;
     }
 
     private TextView lanText(String message, int size) {
@@ -249,9 +308,24 @@ public class LauncherActivity extends Activity {
             layout.addView(lanText("Internet invite received. LAN-only has been turned off for this launch. "
                 + "Press Save & Play to join the invitation.", 14));
 
-        TextView status = lanText(warning, 13);
+        TextView status = lanText(inviteError == null ? warning : warning + " " + inviteError, 13);
         status.setTextColor(Color.rgb(255, 170, 120));
         layout.addView(status);
+
+        if (invitePending) {
+            Button discard = new Button(this);
+            discard.setText("Discard internet invitation (use LAN)");
+            discard.setOnClickListener(view -> {
+                try {
+                    java.nio.file.Files.deleteIfExists(new File(dataRoot,
+                        "pending_invite.txt").toPath());
+                    buildLanInterface();
+                } catch (java.io.IOException e) {
+                    status.setText("Couldn't discard the invitation. Check app storage.");
+                }
+            });
+            layout.addView(discard);
+        }
         layout.addView(lanText("Ports: host UDP/TCP 5150; client UDP 5151. "
             + "Use each phone's current hotspot IP. This screen saves the values "
             + "before Halo initializes its sockets.", 13));
@@ -270,17 +344,23 @@ public class LauncherActivity extends Activity {
                 status.setText("This invite needs internet play. Uncheck LAN only and save again.");
                 return;
             }
-            if (gameProcessRunning()) {
-                status.setText("Halo is still running with its previous network settings. "
-                    + "Force-stop Halo in Android App Settings, then reopen to save and apply LAN settings.");
+            int processStatus = gameProcessStatus();
+            if (processStatus != 0) {
+                status.setText(processStatus == 1
+                    ? "Halo's game process is already running. Force-stop Halo in Android "
+                      + "App Settings, then reopen to apply these settings."
+                    : "Android couldn't verify that the old game process is stopped. "
+                      + "Force-stop Halo in Android App Settings, then reopen to try again.");
                 appSettings.setVisibility(View.VISIBLE);
                 return;
             }
             try {
                 LanConfig.save(new File(dataRoot, "config.toml"),
                     local.getText().toString(), peer.getText().toString(), offline.isChecked());
+                if (invitePending)
+                    publishPendingInvite();
             } catch (java.io.IOException e) {
-                status.setText("Could not save: " + e.getMessage());
+                status.setText("Could not apply network settings: " + e.getMessage());
                 return;
             }
             startGame();
