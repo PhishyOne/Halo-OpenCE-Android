@@ -1,6 +1,8 @@
 package com.halo.decomp;
 
 import android.app.Activity;
+import android.app.ActivityManager;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
@@ -10,12 +12,21 @@ import android.os.Looper;
 import android.os.ParcelFileDescriptor;
 import android.provider.Settings;
 import android.util.TypedValue;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
+
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.util.Enumeration;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -53,33 +64,90 @@ public class LauncherActivity extends Activity {
         passOnHardwareId();
         passOnInvite(getIntent());
         if (haveData()) {
-            startGame();
+            buildLanInterface();
             return;
         }
         buildInterface();
     }
 
     /**
-     * An internet play invite link the app was opened with: the game
-     * (port/linux/src/p2p.c) picks it up from join_link.txt, whether it is
-     * starting now or already running.
+     * Stage an internet invite for the launcher, not for native P2P yet.
+     * A running :game process must not consume an invite before the player
+     * can force-stop it and change network.online.
      */
     private void passOnInvite(Intent intent) {
-        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction()) || intent.getData() == null
-            || dataRoot == null)
+        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction()) ||
+            intent.getData() == null || dataRoot == null)
             return;
-        // written whole under another name, then renamed: the game never
-        // reads it half written
-        File partial = new File(dataRoot, "join_link.txt.tmp");
-        try (OutputStream out = new FileOutputStream(partial)) {
-            out.write(intent.getData().toString().getBytes("UTF-8"));
+        String link = intent.getData().toString();
+        if (!validInvite(link))
+            return;
+        try {
+            atomicWrite(new File(dataRoot, "pending_invite.txt"),
+                link.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         } catch (java.io.IOException e) {
-            // the link is lost; the player can copy it instead
-            partial.delete();
-            return;
+            // Do not touch an older valid pending invite if staging fails.
+            inviteError = "Unable to save the new invitation. Retry opening its link.";
         }
-        if (!partial.renameTo(new File(dataRoot, "join_link.txt")))
-            partial.delete();
+    }
+
+    private String inviteError;
+
+    private static boolean validInvite(String link) {
+        return link != null && link.matches("halo://join/[a-fA-F0-9]{64}");
+    }
+
+    /** Atomic replacement without overwriting existing state on write failure. */
+    private static void atomicWrite(File destination, byte[] data) throws java.io.IOException {
+        File temporary = new File(destination.getParentFile(), destination.getName() + ".tmp");
+        try {
+            try (OutputStream out = new FileOutputStream(temporary)) {
+                out.write(data);
+            }
+            try {
+                java.nio.file.Files.move(temporary.toPath(), destination.toPath(),
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                java.nio.file.Files.move(temporary.toPath(), destination.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            java.nio.file.Files.deleteIfExists(temporary.toPath());
+        }
+    }
+
+    /** File deliberately unreadable by Halo's native join_link.txt polling. */
+    private String pendingInvite() {
+        if (dataRoot == null)
+            return null;
+        File pending = new File(dataRoot, "pending_invite.txt");
+        if (!pending.isFile() || pending.length() > 256)
+            return null;
+        try {
+            String link = new String(java.nio.file.Files.readAllBytes(pending.toPath()),
+                java.nio.charset.StandardCharsets.UTF_8);
+            return validInvite(link) ? link : null;
+        } catch (java.io.IOException e) {
+            return null;
+        }
+    }
+
+    /** Only publish the pending invite after saving online mode and verifying
+     * that the previous game process is no longer running. */
+    private void publishPendingInvite() throws java.io.IOException {
+        File pending = new File(dataRoot, "pending_invite.txt");
+        if (pendingInvite() == null)
+            throw new java.io.IOException("The pending invitation is no longer valid.");
+        File ready = new File(dataRoot, "join_link.txt");
+        try {
+            java.nio.file.Files.move(pending.toPath(), ready.toPath(),
+                java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+            java.nio.file.Files.move(pending.toPath(), ready.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     /**
@@ -123,6 +191,183 @@ public class LauncherActivity extends Activity {
     private int dp(float value) {
         return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value,
             getResources().getDisplayMetrics());
+    }
+
+    /** Hints only: mobile data or a VPN can also have a private address. */
+    private String possibleLanAddresses() {
+        StringBuilder addresses = new StringBuilder();
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces != null && interfaces.hasMoreElements()) {
+                NetworkInterface network = interfaces.nextElement();
+                String name = network.getName();
+                if (network.isLoopback() || !network.isUp() ||
+                    !(name.startsWith("wlan") || name.startsWith("swlan") ||
+                      name.startsWith("ap") || name.startsWith("eth")))
+                    continue;
+                Enumeration<InetAddress> ips = network.getInetAddresses();
+                while (ips.hasMoreElements()) {
+                    InetAddress ip = ips.nextElement();
+                    if (ip instanceof Inet4Address && !ip.isLoopbackAddress()) {
+                        if (addresses.length() != 0)
+                            addresses.append("  ");
+                        addresses.append(name).append(": ").append(ip.getHostAddress());
+                    }
+                }
+            }
+        } catch (java.net.SocketException e) {
+            // Android does not expose every hotspot interface on every phone.
+        }
+        return addresses.length() == 0
+            ? "Check Wi-Fi or hotspot settings to find each phone's IP address."
+            : addresses.toString();
+    }
+
+    /** The file remains after an Android Force stop/reopen with a MAIN intent. */
+    private boolean hasInternetInvite() {
+        return pendingInvite() != null;
+    }
+
+    /** 0: not running; 1: own game process running; -1: unknown, fail closed. */
+    private int gameProcessStatus() {
+        ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+        if (manager == null)
+            return -1;
+        java.util.List<ActivityManager.RunningAppProcessInfo> processes;
+        try {
+            processes = manager.getRunningAppProcesses();
+        } catch (RuntimeException e) {
+            return -1;
+        }
+        if (processes == null)
+            return -1;
+        String gameProcess = getPackageName() + ":game";
+        int ownUid = android.os.Process.myUid();
+        for (ActivityManager.RunningAppProcessInfo process : processes) {
+            if (process != null && process.uid == ownUid && gameProcess.equals(process.processName))
+                return 1;
+        }
+        return 0;
+    }
+
+    private TextView lanText(String message, int size) {
+        TextView text = new TextView(this);
+        text.setText(message);
+        text.setTextColor(Color.rgb(225, 230, 235));
+        text.setTextSize(TypedValue.COMPLEX_UNIT_SP, size);
+        text.setPadding(0, 0, 0, dp(7));
+        return text;
+    }
+
+    /** A phone-friendly System Link screen; no external text editor required. */
+    private void buildLanInterface() {
+        LanConfig.Settings settings = new LanConfig.Settings();
+        String warning = "";
+        try {
+            settings = LanConfig.load(new File(dataRoot, "config.toml"));
+        } catch (java.io.IOException e) {
+            warning = "Could not read the current settings: " + e.getMessage();
+        }
+
+        ScrollView scroll = new ScrollView(this);
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(dp(22), dp(16), dp(22), dp(16));
+        layout.setBackgroundColor(Color.rgb(12, 16, 20));
+        scroll.addView(layout);
+
+        layout.addView(lanText("Halo • System Link", 23));
+        layout.addView(lanText("Configure local multiplayer, then start Halo. "
+            + "Both phones need the same build. Leave an IP blank to use automatic detection.", 14));
+        layout.addView(lanText("Possible local IP: " + possibleLanAddresses(), 13));
+
+        layout.addView(lanText("This phone's LAN IP (optional)", 15));
+        EditText local = new EditText(this);
+        local.setSingleLine(true);
+        local.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        local.setHint("Automatic");
+        local.setText(settings.local);
+        layout.addView(local);
+
+        layout.addView(lanText("Other phone's LAN IP (optional)", 15));
+        EditText peer = new EditText(this);
+        peer.setSingleLine(true);
+        peer.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        peer.setHint("Example: 10.18.179.225");
+        peer.setText(settings.peer);
+        layout.addView(peer);
+
+        CheckBox offline = new CheckBox(this);
+        offline.setText("LAN only (disable internet matchmaking)");
+        offline.setTextColor(Color.WHITE);
+        final boolean invitePending = hasInternetInvite();
+        offline.setChecked(invitePending ? false : settings.lanOnly);
+        layout.addView(offline);
+
+        if (invitePending)
+            layout.addView(lanText("Internet invite received. LAN-only has been turned off for this launch. "
+                + "Press Save & Play to join the invitation.", 14));
+
+        TextView status = lanText(inviteError == null ? warning : warning + " " + inviteError, 13);
+        status.setTextColor(Color.rgb(255, 170, 120));
+        layout.addView(status);
+
+        if (invitePending) {
+            Button discard = new Button(this);
+            discard.setText("Discard internet invitation (use LAN)");
+            discard.setOnClickListener(view -> {
+                try {
+                    java.nio.file.Files.deleteIfExists(new File(dataRoot,
+                        "pending_invite.txt").toPath());
+                    buildLanInterface();
+                } catch (java.io.IOException e) {
+                    status.setText("Couldn't discard the invitation. Check app storage.");
+                }
+            });
+            layout.addView(discard);
+        }
+        layout.addView(lanText("Ports: host UDP/TCP 5150; client UDP 5151. "
+            + "Use each phone's current hotspot IP. This screen saves the values "
+            + "before Halo initializes its sockets.", 13));
+
+        Button appSettings = new Button(this);
+        appSettings.setText("Open Android App Settings");
+        appSettings.setVisibility(View.GONE);
+        appSettings.setOnClickListener(next -> startActivity(
+            new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:" + getPackageName()))));
+
+        Button play = new Button(this);
+        play.setText("Save LAN settings & Play");
+        play.setOnClickListener(view -> {
+            if (invitePending && offline.isChecked()) {
+                status.setText("This invite needs internet play. Uncheck LAN only and save again.");
+                return;
+            }
+            int processStatus = gameProcessStatus();
+            if (processStatus != 0) {
+                status.setText(processStatus == 1
+                    ? "Halo's game process is already running. Force-stop Halo in Android "
+                      + "App Settings, then reopen to apply these settings."
+                    : "Android couldn't verify that the old game process is stopped. "
+                      + "Force-stop Halo in Android App Settings, then reopen to try again.");
+                appSettings.setVisibility(View.VISIBLE);
+                return;
+            }
+            try {
+                LanConfig.save(new File(dataRoot, "config.toml"),
+                    local.getText().toString(), peer.getText().toString(), offline.isChecked());
+                if (invitePending)
+                    publishPendingInvite();
+            } catch (java.io.IOException e) {
+                status.setText("Could not apply network settings: " + e.getMessage());
+                return;
+            }
+            startGame();
+        });
+        layout.addView(play);
+        layout.addView(appSettings);
+        setContentView(scroll);
     }
 
     private void buildInterface() {
@@ -186,8 +431,10 @@ public class LauncherActivity extends Activity {
     protected void onResume() {
         super.onResume();
         // data pushed with adb while this screen was open
-        if (pick != null && pick.isEnabled() && haveData())
-            startGame();
+        if (pick != null && pick.isEnabled() && haveData()) {
+            pick = null;
+            buildLanInterface();
+        }
     }
 
     @Override
@@ -232,7 +479,8 @@ public class LauncherActivity extends Activity {
             }
             handler.post(() -> {
                 if (haveData()) {
-                    startGame();
+                    pick = null;
+                    buildLanInterface();
                 } else {
                     fail("The extraction finished but maps/ui.map is missing.");
                 }
