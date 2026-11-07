@@ -12,14 +12,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, constant, enum_with, function, mutated, read, run, structure  # noqa: E402
 
 CASES = ["fills", "room", "fewer", "even", "against", "follows-players", "never-network", "slayer-only",
-         "not-once-started", "no-player-no-bots", "names-and-machines"]
+         "not-once-started", "no-player-no-bots", "names-and-machines", "lan-one", "lan-four", "lan-off", "internet-never", "high-slot"]
 GAME_MANAGER_FUNCTIONS = ("network_game_invalidate_player", "network_player_is_valid", "network_game_player_is_valid",
                           "network_game_add_player", "network_game_remove_player")
 
 # a fault in network_game_server_port_bots, and the case that must catch it
 NEGATIVE_CONTROLS = {
-    "bots-in-network-games": (("network_game_is_splitscreen_local() && ", ""), "never-network"),
-    "bots-in-any-gametype": ((" && server->game.variant.game_engine_index == game_engine_slayer", ""), "slayer-only"),
+    "network-opt-in-required": (("wanted = bots_system_link_wanted_count();", "wanted = 3;"), "lan-off"),
+    "internet-bots-leak": (("else if (!config_boolean(\"network.online\"))", "else if (TRUE)"), "internet-never"),
+    "bots-in-any-gametype": (("if (server->game.variant.game_engine_index == game_engine_slayer)", "if (TRUE)"), "slayer-only"),
     "bots-once-started": (("server->state != _network_game_server_state_pregame || server->sent_start_game_message",
                            "server->state != _network_game_server_state_pregame"), "not-once-started"),
     "teams-not-evened": (("team_counts[1] < team_counts[0] ? 1 : 0", "1"), "even"),
@@ -53,7 +54,7 @@ def generated(fault=None):
     code = ""
     for name in GAME_MANAGER_FUNCTIONS:
         code += function(manager, name) + "\n"
-    for name in ("bots_machine_is_bot", "bots_network_player"):
+    for name in ("bots_machine_is_bot", "bots_network_player", "bots_system_link_wanted_count"):
         code += function(bots, name) + "\n"
     lobby = function(server, "network_game_server_port_bots")
     if fault:

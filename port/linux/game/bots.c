@@ -92,6 +92,8 @@ and each bot's kills and deaths; debug.bot_trace logs each bot's state.
 #include "structures/structure_bsp_definitions.h"
 #include "physics/collision_bsp_definitions.h"
 #include "networking/network_game_globals.h"
+#include "networking/network_game_manager.h" /* port: identify real LAN machine slots */
+#include "game/player_queues_new.h" /* port: relay the host's simulated bot inputs */
 #include "ai/path.h"
 #include "devices/devices.h"
 #include "devices/device_definitions.h"
@@ -109,6 +111,7 @@ and each bot's kills and deaths; debug.bot_trace logs each bot's state.
 /* port/linux/src/port_config.c */
 const char *config_string(char const *name);
 long config_integer(char const *name);
+int config_boolean(char const *name);
 void platform_log(char const *format, ...);
 
 /* ---------- constants */
@@ -391,6 +394,15 @@ long bots_wanted_count(void)
 	long count = config_integer("bots.count");
 
 	return count < 0 ? 0 : count > BOTS_MAXIMUM ? BOTS_MAXIMUM : count;
+}
+
+/* port: experimental networked bots are separate from offline bots.count.
+Keep the first LAN qualification bounded to four host-simulated players. */
+long bots_system_link_wanted_count(void)
+{
+	long count = config_integer("bots.system_link_count");
+
+	return count < 0 ? 0 : count > 4 ? 4 : count;
 }
 
 short bots_skill(void)
@@ -3004,9 +3016,13 @@ void bots_update_actions(struct player_action *actions)
 	struct data_iterator iterator;
 	struct player_datum *player;
 	long count = 0;
+	/* port: only the true LAN host may run remote bots' thinking; clients
+	   consume the host's action and unit-state messages, never this AI. */
+	boolean lan_host = game_connection() == _game_connection_network_server &&
+		!network_game_is_splitscreen_local() && !config_boolean("network.online") &&
+		bots_system_link_wanted_count() > 0;
 
-	/* (local games alone: no other machine sees a bot) */
-	if (!game_engine_running() || !network_game_is_splitscreen_local())
+	if (!game_engine_running() || (!network_game_is_splitscreen_local() && !lan_host))
 		return;
 	data_iterator_new(&iterator, player_data);
 	while ((player = (struct player_datum *)data_iterator_next(&iterator)) != NULL)
@@ -3017,6 +3033,16 @@ void bots_update_actions(struct player_action *actions)
 
 		if (player->local_player_index != NONE || !bots_machine_is_bot(player->network_player_data.machine_index))
 			continue;
+		if (lan_host)
+		{
+			/* port: a real client that happens to take a high machine slot
+			   is not a virtual bot, even though its index is in that range. */
+			struct network_game *game = network_game_get_game();
+			long machine_index = player->network_player_data.machine_index;
+
+			if (!game || game->machines[machine_index].machine_index != NONE)
+				continue;
+		}
 		/* (the roaming places and the walkable surfaces once a game has
 		bots; the skill once a tick) */
 		if (!count)
@@ -3032,7 +3058,14 @@ void bots_update_actions(struct player_action *actions)
 		if (bot->player_index != iterator.datum_index)
 			bots_bot_reset(bot, iterator.datum_index, bot_index);
 		if (absolute_index >= 0 && absolute_index < HALO_PORT_MAXIMUM_NETWORK_PLAYERS)
+		{
 			bots_bot_update(bot, bot_index, &actions[absolute_index]);
+			/* port: copy the exact action simulated by the host into the
+			   server's tick history, which distributed_host_plan_players relays
+			   to real LAN clients. No synthetic machine connection required. */
+			if (lan_host)
+				update_server_note_bot_action(iterator.datum_index, &actions[absolute_index]);
+		}
 		count++;
 	}
 	if (count)
