@@ -317,9 +317,10 @@ time zone and the data and save folders to the guest through its
 environment, chooses the write tracking (page protection, or page hashes when
 translated or when debug.memory_watch is false), and runs the guest's main;
 never returns normally */
-static void *game_main(void *unused)
+static void *game_main(void *launch_options)
 {
 	struct environment environment = { { 0 }, 0 };
+	char **offline_bots = launch_options;
 	const char *external;
 	char zone[64];
 	char path[600];
@@ -327,7 +328,6 @@ static void *game_main(void *unused)
 	void *image;
 	uint32_t boot;
 
-	(void)unused;
 	external = SDL_GetAndroidExternalStoragePath();
 	if (!external)
 		host_fatal("Android storage is unavailable: %s", SDL_GetError());
@@ -345,6 +345,16 @@ static void *game_main(void *unused)
 	environment_set(&environment, "HOME", save_root);
 	environment_set(&environment, "HALO_DATA_ROOT", data_root);
 	environment_set(&environment, "HALO_SAVE_ROOT", save_root);
+	/* These overrides apply only to the launcher-selected offline session. */
+	if (offline_bots)
+	{
+		environment_set(&environment, "HALO_MENUS", "xbox");
+		environment_set(&environment, "HALO_BOTS", offline_bots[0]);
+		environment_set(&environment, "HALO_BOT_SKILL", offline_bots[1]);
+		environment_set(&environment, "HALO_BOT_TEAMS", offline_bots[2]);
+		environment_set(&environment, "HALO_NET_ONLINE", "false");
+		environment_set(&environment, "HALO_NET_JOIN_FROM_CLIPBOARD", "false");
+	}
 	{
 		/* the game renders 480 lines at the display's aspect ratio
 		(landscape) unless display.screen_width says otherwise (d3d8_gl.c) */
@@ -460,11 +470,12 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
 
 int main(int argc, char *argv[])
 {
-	(void)argc;
-	(void)argv;
+	/* SDLActivity prepends argv[0] to its getArguments() result. */
+	char **offline_bots = argc == 5 && !strcmp(argv[1], "--offline-bots") ? argv + 2 : NULL;
+
 	host_logf(HOST_LOG_INFO, "Halo for Android starting");
 	host_install_signal_handlers();
-	if (host_native_thread_create(game_main, NULL, MAIN_STACK_SIZE) != 0)
+	if (host_native_thread_create(game_main, offline_bots, MAIN_STACK_SIZE) != 0)
 		host_fatal("cannot start the game thread");
 	/* the game ends the process itself (host_exit) */
 	for (;;)
