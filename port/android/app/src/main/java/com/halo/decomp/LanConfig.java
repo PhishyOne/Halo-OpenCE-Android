@@ -25,7 +25,7 @@ final class LanConfig {
 
     private LanConfig() { }
 
-    private static boolean validAddress(String value) {
+    static boolean validAddress(String value) {
         if (value.isEmpty())
             return true;
         String[] fields = value.split("\\.", -1);
@@ -107,6 +107,20 @@ final class LanConfig {
             if (!found[i])
                 result.add(entry(keys[i], local, peer, lanOnly));
         }
+    }
+
+    /** The host answers every searcher separately; only a joining client
+     * needs a target IP. Internet invites must not keep LAN overrides. */
+    static String peerForRole(boolean hosting, String enteredHost, boolean lanOnly)
+            throws IOException {
+        if (hosting || !lanOnly)
+            return "";
+        String host = enteredHost.trim();
+        if (host.isEmpty())
+            throw new IOException("Ask the Halo game host for their LAN IP, then enter it.");
+        if (!validAddress(host))
+            throw new IOException("Host IP must be a complete IPv4 address, e.g. 10.28.111.42.");
+        return host;
     }
 
     static void save(File file, String local, String peer, boolean lanOnly) throws IOException {

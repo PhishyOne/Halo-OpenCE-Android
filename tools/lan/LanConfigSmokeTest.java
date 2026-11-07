@@ -67,6 +67,36 @@ public final class LanConfigSmokeTest {
                 invalidCaught = true;
             }
             check(invalidCaught, "duplicate sections refused");
+            // All joining phones point to one host. The host does not list guests.
+            check(LanConfig.peerForRole(true, "10.28.111.99", true).isEmpty(),
+                "host clears an old peer setting");
+            String guest2 = LanConfig.peerForRole(false, "10.28.111.42", true);
+            String guest3 = LanConfig.peerForRole(false, " 10.28.111.42 ", true);
+            check(guest2.equals(guest3), "multiple joiners share same host address");
+            check(LanConfig.peerForRole(false, "10.28.111.42", false).isEmpty(),
+                "internet mode clears LAN target");
+            boolean missingHostCaught = false;
+            try {
+                LanConfig.peerForRole(false, "", true);
+            } catch (IOException expected) {
+                missingHostCaught = true;
+            }
+            check(missingHostCaught, "LAN join requires game host IP");
+            boolean badHostCaught = false;
+            try {
+                LanConfig.peerForRole(false, "192.168.0.1\n[network]", true);
+            } catch (IOException expected) {
+                badHostCaught = true;
+            }
+            check(badHostCaught, "injected host IP refused");
+            File multiConfig = folder.resolve("multi.toml").toFile();
+            LanConfig.save(multiConfig, "", guest2, true);
+            check(LanConfig.load(multiConfig).peer.equals("10.28.111.42"),
+                "joiner host address roundtrip");
+            LanConfig.save(multiConfig, "", LanConfig.peerForRole(true, guest2, true), true);
+            check(LanConfig.load(multiConfig).peer.isEmpty(),
+                "changing to host clears the client-only discovery target");
+
             System.out.println("LanConfigSmokeTest PASS");
         } finally {
             try (java.util.stream.Stream<Path> files = Files.walk(folder)) {

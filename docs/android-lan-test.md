@@ -1,33 +1,84 @@
-# Android System Link test build (LAN-focused branch)
+# Android LAN multiplayer: simple setup for 2 or more phones
 
-This branch targets a testable Android hotspot discovery workaround. It is a **candidate**, not a confirmed fix.
+This v2 launcher is built on the physically tested v1 unicast-discovery Android APK.
 
-## Differences from upstream
+## What has been tested
 
-1. The Android launcher shows a phone-friendly System Link setup before starting Halo when game maps are installed. It can save the current phone's LAN IPv4 address (optional), the peer phone's IPv4 address (optional), and a LAN-only option to the existing `config.toml` without losing unrelated settings.
-2. In LAN-only mode (`network.online = false`), a host also sends a unicast reply to the IP/port that sent a discovery search. Normal UDP 5151 search replies are rate-limited to the existing advertisement interval; off-port search replies and internet play retain their prior behavior.
-3. A plain JDK smoke test covers preserving other config sections, IP validation, persistence, and malformed duplicate network sections.
+On November 6, 2026, two physical Android phones completed a Halo CE co-op
+campaign level over one phone's hotspot. The person hosting the HALO GAME
+was not the hotspot owner. The host's debug.txt confirms both players joined,
+stayed connected during gameplay and reached the next level. A separate
+client-side co-op bug remains: after the joining player died, the host's
+Spartan or visual effects sometimes disappeared on the joining phone until
+the host died and respawned. That is NOT addressed by this UI-only v2 change.
 
-No new permissions, internet services, game assets, or extra native libraries are added. The package remains `com.halo.decomp`.
+This setup has not yet been physically tested with three or more phones.
+No changes are made to the native LAN discovery workaround, netcode,
+co-op object synchronization, max players or the Android package identity.
 
-## Two-phone test
+## Easy setup for a group
 
-Use the **same candidate APK** on both phones. The APK does not include Halo game data; each phone must import its own lawful Xbox Halo disc image after uninstalling the differently signed stock APK.
+1. Everyone installs the same Halo APK build and supplies their own lawful
+   Halo Xbox disc image for the required game maps.
+2. Everyone connects to ONE phone hotspot or ONE Wi-Fi LAN.
+   The hotspot owner is not required to host the Halo game.
+3. The HALO GAME HOST selects "Host game" in the launcher. The launcher
+   displays potential Wi-Fi/hotspot IPs. If a single interface is found,
+   the share field is prefilled. Confirm it and use "Copy host IP" or
+   "Share invite" to give the SAME IP to everyone joining.
+4. The host taps "Save settings & Open Halo", creates a campaign co-op or
+   multiplayer System Link lobby inside Halo, and waits for players.
+5. Each JOINER selects "Join game", pastes the host's IP, and opens Halo.
+   In Halo, join the host's game through System Link.
+6. A third, fourth, etc. joiner uses that same IP. Joiners never need to
+   know each other's IPs. No guest list is stored on the host.
 
-1. Force-stop Halo on both phones **before changing LAN settings**, then connect both phones via one phone's hotspot; verify current IPs under Android Wi-Fi/hotspot settings. The observed 2026-11-04 IPs were hotspot `10.18.179.225` and client `10.18.179.126`, but leases can change.
-2. Open the new **System Link** launcher on both phones. Check **LAN only** on both.
-3. Leave **This phone's LAN IP** empty for auto detection first.
-4. On the joining phone, enter the host phone's current IP in **Other phone's LAN IP**; the host may leave peer empty.
-5. Save and start on both phones. Host a System Link game on one phone, then search on the other for at least 30 seconds.
-6. If not discovered, force-stop both, enter *each phone's own IP* into **This phone's LAN IP** and the *other phone's IP* into **Other phone's LAN IP** on both sides; relaunch and repeat.
-7. Repeat with the roles reversed, preserving the same hotspot ownership. Keep the games foregrounded.
+Only one phone hosts the Halo game. The native v1 code sends a direct
+unicast System Link discovery reply to every searching phone in LAN-only
+mode, independent of the number of joiners. The IP input is the game's
+network.broadcast search destination on joiners; the host clears any
+saved peer setting. The network.address socket bind is optional, blank
+by default and accessible under Advanced / troubleshooting.
 
-If discovery still fails, upload both devices' `debug.txt` files and the effective `[network]` sections, plus the current IP addresses. An earlier direct UDP test to port 5150 succeeded, but did not verify broadcast or the reverse discovery reply on UDP 5151. A device-to-device match lasting at least several minutes is required before claiming success.
+## Advanced and failure cases
 
-**Lifecycle and invites:** The game reads its network settings on startup. If the launcher detects a running `:game` process before Save, it refuses to overwrite settings or start a potentially stale session, and offers Android App Settings. Use **Force stop** there, then reopen Halo. An incoming `halo://join/...` invite is first staged in `pending_invite.txt`, which the native game does not consume. It stays pending through first-time disc import and even Android **Force stop/reopen**; the launcher unchecks LAN-only and requires **Save & Play** before atomically moving it to native `join_link.txt`. The setup screen also has a **Discard internet invitation (use LAN)** action. If a previous `:game` process exists or Android cannot verify its absence, Save & Play blocks and opens Android App Settings for a manual Force stop. Physical phone testing is required to confirm that process enumeration works on both devices. A source review and physical-device checks must verify this behavior; no Android runtime success is claimed.
+- LAN-only is enabled by default, and internet play can be enabled from
+  Advanced. Internet invitations staged through halo://join are preserved
+  and require internet mode. Internet launches clear a stale LAN target.
+- IPs can change after reconnecting. Reopen the launcher after connecting
+  to the hotspot. If multiple IPs are shown, confirm the correct Wi-Fi
+  interface IP and edit the host's share field; if none, check Android
+  Wi-Fi/hotspot settings. The share field does NOT alter socket binding.
+- An older manual local-IP override is preserved until explicitly cleared
+  under Advanced. The launcher displays a warning that this can become
+  stale after switching hotspots.
+- A running or indeterminate Halo :game process blocks saving changed
+  network settings; Force stop Halo from Android App Settings first.
+- LAN-only refers to discovery settings, not a guarantee that mobile data
+  is unused. If feasible, temporarily disable cellular data for the
+  offline-only acceptance test without disabling the hotspot.
+- Hotspot client limits and isolation policies vary, as do phone hardware
+  and memory. A 3+ player co-op LAN session still requires a physical test.
+- The debug log is Android/data/com.halo.decomp/files/debug.txt. Capture the
+  host and all client logs after problems, before uninstall or map reimport.
+- The public builder produces a debug APK with an ephemeral signing key,
+  and Android cannot install an APK with a different signature over the
+  existing installation. Uninstalling an older differently-signed APK
+  deletes its app-specific imported maps. A durable signing/upgrade
+  strategy would need separate secure implementation.
+- No Halo game data or copyrighted map files are included or uploaded
+  to GitHub, the builder or the APK.
 
-## Build
+## Source-level checks
 
-The source is public AGPL-3.0-or-later. Never upload Xbox game maps to GitHub or ship them in the APK. A public, isolated Android-only builder will be used for the first candidate artifact; existing upstream multi-platform CI in the fork remains disabled. No stable signing key is stored in candidate code or a candidate-controlled workflow, so the debug APK initially requires uninstalling other signatures. This deletes game data.
-
-Build locally only in a safely isolated execution environment, not the privileged Forge account. Android host NDK r27c and Clang support for the ILP32 ARM guest must be verified. The game needs API 28+ and OpenGL ES 3.0; mobile GPU and 4 GB memory performance remain device-dependent.
+- Compile LanConfig.java and LanConfigSmokeTest.java using javac -proc:none.
+- Run the LAN configuration smoke test; includes host mode, multiple
+  joiners entering one host IP, input validation and preserving unrelated
+  TOML settings.
+- Build Android only at an exact source SHA in the isolated public
+  GitHub Actions builder (not from the privileged Forge account).
+- Check package identity, native arm64 library, source SHA, APK SHA-256,
+  signing and artifact receipt.
+- Test three physical devices on the hotspot: discovery, all lobby joins,
+  level progression, respawns, and sustained play.
+- Preserve the known working v1 branch and APK for rollback.
