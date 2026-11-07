@@ -20,7 +20,7 @@ GAME_MANAGER_FUNCTIONS = ("network_game_invalidate_player", "network_player_is_v
 NEGATIVE_CONTROLS = {
     "network-opt-in-required": (("wanted = bots_system_link_wanted_count();", "wanted = 3;"), "lan-off"),
     "internet-bots-leak": (("else if (!config_boolean(\"network.online\"))", "else if (TRUE)"), "internet-never"),
-    "bots-in-any-gametype": ((" && server->game.variant.game_engine_index == game_engine_slayer", ""), "slayer-only"),
+    "bots-in-any-gametype": (("if (server->game.variant.game_engine_index == game_engine_slayer)", "if (TRUE)"), "slayer-only"),
     "bots-once-started": (("server->state != _network_game_server_state_pregame || server->sent_start_game_message",
                            "server->state != _network_game_server_state_pregame"), "not-once-started"),
     "teams-not-evened": (("team_counts[1] < team_counts[0] ? 1 : 0", "1"), "even"),
