@@ -20,6 +20,8 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -193,9 +195,10 @@ public class LauncherActivity extends Activity {
             getResources().getDisplayMetrics());
     }
 
-    /** Hints only: mobile data or a VPN can also have a private address. */
-    private String possibleLanAddresses() {
-        StringBuilder addresses = new StringBuilder();
+    /** LAN IP hints only. Never silently bind the game to one of these:
+     * hotspot, Wi-Fi and VPN interfaces vary across Android devices. */
+    private java.util.List<String> lanIPv4Addresses() {
+        java.util.LinkedHashSet<String> addresses = new java.util.LinkedHashSet<>();
         try {
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             while (interfaces != null && interfaces.hasMoreElements()) {
@@ -208,19 +211,15 @@ public class LauncherActivity extends Activity {
                 Enumeration<InetAddress> ips = network.getInetAddresses();
                 while (ips.hasMoreElements()) {
                     InetAddress ip = ips.nextElement();
-                    if (ip instanceof Inet4Address && !ip.isLoopbackAddress()) {
-                        if (addresses.length() != 0)
-                            addresses.append("  ");
-                        addresses.append(name).append(": ").append(ip.getHostAddress());
-                    }
+                    if (ip instanceof Inet4Address && !ip.isLoopbackAddress() &&
+                        !ip.isLinkLocalAddress())
+                        addresses.add(ip.getHostAddress());
                 }
             }
         } catch (java.net.SocketException e) {
-            // Android does not expose every hotspot interface on every phone.
+            // Some Android builds hide their hotspot interface. Manual entry is available.
         }
-        return addresses.length() == 0
-            ? "Check Wi-Fi or hotspot settings to find each phone's IP address."
-            : addresses.toString();
+        return new java.util.ArrayList<>(addresses);
     }
 
     /** The file remains after an Android Force stop/reopen with a MAIN intent. */
@@ -259,7 +258,10 @@ public class LauncherActivity extends Activity {
         return text;
     }
 
-    /** A phone-friendly System Link screen; no external text editor required. */
+    /** Simple multiplayer setup. The *game* host may be any Wi-Fi client:
+     * the hotspot owner does not have to host Halo. Each joining phone sends
+     * searches to the same host IP; hosts learn searchers from incoming UDP
+     * and do not need a list of guests. */
     private void buildLanInterface() {
         LanConfig.Settings settings = new LanConfig.Settings();
         String warning = "";
@@ -269,50 +271,171 @@ public class LauncherActivity extends Activity {
             warning = "Could not read the current settings: " + e.getMessage();
         }
 
+        final boolean invitePending = hasInternetInvite();
+        java.util.List<String> ips = lanIPv4Addresses();
+        String suggestedAddress = ips.size() == 1 ? ips.get(0) : "";
+
         ScrollView scroll = new ScrollView(this);
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(dp(22), dp(16), dp(22), dp(16));
+        layout.setPadding(dp(20), dp(13), dp(20), dp(16));
         layout.setBackgroundColor(Color.rgb(12, 16, 20));
         scroll.addView(layout);
 
-        layout.addView(lanText("Halo • System Link", 23));
-        layout.addView(lanText("Configure local multiplayer, then start Halo. "
-            + "Both phones need the same build. Leave an IP blank to use automatic detection.", 14));
-        layout.addView(lanText("Possible local IP: " + possibleLanAddresses(), 13));
+        layout.addView(lanText("Halo • Play Together", 23));
+        layout.addView(lanText("All players connect to the same Wi-Fi or phone hotspot. "
+            + "One phone hosts the HALO game; the hotspot owner can be someone else.", 14));
+        layout.addView(lanText("This phone's LAN IP: "
+            + (ips.isEmpty() ? "Not detected; check Wi-Fi settings."
+               : android.text.TextUtils.join("  •  ", ips)), 15));
+        layout.addView(lanText("Which role will this phone have in Halo?", 15));
 
-        layout.addView(lanText("This phone's LAN IP (optional)", 15));
+        RadioGroup roles = new RadioGroup(this);
+        roles.setOrientation(LinearLayout.HORIZONTAL);
+        RadioButton hostRole = new RadioButton(this);
+        hostRole.setId(View.generateViewId());
+        hostRole.setText("Host game");
+        hostRole.setTextColor(Color.WHITE);
+        RadioButton joinRole = new RadioButton(this);
+        joinRole.setId(View.generateViewId());
+        joinRole.setText("Join game");
+        joinRole.setTextColor(Color.WHITE);
+        roles.addView(hostRole);
+        roles.addView(joinRole);
+        roles.check(settings.peer.isEmpty() ? hostRole.getId() : joinRole.getId());
+        layout.addView(roles);
+
+        TextView feedback = lanText(inviteError == null ? warning : warning + " " + inviteError, 13);
+        feedback.setTextColor(Color.rgb(255, 170, 120));
+
+        LinearLayout hostPanel = new LinearLayout(this);
+        hostPanel.setOrientation(LinearLayout.VERTICAL);
+        hostPanel.addView(lanText("1. Start a co-op campaign or multiplayer System Link "
+            + "lobby inside Halo.\n2. Give the IP below to EVERY joining player. "
+            + "No guest IPs are needed on the host.", 14));
+        hostPanel.addView(lanText("Host IP to share (edit if detection is wrong)", 15));
+        EditText shareIp = new EditText(this);
+        shareIp.setSingleLine(true);
+        shareIp.setTextColor(Color.WHITE);
+        shareIp.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        shareIp.setHint(ips.isEmpty() ? "Look in Wi-Fi / hotspot settings" : "Choose this phone's Wi-Fi IP");
+        shareIp.setText(suggestedAddress);
+        shareIp.setSelectAllOnFocus(true);
+        hostPanel.addView(shareIp);
+        if (ips.size() > 1)
+            hostPanel.addView(lanText("Multiple addresses detected: confirm which one "
+                + "belongs to this hotspot before sharing it.", 13));
+
+        LinearLayout shareActions = new LinearLayout(this);
+        shareActions.setOrientation(LinearLayout.HORIZONTAL);
+        Button copy = new Button(this);
+        copy.setText("Copy host IP");
+        copy.setOnClickListener(view -> {
+            String value = shareIp.getText().toString().trim();
+            if (!LanConfig.validAddress(value) || value.isEmpty()) {
+                feedback.setText("Enter this phone's valid LAN IP before copying it.");
+                return;
+            }
+            android.content.ClipboardManager clipboard =
+                (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            if (clipboard == null) {
+                feedback.setText("Android clipboard is unavailable.");
+                return;
+            }
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Halo host IP", value));
+            feedback.setText("Copied " + value + ". Send it to everyone joining the game.");
+        });
+        shareActions.addView(copy, new LinearLayout.LayoutParams(0,
+            LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        Button share = new Button(this);
+        share.setText("Share invite");
+        share.setOnClickListener(view -> {
+            String value = shareIp.getText().toString().trim();
+            if (!LanConfig.validAddress(value) || value.isEmpty()) {
+                feedback.setText("Enter this phone's valid LAN IP before sharing it.");
+                return;
+            }
+            Intent message = new Intent(Intent.ACTION_SEND);
+            message.setType("text/plain");
+            message.putExtra(Intent.EXTRA_TEXT, "Join my Halo LAN game. Connect to the "
+                + "same Wi-Fi/hotspot, choose Join game in the Halo launcher, and enter "
+                + "this Host IP: " + value);
+            startActivity(Intent.createChooser(message, "Share Halo host IP"));
+        });
+        shareActions.addView(share, new LinearLayout.LayoutParams(0,
+            LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        hostPanel.addView(shareActions);
+        layout.addView(hostPanel);
+
+        LinearLayout joinPanel = new LinearLayout(this);
+        joinPanel.setOrientation(LinearLayout.VERTICAL);
+        joinPanel.addView(lanText("Ask the person hosting the HALO game for their IP. "
+            + "Everyone joining enters that same address. You do NOT need the other "
+            + "players' IPs or the hotspot gateway unless that gateway is the game host.", 14));
+        joinPanel.addView(lanText("Halo game host's IP", 15));
+        EditText hostIp = new EditText(this);
+        hostIp.setSingleLine(true);
+        hostIp.setTextColor(Color.WHITE);
+        hostIp.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        hostIp.setHint("Example: 10.28.111.42");
+        hostIp.setText(settings.peer);
+        hostIp.setSelectAllOnFocus(true);
+        joinPanel.addView(hostIp);
+        joinPanel.addView(lanText("After opening Halo, select System Link and join "
+            + "the host's lobby. The game host starts the level once everyone is in.", 13));
+        layout.addView(joinPanel);
+
+        Runnable updateRole = () -> {
+            boolean hosting = hostRole.isChecked();
+            hostPanel.setVisibility(hosting ? View.VISIBLE : View.GONE);
+            joinPanel.setVisibility(hosting ? View.GONE : View.VISIBLE);
+        };
+        roles.setOnCheckedChangeListener((group, checkedId) -> updateRole.run());
+        updateRole.run();
+
+        if (!settings.local.isEmpty())
+            layout.addView(lanText("Note: a manual local IP override is active ("
+                + settings.local + "). If you've switched hotspots, clear it under Advanced.", 13));
+
+        Button advancedToggle = new Button(this);
+        advancedToggle.setText("Advanced / troubleshooting");
+        layout.addView(advancedToggle);
+        LinearLayout advanced = new LinearLayout(this);
+        advanced.setOrientation(LinearLayout.VERTICAL);
+        advanced.addView(lanText("Local IP override (usually leave blank for Automatic)", 14));
         EditText local = new EditText(this);
         local.setSingleLine(true);
+        local.setTextColor(Color.WHITE);
         local.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         local.setHint("Automatic");
         local.setText(settings.local);
-        layout.addView(local);
-
-        layout.addView(lanText("Other phone's LAN IP (optional)", 15));
-        EditText peer = new EditText(this);
-        peer.setSingleLine(true);
-        peer.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        peer.setHint("Example: 10.18.179.225");
-        peer.setText(settings.peer);
-        layout.addView(peer);
+        advanced.addView(local);
 
         CheckBox offline = new CheckBox(this);
         offline.setText("LAN only (disable internet matchmaking)");
         offline.setTextColor(Color.WHITE);
-        final boolean invitePending = hasInternetInvite();
         offline.setChecked(invitePending ? false : settings.lanOnly);
-        layout.addView(offline);
+        advanced.addView(offline);
+        advanced.addView(lanText("LAN ports: game host UDP/TCP 5150; joining client UDP "
+            + "5151. Close and reopen Halo after changing networks.", 12));
+        advanced.setVisibility(invitePending || !settings.lanOnly ? View.VISIBLE : View.GONE);
+        advancedToggle.setOnClickListener(view -> advanced.setVisibility(
+            advanced.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+        layout.addView(advanced);
 
-        if (invitePending)
-            layout.addView(lanText("Internet invite received. LAN-only has been turned off for this launch. "
-                + "Press Save & Play to join the invitation.", 14));
-
-        TextView status = lanText(inviteError == null ? warning : warning + " " + inviteError, 13);
-        status.setTextColor(Color.rgb(255, 170, 120));
-        layout.addView(status);
+        TextView modeStatus = lanText(offline.isChecked()
+            ? "LAN-only enabled. Internet matchmaking disabled."
+            : "Internet mode is enabled; use Advanced to switch to LAN-only.", 13);
+        offline.setOnCheckedChangeListener((button, enabled) ->
+            modeStatus.setText(enabled
+                ? "LAN-only enabled. Internet matchmaking disabled."
+                : "Internet mode is enabled; use Advanced to switch to LAN-only."));
+        layout.addView(modeStatus);
 
         if (invitePending) {
+            layout.addView(lanText("An internet invitation is pending. LAN-only is "
+                + "disabled for this launch. Save & Open Halo to accept it, or discard "
+                + "the invitation to use local multiplayer.", 14));
             Button discard = new Button(this);
             discard.setText("Discard internet invitation (use LAN)");
             discard.setOnClickListener(view -> {
@@ -321,46 +444,46 @@ public class LauncherActivity extends Activity {
                         "pending_invite.txt").toPath());
                     buildLanInterface();
                 } catch (java.io.IOException e) {
-                    status.setText("Couldn't discard the invitation. Check app storage.");
+                    feedback.setText("Couldn't discard the invitation. Check app storage.");
                 }
             });
             layout.addView(discard);
         }
-        layout.addView(lanText("Ports: host UDP/TCP 5150; client UDP 5151. "
-            + "Use each phone's current hotspot IP. This screen saves the values "
-            + "before Halo initializes its sockets.", 13));
 
+        layout.addView(feedback);
         Button appSettings = new Button(this);
-        appSettings.setText("Open Android App Settings");
+        appSettings.setText("Open Android App Settings / Force stop");
         appSettings.setVisibility(View.GONE);
         appSettings.setOnClickListener(next -> startActivity(
             new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                 Uri.parse("package:" + getPackageName()))));
 
         Button play = new Button(this);
-        play.setText("Save LAN settings & Play");
+        play.setText("Save settings & Open Halo");
         play.setOnClickListener(view -> {
             if (invitePending && offline.isChecked()) {
-                status.setText("This invite needs internet play. Uncheck LAN only and save again.");
+                feedback.setText("Discard the pending internet invite before enabling LAN-only.");
                 return;
             }
             int processStatus = gameProcessStatus();
             if (processStatus != 0) {
-                status.setText(processStatus == 1
-                    ? "Halo's game process is already running. Force-stop Halo in Android "
-                      + "App Settings, then reopen to apply these settings."
-                    : "Android couldn't verify that the old game process is stopped. "
-                      + "Force-stop Halo in Android App Settings, then reopen to try again.");
+                feedback.setText(processStatus == 1
+                    ? "Halo is still running. Force-stop it in Android App Settings, "
+                      + "then reopen this launcher to apply new settings."
+                    : "Android couldn't confirm the old game is stopped. Force-stop Halo "
+                      + "in Android App Settings, then reopen.");
                 appSettings.setVisibility(View.VISIBLE);
                 return;
             }
             try {
+                String peer = LanConfig.peerForRole(hostRole.isChecked(),
+                    hostIp.getText().toString(), offline.isChecked());
                 LanConfig.save(new File(dataRoot, "config.toml"),
-                    local.getText().toString(), peer.getText().toString(), offline.isChecked());
+                    local.getText().toString(), peer, offline.isChecked());
                 if (invitePending)
                     publishPendingInvite();
             } catch (java.io.IOException e) {
-                status.setText("Could not apply network settings: " + e.getMessage());
+                feedback.setText("Could not apply network settings: " + e.getMessage());
                 return;
             }
             startGame();
