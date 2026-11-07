@@ -479,6 +479,8 @@ symbols in this file:
 #include "map_share.h" /* port: port/linux/game/map_share.c */
 #include "server_director.h" /* port: port/linux/game/server_director.c */
 #include "bots.h" /* port: port/linux/game/bots.c */
+/* port: experimental System Link bots are gated on LAN-only configuration. */
+int config_boolean(const char *name);
 
 /* port: internet play's Discord presence (port/linux/src/p2p.c), and the
 server browser's listing of a public game (p2p_lobby.c) */
@@ -1582,8 +1584,15 @@ static void network_game_server_port_bots(
 
 	if (server->state != _network_game_server_state_pregame || server->sent_start_game_message)
 		return;
-	if (network_game_is_splitscreen_local() && server->game.variant.game_engine_index == game_engine_slayer)
-		wanted = PIN(bots_wanted_count(), 0, BOTS_MAXIMUM);
+	if (server->game.variant.game_engine_index == game_engine_slayer)
+	{
+		if (network_game_is_splitscreen_local())
+			wanted = PIN(bots_wanted_count(), 0, BOTS_MAXIMUM);
+		/* port: opt-in LAN System Link bots only, never internet co-op
+		   or a client pretending to host. Default count is zero. */
+		else if (!config_boolean("network.online"))
+			wanted = bots_system_link_wanted_count();
+	}
 	for (bot_index = 0; bot_index < BOTS_MAXIMUM; bot_index++)
 		slot_of_bot[bot_index] = NONE;
 	for (slot = 0; slot < MAXIMUM_NETWORK_PLAYER_COUNT; slot++)
@@ -1592,7 +1601,10 @@ static void network_game_server_port_bots(
 
 		if (!network_player_is_valid(player))
 			continue;
-		if (bots_machine_is_bot(player->machine_index))
+		/* port: a real machine at a high index is not a bot. A genuine
+		   connection has a server client-machine record. */
+		if (bots_machine_is_bot(player->machine_index) &&
+			server->client_machines[(short)player->machine_index].machine_index == NONE)
 			slot_of_bot[player->machine_index - BOTS_FIRST_MACHINE] = slot;
 		else if (VALID_INDEX(player->team_index, NUMBER_OF_MULTIPLAYER_TEAMS))
 		{
@@ -1633,9 +1645,15 @@ static void network_game_server_port_bots(
 		if (slot_of_bot[bot_index] == NONE)
 		{
 			struct network_player joining;
+			long virtual_machine_index = BOTS_FIRST_MACHINE + bot_index;
 
 			if (server->game.player_count >= server->game.maximum_players)
 				break;
+			/* port: do not put a bot on an existing real connection or
+			   legitimate machine already holding this high-index slot. */
+			if (server->client_machines[virtual_machine_index].machine_index != NONE ||
+				server->game.machines[virtual_machine_index].machine_index != NONE)
+				continue;
 			bots_network_player(bot_index, &joining);
 			joining.team_index = (char)team_index;
 			joining.primary_color_index = NONE;
@@ -4849,7 +4867,11 @@ static boolean network_game_server_add_new_client(
 	{
 		for (i = 0; i < MAXIMUM_NETWORK_MACHINE_COUNT; i++)
 		{
-			if (server->client_machines[i].machine_index == NONE)
+			/* port: keep synthetic bot slots free of real connections while
+			   host-only LAN bots are enabled; no effect with default zero. */
+			if (server->client_machines[i].machine_index == NONE &&
+				!(bots_system_link_wanted_count() > 0 && !config_boolean("network.online") &&
+				  bots_machine_is_bot(i)))
 			{
 				struct transport_address client_address = { 0 };
 

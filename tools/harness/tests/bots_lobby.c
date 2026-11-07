@@ -32,8 +32,19 @@ struct game_variant
 	short game_engine_index;
 };
 
+struct network_machine
+{
+	char machine_index;
+};
+
+struct network_game_client_machine
+{
+	short machine_index;
+};
+
 struct network_game
 {
+	struct network_machine machines[HALO_PORT_MAXIMUM_NETWORK_MACHINES];
 	struct game_variant variant;
 	byte maximum_players;
 	short player_count;
@@ -43,6 +54,7 @@ struct network_game
 struct network_game_server
 {
 	word state;
+	struct network_game_client_machine client_machines[HALO_PORT_MAXIMUM_NETWORK_MACHINES];
 	struct network_game game;
 	boolean sent_start_game_message;
 };
@@ -50,12 +62,16 @@ struct network_game_server
 /* the world the lobby asks */
 static boolean local_game;
 static long wanted;
+static long system_link_wanted;
+static boolean online_game;
 static short teams_setting;
 static long sends;
 static short next_color;
 
 static boolean network_game_is_splitscreen_local(void) { return local_game; }
 static long bots_wanted_count(void) { return wanted; }
+static long config_integer(char const *name) { (void)name; return system_link_wanted; }
+static int config_boolean(char const *name) { (void)name; return online_game; }
 static short bots_teams(void) { return teams_setting; }
 static boolean network_game_player_slot_held(long player_index) { (void)player_index; return FALSE; }
 static void get_unique_random_color(struct network_game_server *server, struct network_player *player)
@@ -88,8 +104,14 @@ static void lobby(short game_engine_index, long maximum)
 	server.game.variant.game_engine_index = game_engine_index;
 	server.game.maximum_players = (byte)maximum;
 	for (index = 0; index < HALO_PORT_MAXIMUM_NETWORK_PLAYERS; index++)
+	{
 		network_game_invalidate_player(&server.game.players[index]);
+		server.game.machines[index].machine_index = NONE;
+		server.client_machines[index].machine_index = NONE;
+	}
 	local_game = TRUE;
+	system_link_wanted = 0;
+	online_game = FALSE;
 	teams_setting = _bots_teams_even;
 	sends = 0;
 }
@@ -125,7 +147,8 @@ static long bots_in(long *team0, long *team1)
 	{
 		struct network_player *slot = &server.game.players[index];
 
-		if (!network_player_is_valid(slot) || !bots_machine_is_bot(slot->machine_index))
+		if (!network_player_is_valid(slot) || !bots_machine_is_bot(slot->machine_index) ||
+			server.game.machines[(short)slot->machine_index].machine_index != NONE)
 			continue;
 		count++;
 		if (slot->team_index == 0)
@@ -329,6 +352,74 @@ int main(int argc, char **argv)
 		}
 		CHECK(named == 15, "%ld of 15 bots named", named);
 		CHECK(!bots_machine_is_bot(0) && !bots_machine_is_bot(BOTS_FIRST_MACHINE - 1), "a real machine is a bot");
+		return 0;
+	}
+	/* port: network bots stay off until the LAN host opts in. */
+	CASE("lan-off")
+	{
+		lobby(game_engine_slayer, 16);
+		player(0, 0);
+		local_game = FALSE;
+		wanted = 6;
+		network_game_server_port_bots(&server);
+		CHECK(bots_in(&team0, &team1) == 0, "network bots started without opt-in");
+		return 0;
+	}
+	CASE("lan-one")
+	{
+		lobby(game_engine_slayer, 16);
+		player(0, 0);
+		local_game = FALSE;
+		system_link_wanted = 1;
+		network_game_server_port_bots(&server);
+		CHECK(bots_in(&team0, &team1) == 1 && server.game.player_count == 2,
+			"one LAN bot was not put in the lobby");
+		CHECK(sends == 1, "LAN bot roster was not sent");
+		return 0;
+	}
+	CASE("lan-four")
+	{
+		lobby(game_engine_slayer, 16);
+		player(0, 0);
+		player(1, 0);
+		local_game = FALSE;
+		system_link_wanted = 99;
+		network_game_server_port_bots(&server);
+		CHECK(bots_in(&team0, &team1) == 4, "LAN bot limit did not clamp to four");
+		CHECK(server.game.player_count == 6, "LAN bot roster has wrong player count");
+		return 0;
+	}
+	CASE("internet-never")
+	{
+		lobby(game_engine_slayer, 16);
+		player(0, 0);
+		local_game = FALSE;
+		system_link_wanted = 4;
+		online_game = TRUE;
+		network_game_server_port_bots(&server);
+		CHECK(bots_in(&team0, &team1) == 0, "LAN bots entered an internet lobby");
+		CHECK(sends == 0, "internet bot roster unexpectedly sent");
+		return 0;
+	}
+	CASE("high-slot")
+	{
+		struct network_player joining;
+		long fake_slot = BOTS_FIRST_MACHINE;
+		lobby(game_engine_slayer, 16);
+		player(0, 0);
+		local_game = FALSE;
+		system_link_wanted = 1;
+		memset(&joining, 0, sizeof(joining));
+		joining.machine_index = (char)fake_slot;
+		joining.controller_index = 0;
+		joining.team_index = 0;
+		joining.player_list_index = NONE;
+		server.game.machines[fake_slot].machine_index = (char)fake_slot;
+		server.client_machines[fake_slot].machine_index = (short)fake_slot;
+		CHECK(network_game_add_player(&server.game, &joining), "high-index real player did not join");
+		network_game_server_port_bots(&server);
+		CHECK(server.game.player_count == 2, "host replaced a real high-index client with a bot");
+		CHECK(bots_in(&team0, &team1) == 0, "fake bot collided with a real machine");
 		return 0;
 	}
 	fprintf(stderr, "unknown case: %s\n", case_name);
