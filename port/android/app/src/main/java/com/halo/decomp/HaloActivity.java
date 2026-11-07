@@ -28,6 +28,7 @@ import org.libsdl.app.SDLActivity;
  * loads the game image from the APK's assets.
  */
 public class HaloActivity extends SDLActivity {
+    static final String OFFLINE_BOT_ARGUMENTS = "com.halo.decomp.OFFLINE_BOT_ARGUMENTS";
     /** lets system link's broadcasts in over Wi-Fi while the game runs */
     private WifiManager.MulticastLock multicastLock;
     /**
@@ -44,6 +45,12 @@ public class HaloActivity extends SDLActivity {
     @Override
     protected String[] getLibraries() {
         return new String[] { "SDL3", "main" };
+    }
+
+    @Override
+    protected String[] getArguments() {
+        String[] arguments = getIntent().getStringArrayExtra(OFFLINE_BOT_ARGUMENTS);
+        return arguments == null ? super.getArguments() : arguments;
     }
 
     @Override
