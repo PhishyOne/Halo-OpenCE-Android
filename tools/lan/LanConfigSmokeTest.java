@@ -97,6 +97,68 @@ public final class LanConfigSmokeTest {
             check(LanConfig.load(multiConfig).peer.isEmpty(),
                 "changing to host clears the client-only discovery target");
 
+            // The launcher must set one host's LAN bots without changing
+            // the separate offline bots.count, difficulty, or network mode.
+            File botsConfig = folder.resolve("lan-bots.toml").toFile();
+            LanConfig.save(botsConfig, "", "", true, 1);
+            check(LanConfig.load(botsConfig).systemLinkBotCount == 1,
+                "one experimental host bot saved in existing TOML");
+            check(Files.readString(botsConfig.toPath()).contains("[bots]"),
+                "a missing [bots] section was added");
+            Files.writeString(botsConfig.toPath(),
+                "[bots]\ncount = 15\nskill = \"veteran\"\n"
+                + "system_link_count = 3 # previous session\nteams = \"against\"\n"
+                + "\n[network]\naddress = \"\"\nbroadcast = \"\"\nonline = false\n"
+                + "\n[display]\nshow_fps = true\n", StandardCharsets.UTF_8);
+            check(LanConfig.load(botsConfig).systemLinkBotCount == 3,
+                "bot count read with inline comment");
+            LanConfig.save(botsConfig, "", "", true, 4);
+            String botSaved = Files.readString(botsConfig.toPath());
+            check(botSaved.contains("system_link_count = 4"), "bot count was updated");
+            check(botSaved.contains("count = 15"), "offline bot count was preserved");
+            check(botSaved.contains("skill = \"veteran\""), "offline bot skill was preserved");
+            check(botSaved.contains("teams = \"against\""), "offline team setup was preserved");
+            check(botSaved.contains("show_fps = true"), "display config preserved");
+            check(botSaved.split("system_link_count", -1).length == 2,
+                "LAN bot count was not duplicated");
+            LanConfig.save(botsConfig, "", "", true);
+            check(Files.readString(botsConfig.toPath()).contains("system_link_count = 4"),
+                "existing callers preserve experimental bot setting");
+            // A joining phone or internet invite turns the host-only bots off.
+            LanConfig.save(botsConfig, "", "10.28.111.42", true, 0);
+            check(LanConfig.load(botsConfig).systemLinkBotCount == 0,
+                "joining phone cleared host's prior LAN bot count");
+            check(LanConfig.load(botsConfig).peer.equals("10.28.111.42"),
+                "the joiner's target IP remains intact");
+            LanConfig.save(botsConfig, "", "", false, 0);
+            check(!LanConfig.load(botsConfig).lanOnly
+                && LanConfig.load(botsConfig).systemLinkBotCount == 0,
+                "internet mode disables host-only bots and LAN-only mode");
+            for (int count : new int[] { -1, 5, 99 }) {
+                String previous = Files.readString(botsConfig.toPath());
+                boolean rejected = false;
+                try {
+                    LanConfig.save(botsConfig, "", "", true, count);
+                } catch (IOException expected) {
+                    rejected = true;
+                }
+                check(rejected && Files.readString(botsConfig.toPath()).equals(previous),
+                    "out-of-range LAN count rejected without modifying data");
+            }
+            for (String bad : new String[] {
+                    "[bots]\nsystem_link_count = 1\n[bots]\ncount = 4\n",
+                    "[bots]\nsystem_link_count = 1\nsystem_link_count = 2\n"}) {
+                Files.writeString(botsConfig.toPath(), bad, StandardCharsets.UTF_8);
+                boolean rejected = false;
+                try {
+                    LanConfig.save(botsConfig, "", "", true, 1);
+                } catch (IOException expected) {
+                    rejected = true;
+                }
+                check(rejected && Files.readString(botsConfig.toPath()).equals(bad),
+                    "duplicate bot config refused atomically");
+            }
+
             System.out.println("LanConfigSmokeTest PASS");
         } finally {
             try (java.util.stream.Stream<Path> files = Files.walk(folder)) {

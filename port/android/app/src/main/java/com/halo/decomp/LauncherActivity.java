@@ -2,8 +2,10 @@ package com.halo.decomp;
 
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
@@ -15,6 +17,7 @@ import android.util.TypedValue;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
@@ -23,6 +26,7 @@ import android.widget.ProgressBar;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.ScrollView;
+import android.widget.Spinner;
 import android.widget.TextView;
 
 import java.net.Inet4Address;
@@ -186,7 +190,11 @@ public class LauncherActivity extends Activity {
     }
 
     private void startGame() {
-        startActivity(new Intent(this, HaloActivity.class));
+        startGame(new Intent(this, HaloActivity.class));
+    }
+
+    private void startGame(Intent intent) {
+        startActivity(intent);
         finish();
     }
 
@@ -247,6 +255,78 @@ public class LauncherActivity extends Activity {
                 return 1;
         }
         return 0;
+    }
+
+    private boolean canStartGame(TextView feedback, Button appSettings) {
+        int processStatus = gameProcessStatus();
+        if (processStatus == 0)
+            return true;
+        feedback.setText(processStatus == 1
+            ? "Halo is still running. Force-stop it in Android App Settings, "
+              + "then reopen this launcher to apply new settings."
+            : "Android couldn't confirm the old game is stopped. Force-stop Halo "
+              + "in Android App Settings, then reopen.");
+        appSettings.setVisibility(View.VISIBLE);
+        return false;
+    }
+
+    private Spinner botChoice(LinearLayout layout, String label, String[] choices, int selection) {
+        TextView title = new TextView(this);
+        title.setText(label);
+        title.setPadding(0, dp(12), 0, 0);
+        layout.addView(title);
+        Spinner spinner = new Spinner(this);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
+            android.R.layout.simple_spinner_item, choices);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinner.setAdapter(adapter);
+        spinner.setSelection(Math.max(0, Math.min(selection, choices.length - 1)));
+        layout.addView(spinner);
+        return spinner;
+    }
+
+    private void showOfflineBotOptions(TextView feedback, Button appSettings) {
+        SharedPreferences preferences = getSharedPreferences("offline_bots", MODE_PRIVATE);
+        String[] counts = new String[15];
+        for (int index = 0; index < counts.length; index++)
+            counts[index] = Integer.toString(index + 1);
+        String[] skills = { "Recruit", "Easy", "Normal", "Heroic", "Veteran", "Legendary" };
+        String[] teams = { "Balanced teams", "All bots against human players" };
+
+        LinearLayout options = new LinearLayout(this);
+        options.setOrientation(LinearLayout.VERTICAL);
+        options.setPadding(dp(24), dp(12), dp(24), dp(12));
+        TextView instructions = new TextView(this);
+        instructions.setText("In Halo, choose Multiplayer → Split Screen, then Slayer or Team Slayer. "
+            + "You can play alone or with controllers on this phone.");
+        options.addView(instructions);
+        Spinner count = botChoice(options, "Bots", counts, preferences.getInt("count", 3) - 1);
+        Spinner skill = botChoice(options, "Difficulty", skills, preferences.getInt("skill", 2));
+        Spinner team = botChoice(options, "Team Slayer setup", teams, preferences.getInt("team", 0));
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(options);
+        new AlertDialog.Builder(this)
+            .setTitle("Offline Bot Match")
+            .setView(scroll)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Open Halo", (dialog, which) -> {
+                if (!canStartGame(feedback, appSettings))
+                    return;
+                int botCount = count.getSelectedItemPosition() + 1;
+                int skillIndex = skill.getSelectedItemPosition();
+                int teamIndex = team.getSelectedItemPosition();
+                preferences.edit().putInt("count", botCount).putInt("skill", skillIndex)
+                    .putInt("team", teamIndex).apply();
+                Intent game = new Intent(this, HaloActivity.class);
+                game.putExtra(HaloActivity.OFFLINE_BOT_ARGUMENTS, new String[] {
+                    "--offline-bots", Integer.toString(botCount),
+                    skills[skillIndex].toLowerCase(java.util.Locale.ROOT),
+                    teamIndex == 0 ? "even" : "against"
+                });
+                startGame(game);
+            })
+            .show();
     }
 
     private TextView lanText(String message, int size) {
@@ -365,6 +445,12 @@ public class LauncherActivity extends Activity {
         shareActions.addView(share, new LinearLayout.LayoutParams(0,
             LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         hostPanel.addView(shareActions);
+        Spinner lanBots = botChoice(hostPanel, "Experimental LAN Slayer bots (host only)",
+            new String[] { "Off (0)", "1 bot", "2 bots", "3 bots", "4 bots" },
+            settings.systemLinkBotCount);
+        hostPanel.addView(lanText("Start with one bot in a System Link Slayer match. "
+            + "These bots are experimental and do not run in co-op campaign. "
+            + "Your friends must use the same experimental APK.", 13));
         layout.addView(hostPanel);
 
         LinearLayout joinPanel = new LinearLayout(this);
@@ -465,21 +551,15 @@ public class LauncherActivity extends Activity {
                 feedback.setText("Discard the pending internet invite before enabling LAN-only.");
                 return;
             }
-            int processStatus = gameProcessStatus();
-            if (processStatus != 0) {
-                feedback.setText(processStatus == 1
-                    ? "Halo is still running. Force-stop it in Android App Settings, "
-                      + "then reopen this launcher to apply new settings."
-                    : "Android couldn't confirm the old game is stopped. Force-stop Halo "
-                      + "in Android App Settings, then reopen.");
-                appSettings.setVisibility(View.VISIBLE);
+            if (!canStartGame(feedback, appSettings))
                 return;
-            }
             try {
                 String peer = LanConfig.peerForRole(hostRole.isChecked(),
                     hostIp.getText().toString(), offline.isChecked());
+                int count = hostRole.isChecked() && offline.isChecked() && !invitePending
+                    ? lanBots.getSelectedItemPosition() : 0;
                 LanConfig.save(new File(dataRoot, "config.toml"),
-                    local.getText().toString(), peer, offline.isChecked());
+                    local.getText().toString(), peer, offline.isChecked(), count);
                 if (invitePending)
                     publishPendingInvite();
             } catch (java.io.IOException e) {
@@ -489,6 +569,10 @@ public class LauncherActivity extends Activity {
             startGame();
         });
         layout.addView(play);
+        Button offlineBots = new Button(this);
+        offlineBots.setText("Offline Bot Match");
+        offlineBots.setOnClickListener(view -> showOfflineBotOptions(feedback, appSettings));
+        layout.addView(offlineBots);
         layout.addView(appSettings);
         setContentView(scroll);
     }

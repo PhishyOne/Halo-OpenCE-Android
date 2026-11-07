@@ -24,6 +24,33 @@ lobby, never internet games or campaign co-op.
 This branch raises the OpenCE network protocol from 41 to 42. Do not mix
 APK builds from this branch with the stable two-phone or three-phone builds.
 
+## v1 Android test launcher
+
+The Android-only integration adds the proven offline-bots launcher and an
+*Experimental LAN Slayer bots* selector (Off / 1 / 2 / 3 / 4) under
+**Host game**. All clients run the same experimental build, but choose
+**Join game** and enter the Halo host's LAN IPv4. The host can share that
+address using the launcher. Only the host can enable bot AI, by selecting
+LAN-only mode and one or more bots; joining or switching to internet mode
+sets `bots.system_link_count = 0` in the local TOML. Offline bots use
+`bots.count` and are entirely separate.
+
+One-button Save persists LAN settings and the bot count in one atomic
+configuration update without dropping offline difficulty, team, display,
+audio or other settings. A new test covers client-mode clearing, invalid
+count and duplicate TOML sections/keys. Do not install casually:
+the debug signing key is not stable and an uninstall erases game maps.
+
+**One-bot test protocol:** host starts System Link *Slayer* on Blood Gulch,
+with 1 bot on the host only. Both phones should see bot name in lobby and
+scoreboard. One player watches the bot move/shoot, the other shoots it.
+Check bot dies/respawns and all kills are scored identically. Save
+`debug.txt` on BOTH phones before uninstalling. If successful, repeat
+with two, then four bots; test one joining player dying and respawning.
+A bot appearing in the host-only scoreboard is not sufficient to claim
+networked bot functionality. Campaign co-op and Covenant/Flood waves are
+not implemented by this prototype.
+
 ## Preliminary source behavior
 
 1. The host adds synthetic bot players to its Slayer lobby, *not* synthetic
