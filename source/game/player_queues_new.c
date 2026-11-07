@@ -1151,6 +1151,29 @@ long update_server_ticked_update_number(
 		update_client_globals.next_update_number_to_dequeue - 1 : NONE;
 }
 
+/* port: the host's bot AI runs inside players_update_before_game, after
+   the action queue had already built the tick. Preserve the *simulated*
+   action here so network_distributed.c relays the same controls to clients.
+   Never accept this path on a client, and never alter an expired update. */
+void update_server_note_bot_action(
+	long player_index,
+	struct player_action const *action)
+{
+	long absolute_index = DATUM_INDEX_TO_ABSOLUTE_INDEX(player_index);
+	long update_number = update_server_ticked_update_number();
+	struct update *update;
+
+	if (game_connection() != _game_connection_network_server || !action ||
+		!distributed_action_valid(action) || absolute_index < 0 ||
+		absolute_index >= MAXIMUM_NUMBER_OF_PLAYERS || update_number == NONE)
+		return;
+	update = update_server_get_update(update_number);
+	if (!update || update->update_number != update_number ||
+		absolute_index >= update->update.action_count)
+		return;
+	update->update.actions[absolute_index] = *action;
+}
+
 struct player_action const *update_server_update_actions(
 	long update_number,
 	short *count)
