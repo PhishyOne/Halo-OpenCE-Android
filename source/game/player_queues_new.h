@@ -80,6 +80,11 @@ void update_server_handle_distributed_input(
 actions (NULL once it is gone) */
 long update_server_ticked_update_number(
 	void);
+/* port: copy the host's own simulated bot control into that tick's
+   history before the distributed netcode relays it to clients. */
+void update_server_note_bot_action(
+	long player_index,
+	struct player_action const *action);
 struct player_action const *update_server_update_actions(
 	long update_number,
 	short *count);
