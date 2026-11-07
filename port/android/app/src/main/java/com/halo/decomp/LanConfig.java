@@ -11,16 +11,18 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Edits only the three System Link options, preserving the rest of config.toml. */
+/** Edits System Link options and optional LAN bot count, preserving other TOML. */
 final class LanConfig {
     private static final Pattern SECTION = Pattern.compile("^\\s*\\[([^]\\r\\n]+)\\]\\s*(?:#.*)?$");
     private static final Pattern KEY = Pattern.compile("^\\s*(address|broadcast|online)\\s*=.*$");
+    private static final Pattern BOT_KEY = Pattern.compile("^\\s*system_link_count\\s*=.*$");
     private static final long MAX_BYTES = 1024 * 1024;
 
     static final class Settings {
         String local = "";
         String peer = "";
         boolean lanOnly = true;
+        int systemLinkBotCount = 0;
     }
 
     private LanConfig() { }
@@ -60,13 +62,15 @@ final class LanConfig {
     static Settings load(File file) throws IOException {
         Settings settings = new Settings();
         boolean network = false;
+        boolean bots = false;
         for (String line : lines(file)) {
             Matcher section = SECTION.matcher(line);
             if (section.matches()) {
                 network = section.group(1).trim().equals("network");
+                bots = section.group(1).trim().equals("bots");
                 continue;
             }
-            if (!network)
+            if (!network && !bots)
                 continue;
             int equal = line.indexOf('=');
             if (equal < 0)
@@ -82,12 +86,21 @@ final class LanConfig {
                 if (comment >= 0)
                     value = value.substring(0, comment).trim();
             }
-            if (key.equals("address"))
-                settings.local = validAddress(value) ? value : "";
-            else if (key.equals("broadcast"))
-                settings.peer = validAddress(value) ? value : "";
-            else if (key.equals("online"))
-                settings.lanOnly = !value.equalsIgnoreCase("true");
+            if (network) {
+                if (key.equals("address"))
+                    settings.local = validAddress(value) ? value : "";
+                else if (key.equals("broadcast"))
+                    settings.peer = validAddress(value) ? value : "";
+                else if (key.equals("online"))
+                    settings.lanOnly = !value.equalsIgnoreCase("true");
+            } else if (bots && key.equals("system_link_count")) {
+                try {
+                    int count = Integer.parseInt(value);
+                    settings.systemLinkBotCount = count >= 0 && count <= 4 ? count : 0;
+                } catch (NumberFormatException e) {
+                    settings.systemLinkBotCount = 0;
+                }
+            }
         }
         return settings;
     }
@@ -124,6 +137,15 @@ final class LanConfig {
     }
 
     static void save(File file, String local, String peer, boolean lanOnly) throws IOException {
+        save(file, local, peer, lanOnly, null);
+    }
+
+    /** Update host-only LAN bots in the same atomic write as the network settings.
+     * null preserves the existing [bots] section for callers not managing bots. */
+    static void save(File file, String local, String peer, boolean lanOnly,
+            Integer lanBotCount) throws IOException {
+        if (lanBotCount != null && (lanBotCount < 0 || lanBotCount > 4))
+            throw new IOException("LAN bot count must be from 0 to 4.");
         local = local.trim();
         peer = peer.trim();
         if (!validAddress(local) || !validAddress(peer))
@@ -132,19 +154,27 @@ final class LanConfig {
         String[] original = lines(file);
         List<String> result = new ArrayList<>();
         boolean network = false;
+        boolean bots = false;
         boolean seenNetwork = false;
+        boolean seenBots = false;
+        boolean foundBotCount = false;
         boolean[] found = new boolean[3];
         for (String line : original) {
             Matcher section = SECTION.matcher(line);
             if (section.matches()) {
-                if (network) {
+                if (network)
                     insertMissing(result, found, local, peer, lanOnly);
-                    network = false;
-                }
+                if (bots && lanBotCount != null && !foundBotCount)
+                    result.add("system_link_count = " + lanBotCount);
+                network = bots = false;
                 if (section.group(1).trim().equals("network")) {
                     if (seenNetwork)
                         throw new IOException("Duplicate [network] sections in config.toml.");
                     seenNetwork = network = true;
+                } else if (lanBotCount != null && section.group(1).trim().equals("bots")) {
+                    if (seenBots)
+                        throw new IOException("Duplicate [bots] sections in config.toml.");
+                    seenBots = bots = true;
                 }
                 result.add(line);
                 continue;
@@ -157,17 +187,29 @@ final class LanConfig {
                     throw new IOException("Duplicate " + name + " setting in [network].");
                 found[index] = true;
                 result.add(entry(name, local, peer, lanOnly));
+            } else if (bots && lanBotCount != null && BOT_KEY.matcher(line).matches()) {
+                if (foundBotCount)
+                    throw new IOException("Duplicate system_link_count in [bots].");
+                foundBotCount = true;
+                result.add("system_link_count = " + lanBotCount);
             } else {
                 result.add(line);
             }
         }
         if (network)
             insertMissing(result, found, local, peer, lanOnly);
+        if (bots && lanBotCount != null && !foundBotCount)
+            result.add("system_link_count = " + lanBotCount);
         if (!seenNetwork) {
             if (!result.isEmpty())
                 result.add("");
             result.add("[network]");
             insertMissing(result, new boolean[3], local, peer, lanOnly);
+        }
+        if (lanBotCount != null && !seenBots) {
+            result.add("");
+            result.add("[bots]");
+            result.add("system_link_count = " + lanBotCount);
         }
         File parent = file.getParentFile();
         if (parent == null || !parent.isDirectory())
