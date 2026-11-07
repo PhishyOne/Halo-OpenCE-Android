@@ -1604,7 +1604,8 @@ static void network_game_server_port_bots(
 		/* port: a real machine at a high index is not a bot. A genuine
 		   connection has a server client-machine record. */
 		if (bots_machine_is_bot(player->machine_index) &&
-			server->client_machines[(short)player->machine_index].machine_index == NONE)
+			server->client_machines[(short)player->machine_index].machine_index == NONE &&
+			server->game.machines[(short)player->machine_index].machine_index == NONE)
 			slot_of_bot[player->machine_index - BOTS_FIRST_MACHINE] = slot;
 		else if (VALID_INDEX(player->team_index, NUMBER_OF_MULTIPLAYER_TEAMS))
 		{
