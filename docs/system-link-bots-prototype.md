@@ -17,11 +17,11 @@ teams = "against"
 ```
 
 `bots.system_link_count = 0` by default. Values are clamped to 0..4.
-Offline split-screen continues to use `bots.count` (0..15); the two settings
+Offline split-screen uses `bots.count` (0..31); LAN bots remain capped at 4; the two settings
 are independent. System Link bots are only eligible in a LAN-only Slayer
 lobby, never internet games or campaign co-op.
 
-This branch raises the OpenCE network protocol from 41 to 42. Do not mix
+The combined 31-offline-bot build uses network protocol 43 rather than 42, because the bots' synthetic machine indices change from 113..127 to 97..127. Do not mix
 APK builds from this branch with the stable two-phone or three-phone builds.
 
 ## v1 Android test launcher

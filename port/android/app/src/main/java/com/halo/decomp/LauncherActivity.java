@@ -287,7 +287,7 @@ public class LauncherActivity extends Activity {
 
     private void showOfflineBotOptions(TextView feedback, Button appSettings) {
         SharedPreferences preferences = getSharedPreferences("offline_bots", MODE_PRIVATE);
-        String[] counts = new String[15];
+        String[] counts = new String[31];
         for (int index = 0; index < counts.length; index++)
             counts[index] = Integer.toString(index + 1);
         String[] skills = { "Recruit", "Easy", "Normal", "Heroic", "Veteran", "Legendary" };

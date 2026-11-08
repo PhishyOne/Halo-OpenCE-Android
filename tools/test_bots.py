@@ -15,11 +15,17 @@ import pytest
 
 RETAIL_MAPS = Path("assets/maps")
 GAME = Path("build/linux/halo")
-# a player's line of the network test's each second (network_test.c): alive or dead, its kills, deaths, team and
-# machine (a bot's is BOTS_FIRST_MACHINE, 113, and up)
+# a player's line of the network test's each second (network_test.c): alive or dead,
+# its kills, deaths, team and machine (bots use the highest machine indices).
 PLAYER = re.compile(r"player (\d+): (?:\((-?[\d.]+) (-?[\d.]+) -?[\d.]+\)|dead).*? s-?\d+ k(-?\d+) d(-?\d+) f-?\d+ "
                     r"t-?\d+ m(\d+)")
-BOTS_FIRST_MACHINE = 113
+# Keep this independent gameplay test aligned with the actual source definitions;
+# the offline bot maximum can grow without invalidating the test's threshold.
+limits = (Path(__file__).resolve().parents[1] / "port/linux/include/halo_port_limits.h").read_text()
+bot_header = (Path(__file__).resolve().parents[1] / "port/linux/game/bots.h").read_text()
+maximum_machines = int(re.search(r"#define HALO_PORT_MAXIMUM_NETWORK_MACHINES (\d+)", limits).group(1))
+maximum_bots = int(re.search(r"#define BOTS_MAXIMUM (\d+)", bot_header).group(1))
+BOTS_FIRST_MACHINE = maximum_machines - maximum_bots
 
 
 def _game(map_name):
