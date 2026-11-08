@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, constant, enum_with, function, mutated, read, run, structure  # noqa: E402
 
 CASES = ["fills", "room", "fewer", "even", "against", "follows-players", "never-network", "slayer-only",
-         "not-once-started", "no-player-no-bots", "names-and-machines", "cap-two-humans", "lan-one", "lan-four", "lan-off", "internet-never", "high-slot"]
+         "not-once-started", "no-player-no-bots", "names-and-machines", "cap-two-humans", "lan-one", "lan-four", "lan-off", "internet-never", "high-slot", "lan-low-real-slot"]
 GAME_MANAGER_FUNCTIONS = ("network_game_invalidate_player", "network_player_is_valid", "network_game_player_is_valid",
                           "network_game_add_player", "network_game_remove_player")
 
@@ -43,10 +43,12 @@ def generated(fault=None):
         config += f"#define {name} {constant(limits, name)}\n"
     config += f"#define MAXIMUM_LOCAL_PLAYERS {constant(read('source/game/players.h'), 'MAXIMUM_LOCAL_PLAYERS')}\n"
     config += f"#define NUMBER_OF_MULTIPLAYER_TEAMS {constant(server, 'NUMBER_OF_MULTIPLAYER_TEAMS')}\n"
-    config += f"#define BOTS_MAXIMUM {constant(bots_header, 'BOTS_MAXIMUM')}\n"
-    match = re.search(r"^#define BOTS_FIRST_MACHINE .*$", bots_header, re.M)
-    assert match, "BOTS_FIRST_MACHINE not found in bots.h"
-    config += match.group(0) + "\n"
+    for name in ("BOTS_MAXIMUM", "BOTS_SYSTEM_LINK_MAXIMUM"):
+        config += f"#define {name} {constant(bots_header, name)}\n"
+    for name in ("BOTS_FIRST_MACHINE", "BOTS_LAN_FIRST_MACHINE"):
+        match = re.search(r"^#define " + name + r" .*$", bots_header, re.M)
+        assert match, f"{name} not found in bots.h"
+        config += match.group(0) + "\n"
     config += enum_with(bots_header, "_bots_teams_against") + "\n"
     config += enum_with(server, "_network_game_server_state_pregame") + "\n"
     config += enum_with(read("source/game/game_engine.h"), "game_engine_slayer") + "\n"
@@ -54,7 +56,7 @@ def generated(fault=None):
     code = ""
     for name in GAME_MANAGER_FUNCTIONS:
         code += function(manager, name) + "\n"
-    for name in ("bots_machine_is_bot", "bots_network_player", "bots_system_link_wanted_count"):
+    for name in ("bots_first_machine", "bots_machine_is_bot", "bots_network_player", "bots_system_link_wanted_count"):
         code += function(bots, name) + "\n"
     lobby = function(server, "network_game_server_port_bots")
     if fault:

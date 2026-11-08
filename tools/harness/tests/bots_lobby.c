@@ -166,7 +166,7 @@ static boolean bot_in(long bot_index)
 	for (index = 0; index < HALO_PORT_MAXIMUM_NETWORK_PLAYERS; index++)
 	{
 		if (network_player_is_valid(&server.game.players[index]) &&
-			server.game.players[index].machine_index == BOTS_FIRST_MACHINE + bot_index)
+			server.game.players[index].machine_index == bots_first_machine() + bot_index)
 		{
 			return TRUE;
 		}
@@ -179,11 +179,11 @@ int main(int argc, char **argv)
 	char const *case_name = argc > 1 ? argv[1] : "";
 	long team0, team1, count;
 
-	/* as many as asked for, once: the lobby unchanged after (nothing sent
-	   again); more than 31 asked for is 31, subject to real player slots */
+	/* as many as asked for, once: unchanged after; 127 maximum bots in
+	   a 128-player local lobby, with one human on machine zero. */
 	CASE("fills")
 	{
-		lobby(game_engine_slayer, 32);
+		lobby(game_engine_slayer, 128);
 		player(0, 0);
 		wanted = 6;
 		network_game_server_port_bots(&server);
@@ -194,8 +194,11 @@ int main(int argc, char **argv)
 		CHECK(sends == 1 && server.game.player_count == 7, "the lobby changed again (%ld sends)", sends);
 		wanted = 99;
 		network_game_server_port_bots(&server);
-		CHECK(bots_in(&team0, &team1) == 31, "%ld bots for 99, not 31", bots_in(&team0, &team1));
-		CHECK(server.game.player_count == 32 && bot_in(30), "31-bot match did not fill 32 player slots");
+		CHECK(bots_in(&team0, &team1) == 99, "%ld bots for 99, not 99", bots_in(&team0, &team1));
+		wanted = 255;
+		network_game_server_port_bots(&server);
+		CHECK(bots_in(&team0, &team1) == 127, "%ld bots for 255, not 127", bots_in(&team0, &team1));
+		CHECK(server.game.player_count == 128 && bot_in(126), "127-bot match did not fill 128 player slots");
 		return 0;
 	}
 	/* as far as the game has room */
@@ -333,9 +336,9 @@ int main(int argc, char **argv)
 	{
 		long index, named = 0;
 
-		lobby(game_engine_slayer, 32);
+		lobby(game_engine_slayer, 128);
 		player(0, 0);
-		wanted = 31;
+		wanted = 127;
 		network_game_server_port_bots(&server);
 		for (index = 0; index < HALO_PORT_MAXIMUM_NETWORK_PLAYERS; index++)
 		{
@@ -349,24 +352,34 @@ int main(int argc, char **argv)
 				"bot of machine %d", slot->machine_index);
 			CHECK(slot->primary_color_index != NONE, "bot of machine %d has no colour", slot->machine_index);
 			if (slot->name[0])
+			{
+				long previous;
+				for (previous = 0; previous < index; previous++)
+				{
+					struct network_player *other = &server.game.players[previous];
+					if (network_player_is_valid(other) && bots_machine_is_bot(other->machine_index))
+						CHECK(wcscmp(slot->name, other->name) != 0,
+							"duplicate bot name at slots %ld and %ld", previous, index);
+				}
 				named++;
+			}
 		}
-		CHECK(named == 31, "%ld of 31 bots named", named);
+		CHECK(named == 127, "%ld of 127 bots named", named);
 		CHECK(!bots_machine_is_bot(0) && !bots_machine_is_bot(BOTS_FIRST_MACHINE - 1), "a real machine is a bot");
 		return 0;
 	}
-	/* port: 31 bots never displace human players in a 32-player lobby. */
+	/* port: reserve room for two humans even at the 128-player ceiling. */
 	CASE("cap-two-humans")
 	{
-		lobby(game_engine_slayer, 32);
+		lobby(game_engine_slayer, 128);
 		player(0, 0);
 		player(1, 0);
-		wanted = 31;
+		wanted = 127;
 		network_game_server_port_bots(&server);
-		CHECK(bots_in(&team0, &team1) == 30,
-			"%ld bots with two humans in 32 slots, expected 30", bots_in(&team0, &team1));
-		CHECK(server.game.player_count == 32, "the 32-player lobby is not filled");
-		CHECK(bot_in(29) && !bot_in(30), "the final bot took a human's player slot");
+		CHECK(bots_in(&team0, &team1) == 126,
+			"%ld bots with two humans in 128 slots, expected 126", bots_in(&team0, &team1));
+		CHECK(server.game.player_count == 128, "the 128-player lobby is not filled");
+		CHECK(bot_in(125) && !bot_in(126), "the final bot took a human's player slot");
 		return 0;
 	}
 	/* port: network bots stay off until the LAN host opts in. */
@@ -419,7 +432,7 @@ int main(int argc, char **argv)
 	CASE("high-slot")
 	{
 		struct network_player joining;
-		long fake_slot = BOTS_FIRST_MACHINE;
+		long fake_slot = BOTS_LAN_FIRST_MACHINE;
 		lobby(game_engine_slayer, 16);
 		player(0, 0);
 		local_game = FALSE;
@@ -435,6 +448,34 @@ int main(int argc, char **argv)
 		network_game_server_port_bots(&server);
 		CHECK(server.game.player_count == 2, "host replaced a real high-index client with a bot");
 		CHECK(bots_in(&team0, &team1) == 0, "fake bot collided with a real machine");
+		return 0;
+	}
+	/* port: the 127-offline cap MUST NOT reserve a normal guest's LAN
+	   machine slot 1: only machines 124..127 are synthetic in LAN mode. */
+	CASE("lan-low-real-slot")
+	{
+		struct network_player joining;
+		lobby(game_engine_slayer, 16);
+		player(0, 0);
+		local_game = FALSE;
+		system_link_wanted = 4;
+		CHECK(!bots_machine_is_bot(1), "the first LAN guest machine is reserved for bots");
+		CHECK(bots_machine_is_bot(BOTS_LAN_FIRST_MACHINE) &&
+			!bots_machine_is_bot(BOTS_LAN_FIRST_MACHINE - 1),
+			"LAN bot machine range differs from four high slots");
+		memset(&joining, 0, sizeof(joining));
+		joining.name[0] = L'G';
+		joining.machine_index = 1;
+		joining.controller_index = 0;
+		joining.team_index = 0;
+		joining.player_list_index = NONE;
+		server.game.machines[1].machine_index = 1;
+		server.client_machines[1].machine_index = 1;
+		CHECK(network_game_add_player(&server.game, &joining), "guest on machine 1 cannot join");
+		network_game_server_port_bots(&server);
+		CHECK(server.game.player_count == 6, "two humans + four LAN bots did not fit");
+		CHECK(bots_in(&team0, &team1) == 4, "LAN bots not present alongside guest");
+		CHECK(bot_in(0) && bot_in(3), "LAN bots not placed in high reserved machines");
 		return 0;
 	}
 	fprintf(stderr, "unknown case: %s\n", case_name);

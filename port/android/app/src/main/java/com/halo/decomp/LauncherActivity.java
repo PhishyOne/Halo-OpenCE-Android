@@ -287,7 +287,7 @@ public class LauncherActivity extends Activity {
 
     private void showOfflineBotOptions(TextView feedback, Button appSettings) {
         SharedPreferences preferences = getSharedPreferences("offline_bots", MODE_PRIVATE);
-        String[] counts = new String[31];
+        String[] counts = new String[127];
         for (int index = 0; index < counts.length; index++)
             counts[index] = Integer.toString(index + 1);
         String[] skills = { "Recruit", "Easy", "Normal", "Heroic", "Veteran", "Legendary" };
@@ -300,7 +300,12 @@ public class LauncherActivity extends Activity {
         instructions.setText("In Halo, choose Multiplayer → Split Screen, then Slayer or Team Slayer. "
             + "You can play alone or with controllers on this phone.");
         options.addView(instructions);
-        Spinner count = botChoice(options, "Bots", counts, preferences.getInt("count", 3) - 1);
+        Spinner count = botChoice(options, "Bots (1–127, stress test)", counts,
+            preferences.getInt("count", 3) - 1);
+        Button maxBots = new Button(this);
+        maxBots.setText("MAX: 127 BOTS");
+        maxBots.setOnClickListener(view -> count.setSelection(126));
+        options.addView(maxBots);
         Spinner skill = botChoice(options, "Difficulty", skills, preferences.getInt("skill", 2));
         Spinner team = botChoice(options, "Team Slayer setup", teams, preferences.getInt("team", 0));
 

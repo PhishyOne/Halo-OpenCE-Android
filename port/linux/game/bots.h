@@ -3,9 +3,9 @@
 A bot is a player of a local (split screen) game whose controls come from
 code instead of a controller: it is in the lobby, the scores and the game's
 rules as any player is, spawns, respawns and scores. Each bot is the one
-player of a machine of its own at the top of the machine indices
-(BOTS_FIRST_MACHINE up), which no real machine takes: a split screen game has
-only its own machine. The bots have no view and no controller: nothing is
+player of a machine of its own at the top of the machine indices. Offline
+bots use machine indices 1..127 (the only real machine is 0), while LAN
+bots use 124..127 and yield if a real guest already occupies one. The bots have no view and no controller: nothing is
 drawn for them. */
 #ifndef HALO_BOTS_H
 #define HALO_BOTS_H
@@ -13,11 +13,15 @@ drawn for them. */
 struct player_action;
 struct network_player;
 
-/* port: extended offline Slayer bot capacity (31 bots + 1 human = 32).
-   Networked bots still have the separate bots.system_link_count cap of 4. */
-#define BOTS_MAXIMUM 31
-/* the first bot's machine index (the last machine indices of the session) */
+/* Offline stress-test ceiling: 127 synthetic machines + host machine 0.
+   LAN bots are a SEPARATE four-bot experiment and MUST NOT reserve the
+   other 123 slots from real joining clients. */
+#define BOTS_MAXIMUM 127
+#define BOTS_SYSTEM_LINK_MAXIMUM 4
+/* offline local split screen only: simulated machine indices 1..127 */
 #define BOTS_FIRST_MACHINE (HALO_PORT_MAXIMUM_NETWORK_MACHINES - BOTS_MAXIMUM)
+/* LAN only: simulated machine indices 124..127, leaving room for real guests */
+#define BOTS_LAN_FIRST_MACHINE (HALO_PORT_MAXIMUM_NETWORK_MACHINES - BOTS_SYSTEM_LINK_MAXIMUM)
 
 enum
 {
@@ -34,7 +38,9 @@ long bots_system_link_wanted_count(void);
 short bots_skill(void);
 short bots_teams(void);
 
-/* a machine is a bot's */
+/* Bot machine-number range is mode-specific: local 1..127, LAN 124..127. */
+long bots_first_machine(void);
+/* a machine is in that mode's synthetic bot range */
 int bots_machine_is_bot(long machine_index);
 /* the network player for bot number `bot_index` (0 up): its machine,
 controller, name and no team or colour yet */

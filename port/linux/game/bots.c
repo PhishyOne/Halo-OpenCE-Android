@@ -402,7 +402,7 @@ long bots_system_link_wanted_count(void)
 {
 	long count = config_integer("bots.system_link_count");
 
-	return count < 0 ? 0 : count > 4 ? 4 : count;
+	return count < 0 ? 0 : count > BOTS_SYSTEM_LINK_MAXIMUM ? BOTS_SYSTEM_LINK_MAXIMUM : count;
 }
 
 short bots_skill(void)
@@ -423,15 +423,23 @@ short bots_teams(void)
 	return strcmp(config_string("bots.teams"), "against") ? _bots_teams_even : _bots_teams_against;
 }
 
+long bots_first_machine(void)
+{
+	/* Never let offline 127-bot capacity reserve every LAN client machine. */
+	return network_game_is_splitscreen_local() ? BOTS_FIRST_MACHINE : BOTS_LAN_FIRST_MACHINE;
+}
+
 int bots_machine_is_bot(long machine_index)
 {
-	return machine_index >= BOTS_FIRST_MACHINE && machine_index < BOTS_FIRST_MACHINE + BOTS_MAXIMUM;
+	long first = bots_first_machine();
+	return machine_index >= first && machine_index < HALO_PORT_MAXIMUM_NETWORK_MACHINES;
 }
 
 void bots_network_player(long bot_index, struct network_player *player)
 {
 	/* (the Marines of Halo's campaign; eleven characters at most) */
-	static char const *const names[BOTS_MAXIMUM] =
+	/* Keep the 31 existing names; generate numbered names for 32..127. */
+	static char const *const names[] =
 	{
 		"Johnson", "Jenkins", "Mendoza", "Bisenti", "Stacker", "Polaski", "Chips", "Kojo",
 		"Rawley", "Riley", "Wellsley", "Hall", "Fitzgerald", "Locklear", "Mitchell",
@@ -440,8 +448,17 @@ void bots_network_player(long bot_index, struct network_player *player)
 		"Marine 24", "Marine 25", "Marine 26", "Marine 27",
 		"Marine 28", "Marine 29", "Marine 30", "Marine 31",
 	};
-	char const *name = names[bot_index % BOTS_MAXIMUM];
+	char generated_name[16];
+	char const *name;
 	long index;
+
+	if (bot_index < (long)NUMBEROF(names))
+		name = names[bot_index];
+	else
+	{
+		snprintf(generated_name, sizeof(generated_name), "Marine %ld", bot_index + 1);
+		name = generated_name;
+	}
 
 	csmemset(player, 0, sizeof(*player));
 	for (index = 0; index < (long)NUMBEROF(player->name) - 1 && name[index]; index++)
@@ -449,7 +466,7 @@ void bots_network_player(long bot_index, struct network_player *player)
 	player->name[index] = 0;
 	player->primary_color_index = NONE;
 	player->icon_index = 0;
-	player->machine_index = (char)(BOTS_FIRST_MACHINE + bot_index);
+	player->machine_index = (char)(bots_first_machine() + bot_index);
 	player->controller_index = 0;
 	player->team_index = 0;
 	player->player_list_index = NONE;
@@ -3057,7 +3074,7 @@ void bots_update_actions(struct player_action *actions)
 			bots_globals.tick_searches = 0;
 			bots_paths_scan();
 		}
-		bot_index = player->network_player_data.machine_index - BOTS_FIRST_MACHINE;
+		bot_index = player->network_player_data.machine_index - bots_first_machine();
 		bot = &bots_globals.bots[bot_index];
 		if (bot->player_index != iterator.datum_index)
 			bots_bot_reset(bot, iterator.datum_index, bot_index);
