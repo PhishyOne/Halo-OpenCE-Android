@@ -188,6 +188,46 @@ public final class LanConfigSmokeTest {
             check(!LanConfig.validBotSkill("\"heroic\"") && !LanConfig.validBotSkill("easy\\n[evil]"),
                 "bot difficulty validator must reject TOML injection");
 
+            // Vehicle mode remains off by default.  All role changes and
+            // configuration writes are one atomic operation.
+            Files.writeString(botsConfig.toPath(),
+                "[bots]\ncount = 31\nskill = \"heroic\"\n"
+                + "system_link_count = 8\nvehicle_seats = false\n"
+                + "[network]\nonline = false\n", StandardCharsets.UTF_8);
+            check(!LanConfig.load(botsConfig).vehicleSeats,
+                "vehicle seat AI must default off");
+            LanConfig.save(botsConfig, "", "", true, 8, "normal", true);
+            check(LanConfig.load(botsConfig).vehicleSeats,
+                "host vehicle seats setting did not round-trip");
+            String seats = Files.readString(botsConfig.toPath());
+            check(seats.contains("vehicle_seats = true")
+                && seats.contains("count = 31"),
+                "experimental setting overwrote offline count");
+            check(seats.split("vehicle_seats", -1).length == 2,
+                "vehicle seat key duplicated");
+            // Older save overloads must never accidentally enable or erase it.
+            LanConfig.save(botsConfig, "", "", true, 4, "veteran");
+            check(LanConfig.load(botsConfig).vehicleSeats,
+                "old save overload erased seat setting");
+            // Joining clients cannot run seat AI, and internet mode clears it.
+            LanConfig.save(botsConfig, "", "10.28.111.42", true, 0, null, false);
+            check(!LanConfig.load(botsConfig).vehicleSeats
+                && LanConfig.load(botsConfig).systemLinkBotCount == 0,
+                "guest retained host-only vehicle AI");
+            LanConfig.save(botsConfig, "", "", false, 0, null, false);
+            check(!LanConfig.load(botsConfig).vehicleSeats
+                && !LanConfig.load(botsConfig).lanOnly,
+                "internet-mode seat AI not disabled");
+            String duplicate = "[bots]\nvehicle_seats = false\nvehicle_seats = true\n";
+            Files.writeString(botsConfig.toPath(), duplicate, StandardCharsets.UTF_8);
+            boolean refused = false;
+            try {
+                LanConfig.save(botsConfig, "", "", true, 4, "normal", true);
+            } catch (IOException expected) {
+                refused = true;
+            }
+            check(refused && Files.readString(botsConfig.toPath()).equals(duplicate),
+                "duplicate seat settings not rejected atomically");
             System.out.println("LanConfigSmokeTest PASS");
         } finally {
             try (java.util.stream.Stream<Path> files = Files.walk(folder)) {
