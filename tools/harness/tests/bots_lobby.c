@@ -180,10 +180,10 @@ int main(int argc, char **argv)
 	long team0, team1, count;
 
 	/* as many as asked for, once: the lobby unchanged after (nothing sent
-	again); more than 15 asked for is 15 */
+	   again); more than 31 asked for is 31, subject to real player slots */
 	CASE("fills")
 	{
-		lobby(game_engine_slayer, 16);
+		lobby(game_engine_slayer, 32);
 		player(0, 0);
 		wanted = 6;
 		network_game_server_port_bots(&server);
@@ -194,7 +194,8 @@ int main(int argc, char **argv)
 		CHECK(sends == 1 && server.game.player_count == 7, "the lobby changed again (%ld sends)", sends);
 		wanted = 99;
 		network_game_server_port_bots(&server);
-		CHECK(bots_in(&team0, &team1) == 15, "%ld bots for 99, not 15", bots_in(&team0, &team1));
+		CHECK(bots_in(&team0, &team1) == 31, "%ld bots for 99, not 31", bots_in(&team0, &team1));
+		CHECK(server.game.player_count == 32 && bot_in(30), "31-bot match did not fill 32 player slots");
 		return 0;
 	}
 	/* as far as the game has room */
@@ -332,9 +333,9 @@ int main(int argc, char **argv)
 	{
 		long index, named = 0;
 
-		lobby(game_engine_slayer, 16);
+		lobby(game_engine_slayer, 32);
 		player(0, 0);
-		wanted = 15;
+		wanted = 31;
 		network_game_server_port_bots(&server);
 		for (index = 0; index < HALO_PORT_MAXIMUM_NETWORK_PLAYERS; index++)
 		{
@@ -350,8 +351,22 @@ int main(int argc, char **argv)
 			if (slot->name[0])
 				named++;
 		}
-		CHECK(named == 15, "%ld of 15 bots named", named);
+		CHECK(named == 31, "%ld of 31 bots named", named);
 		CHECK(!bots_machine_is_bot(0) && !bots_machine_is_bot(BOTS_FIRST_MACHINE - 1), "a real machine is a bot");
+		return 0;
+	}
+	/* port: 31 bots never displace human players in a 32-player lobby. */
+	CASE("cap-two-humans")
+	{
+		lobby(game_engine_slayer, 32);
+		player(0, 0);
+		player(1, 0);
+		wanted = 31;
+		network_game_server_port_bots(&server);
+		CHECK(bots_in(&team0, &team1) == 30,
+			"%ld bots with two humans in 32 slots, expected 30", bots_in(&team0, &team1));
+		CHECK(server.game.player_count == 32, "the 32-player lobby is not filled");
+		CHECK(bot_in(29) && !bot_in(30), "the final bot took a human's player slot");
 		return 0;
 	}
 	/* port: network bots stay off until the LAN host opts in. */

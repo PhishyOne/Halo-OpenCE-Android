@@ -435,6 +435,10 @@ void bots_network_player(long bot_index, struct network_player *player)
 	{
 		"Johnson", "Jenkins", "Mendoza", "Bisenti", "Stacker", "Polaski", "Chips", "Kojo",
 		"Rawley", "Riley", "Wellsley", "Hall", "Fitzgerald", "Locklear", "Mitchell",
+		"Marine 16", "Marine 17", "Marine 18", "Marine 19",
+		"Marine 20", "Marine 21", "Marine 22", "Marine 23",
+		"Marine 24", "Marine 25", "Marine 26", "Marine 27",
+		"Marine 28", "Marine 29", "Marine 30", "Marine 31",
 	};
 	char const *name = names[bot_index % BOTS_MAXIMUM];
 	long index;

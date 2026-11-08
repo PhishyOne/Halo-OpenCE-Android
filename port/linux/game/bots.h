@@ -13,8 +13,9 @@ drawn for them. */
 struct player_action;
 struct network_player;
 
-/* the most bots in one game (with one player, the Xbox's 16) */
-#define BOTS_MAXIMUM 15
+/* port: extended offline Slayer bot capacity (31 bots + 1 human = 32).
+   Networked bots still have the separate bots.system_link_count cap of 4. */
+#define BOTS_MAXIMUM 31
 /* the first bot's machine index (the last machine indices of the session) */
 #define BOTS_FIRST_MACHINE (HALO_PORT_MAXIMUM_NETWORK_MACHINES - BOTS_MAXIMUM)
 

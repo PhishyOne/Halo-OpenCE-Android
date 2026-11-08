@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness import CHECK_FAILED, build, constant, enum_with, function, mutated, read, run, structure  # noqa: E402
 
 CASES = ["fills", "room", "fewer", "even", "against", "follows-players", "never-network", "slayer-only",
-         "not-once-started", "no-player-no-bots", "names-and-machines", "lan-one", "lan-four", "lan-off", "internet-never", "high-slot"]
+         "not-once-started", "no-player-no-bots", "names-and-machines", "cap-two-humans", "lan-one", "lan-four", "lan-off", "internet-never", "high-slot"]
 GAME_MANAGER_FUNCTIONS = ("network_game_invalidate_player", "network_player_is_valid", "network_game_player_is_valid",
                           "network_game_add_player", "network_game_remove_player")
 
