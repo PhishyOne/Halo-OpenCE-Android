@@ -14,13 +14,13 @@ struct player_action;
 struct network_player;
 
 /* Offline stress-test ceiling: 127 synthetic machines + host machine 0.
-   LAN bots are a SEPARATE four-bot experiment and MUST NOT reserve the
+   LAN bots are a SEPARATE 16-bot experiment and MUST NOT reserve the
    other 123 slots from real joining clients. */
 #define BOTS_MAXIMUM 127
-#define BOTS_SYSTEM_LINK_MAXIMUM 4
+#define BOTS_SYSTEM_LINK_MAXIMUM 16
 /* offline local split screen only: simulated machine indices 1..127 */
 #define BOTS_FIRST_MACHINE (HALO_PORT_MAXIMUM_NETWORK_MACHINES - BOTS_MAXIMUM)
-/* LAN only: simulated machine indices 124..127, leaving room for real guests */
+/* LAN only: simulated machine indices 112..127, leaving room for real guests */
 #define BOTS_LAN_FIRST_MACHINE (HALO_PORT_MAXIMUM_NETWORK_MACHINES - BOTS_SYSTEM_LINK_MAXIMUM)
 
 enum
@@ -33,7 +33,7 @@ enum
 
 /* the settings (bots.count, bots.skill, bots.teams) */
 long bots_wanted_count(void);
-/* port: opt-in count for LAN-only Slayer host; capped at 4 in prototype. */
+/* port: opt-in count for LAN-only Slayer host; capped at 16 in test builds. */
 long bots_system_link_wanted_count(void);
 short bots_skill(void);
 short bots_teams(void);

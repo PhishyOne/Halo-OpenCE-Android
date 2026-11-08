@@ -134,7 +134,7 @@ public final class LanConfigSmokeTest {
             check(!LanConfig.load(botsConfig).lanOnly
                 && LanConfig.load(botsConfig).systemLinkBotCount == 0,
                 "internet mode disables host-only bots and LAN-only mode");
-            for (int count : new int[] { -1, 5, 99 }) {
+            for (int count : new int[] { -1, 17, 99 }) {
                 String previous = Files.readString(botsConfig.toPath());
                 boolean rejected = false;
                 try {
@@ -158,6 +158,56 @@ public final class LanConfigSmokeTest {
                 check(rejected && Files.readString(botsConfig.toPath()).equals(bad),
                     "duplicate bot config refused atomically");
             }
+
+            // Higher LAN bot counts and host-selected difficulty must be
+            // written atomically without changing offline count/teams.
+            File skillConfig = folder.resolve("lan-skill.toml").toFile();
+            Files.writeString(skillConfig.toPath(),
+                "[bots]\ncount = 31\nteams = \"against\"\nskill = \"veteran\"\n"
+                + "system_link_count = 4\n[network]\nonline = false\n",
+                StandardCharsets.UTF_8);
+            check(LanConfig.load(skillConfig).botSkill.equals("veteran"),
+                "existing bot skill was loaded");
+            LanConfig.save(skillConfig, "", "", true, 16, "legendary");
+            String skillSaved = Files.readString(skillConfig.toPath());
+            check(LanConfig.load(skillConfig).systemLinkBotCount == 16 &&
+                LanConfig.load(skillConfig).botSkill.equals("legendary"),
+                "16 LAN bots and legendary skill were saved");
+            check(skillSaved.contains("count = 31") && skillSaved.contains("teams = \"against\""),
+                "offline count and team option preserved");
+            LanConfig.save(skillConfig, "", "", true, 8, "recruit");
+            check(LanConfig.load(skillConfig).systemLinkBotCount == 8 &&
+                LanConfig.load(skillConfig).botSkill.equals("recruit"),
+                "lower LAN count and recruit skill roundtrip");
+            LanConfig.save(skillConfig, "", "", true, 0);
+            check(LanConfig.load(skillConfig).botSkill.equals("recruit"),
+                "legacy LAN save must not change difficulty");
+            LanConfig.save(skillConfig, "", "", true, 12, "heroic");
+            check(LanConfig.load(skillConfig).systemLinkBotCount == 12 &&
+                LanConfig.load(skillConfig).botSkill.equals("heroic"),
+                "12 LAN bots with heroic difficulty");
+            for (String skill : new String[] { "legendary\\n[network]", "Impossible", "easy\"bad" }) {
+                String before = Files.readString(skillConfig.toPath());
+                boolean rejected = false;
+                try {
+                    LanConfig.save(skillConfig, "", "", true, 4, skill);
+                } catch (IOException expected) {
+                    rejected = true;
+                }
+                check(rejected && Files.readString(skillConfig.toPath()).equals(before),
+                    "bad LAN bot skill rejected without changing config");
+            }
+            String duplicateSkills =
+                "[bots]\nskill = \"normal\"\nskill = \"legendary\"\n";
+            Files.writeString(skillConfig.toPath(), duplicateSkills, StandardCharsets.UTF_8);
+            boolean duplicateSkillRejected = false;
+            try {
+                LanConfig.save(skillConfig, "", "", true, 2, "veteran");
+            } catch (IOException expected) {
+                duplicateSkillRejected = true;
+            }
+            check(duplicateSkillRejected && Files.readString(skillConfig.toPath()).equals(duplicateSkills),
+                "duplicate skill refused atomically");
 
             System.out.println("LanConfigSmokeTest PASS");
         } finally {

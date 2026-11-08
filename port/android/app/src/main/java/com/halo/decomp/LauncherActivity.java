@@ -334,6 +334,47 @@ public class LauncherActivity extends Activity {
             .show();
     }
 
+    /** Show the game's most recent log without Android/data access or ADB.
+     * The user chooses whether to copy any log details for troubleshooting. */
+    private void showGameLog() {
+        if (dataRoot == null) {
+            new AlertDialog.Builder(this).setMessage("Halo data folder is unavailable.")
+                .setPositiveButton("Close", null).show();
+            return;
+        }
+        File file = new File(dataRoot, "debug.txt");
+        if (!file.isFile()) {
+            new AlertDialog.Builder(this).setMessage("No debug.txt found yet. Start a match first.")
+                .setPositiveButton("Close", null).show();
+            return;
+        }
+        String log;
+        try (java.io.RandomAccessFile input = new java.io.RandomAccessFile(file, "r")) {
+            int size = (int) Math.min(input.length(), 48L * 1024L);
+            byte[] bytes = new byte[size];
+            input.seek(input.length() - size);
+            input.readFully(bytes);
+            log = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (java.io.IOException e) {
+            new AlertDialog.Builder(this).setMessage("Unable to read debug.txt: " + e.getMessage())
+                .setPositiveButton("Close", null).show();
+            return;
+        }
+        final String displayedLog = log.isEmpty() ? "The game log is empty." : log;
+        new AlertDialog.Builder(this)
+            .setTitle("Last game debug.txt (up to 48 KB)")
+            .setMessage(displayedLog)
+            .setNeutralButton("Copy log", (dialog, which) -> {
+                android.content.ClipboardManager clipboard =
+                    (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                if (clipboard != null)
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText(
+                        "Halo debug.txt", displayedLog));
+            })
+            .setPositiveButton("Close", null)
+            .show();
+    }
+
     private TextView lanText(String message, int size) {
         TextView text = new TextView(this);
         text.setText(message);
@@ -450,12 +491,26 @@ public class LauncherActivity extends Activity {
         shareActions.addView(share, new LinearLayout.LayoutParams(0,
             LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         hostPanel.addView(shareActions);
+        String[] lanCounts = new String[17];
+        lanCounts[0] = "Off (0)";
+        for (int i = 1; i < lanCounts.length; i++)
+            lanCounts[i] = i + (i == 1 ? " bot" : " bots");
         Spinner lanBots = botChoice(hostPanel, "Experimental LAN Slayer bots (host only)",
-            new String[] { "Off (0)", "1 bot", "2 bots", "3 bots", "4 bots" },
-            settings.systemLinkBotCount);
-        hostPanel.addView(lanText("Start with one bot in a System Link Slayer match. "
-            + "These bots are experimental and do not run in co-op campaign. "
-            + "Your friends must use the same experimental APK.", 13));
+            lanCounts, settings.systemLinkBotCount);
+        String[] lanSkills = { "Recruit", "Easy", "Normal", "Heroic", "Veteran", "Legendary" };
+        int currentLanSkill = 2;
+        for (int i = 0; i < lanSkills.length; i++) {
+            if (lanSkills[i].equalsIgnoreCase(settings.botSkill)) {
+                currentLanSkill = i;
+                break;
+            }
+        }
+        Spinner lanSkill = botChoice(hostPanel, "LAN bot difficulty (host only)",
+            lanSkills, currentLanSkill);
+        hostPanel.addView(lanText("4 bots were tested successfully over LAN. "
+            + "Try 6, 8, 12, then 16 to test the new limit. "
+            + "Only the host simulates bots; they do not enter co-op campaign. "
+            + "All phones must use this same experimental APK.", 13));
         layout.addView(hostPanel);
 
         LinearLayout joinPanel = new LinearLayout(this);
@@ -563,8 +618,11 @@ public class LauncherActivity extends Activity {
                     hostIp.getText().toString(), offline.isChecked());
                 int count = hostRole.isChecked() && offline.isChecked() && !invitePending
                     ? lanBots.getSelectedItemPosition() : 0;
+                String chosenSkill = hostRole.isChecked() && offline.isChecked() && !invitePending
+                    ? lanSkills[lanSkill.getSelectedItemPosition()].toLowerCase(java.util.Locale.ROOT)
+                    : null;
                 LanConfig.save(new File(dataRoot, "config.toml"),
-                    local.getText().toString(), peer, offline.isChecked(), count);
+                    local.getText().toString(), peer, offline.isChecked(), count, chosenSkill);
                 if (invitePending)
                     publishPendingInvite();
             } catch (java.io.IOException e) {
@@ -578,6 +636,10 @@ public class LauncherActivity extends Activity {
         offlineBots.setText("Offline Bot Match");
         offlineBots.setOnClickListener(view -> showOfflineBotOptions(feedback, appSettings));
         layout.addView(offlineBots);
+        Button diagnostics = new Button(this);
+        diagnostics.setText("View / Copy Game Debug Log");
+        diagnostics.setOnClickListener(view -> showGameLog());
+        layout.addView(diagnostics);
         layout.addView(appSettings);
         setContentView(scroll);
     }
