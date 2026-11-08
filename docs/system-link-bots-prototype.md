@@ -17,11 +17,11 @@ teams = "against"
 ```
 
 `bots.system_link_count = 0` by default. Values are clamped to 0..4.
-Offline split-screen uses `bots.count` (0..31); LAN bots remain capped at 4; the two settings
+Offline split-screen uses `bots.count` (0..127); LAN bots remain capped at 4; the two settings
 are independent. System Link bots are only eligible in a LAN-only Slayer
 lobby, never internet games or campaign co-op.
 
-The combined 31-offline-bot build uses network protocol 43 rather than 42, because the bots' synthetic machine indices change from 113..127 to 97..127. Do not mix
+The max-offline-bot test uses network protocol 44. Offline local matches reserve machine IDs 1..127 for up to 127 bots, but LAN-only matches still reserve only 124..127 for up to four bots, preserving guest machine slots. This requires all participating LAN devices to run the same version; versions 41..43 cannot join. Do not mix
 APK builds from this branch with the stable two-phone or three-phone builds.
 
 ## v1 Android test launcher

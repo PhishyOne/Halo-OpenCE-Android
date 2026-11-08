@@ -1564,8 +1564,8 @@ static void network_game_server_list(
 /* port: the bots (port/linux/game/bots.c, the settings' bots.count and
 bots.teams): in the lobby of a local (split screen) Slayer game, as many bot
 players as the settings ask for, as far as the game has room, each the one
-player of a machine of its own (BOTS_FIRST_MACHINE up, which no real machine
-is). In a team game they even the teams with the players or, for bots.teams
+player of a machine of its own (offline BOTS_FIRST_MACHINE up, LAN
+BOTS_LAN_FIRST_MACHINE up). In a team game they even the teams with the players or, for bots.teams
 "against", all take the team the players are not on; the players may change
 teams in the lobby, and the bots follow. They leave when the setting asks
 for fewer, or the game is another gametype. Not once the game has been
@@ -1606,7 +1606,7 @@ static void network_game_server_port_bots(
 		if (bots_machine_is_bot(player->machine_index) &&
 			server->client_machines[(short)player->machine_index].machine_index == NONE &&
 			server->game.machines[(short)player->machine_index].machine_index == NONE)
-			slot_of_bot[player->machine_index - BOTS_FIRST_MACHINE] = slot;
+			slot_of_bot[player->machine_index - bots_first_machine()] = slot;
 		else if (VALID_INDEX(player->team_index, NUMBER_OF_MULTIPLAYER_TEAMS))
 		{
 			team_counts[player->team_index]++;
@@ -1646,7 +1646,7 @@ static void network_game_server_port_bots(
 		if (slot_of_bot[bot_index] == NONE)
 		{
 			struct network_player joining;
-			long virtual_machine_index = BOTS_FIRST_MACHINE + bot_index;
+			long virtual_machine_index = bots_first_machine() + bot_index;
 
 			if (server->game.player_count >= server->game.maximum_players)
 				break;

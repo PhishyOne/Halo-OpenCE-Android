@@ -69,10 +69,10 @@ Raise it with any change to what the machines send each other. */
 /* port: experimental System Link bot-player identities and host relayed
    bot controls. Even with no bots configured, refuse mixing with clients
    built before the authoritative bot path existed. Rebase before upstream. */
-/* port: offline bot capacity now uses synthetic machine slots 97..127
-   instead of 113..127. LAN bots remain capped to 4 but their shared
-   player/machine identities changed; do not mix with version 42 peers. */
-#define HALO_PORT_NETWORK_VERSION 43
+/* port: 127 offline bots use machines 1..127. LAN bots remain capped
+   at four, with their own reserved machine range 124..127 so other client
+   machine slots remain available. Incompatible with versions 41..43. */
+#define HALO_PORT_NETWORK_VERSION 44
 /* ... the advertisement's reserved bytes: the version (a little-endian word),
 then flags, then the game's kind (an OpenCE gametype's mode, and Hardcore:
 port/linux/game/game_modes.h's game_modes_kind), for the server browser */
