@@ -405,16 +405,17 @@ int main(int argc, char **argv)
 		CHECK(sends == 1, "LAN bot roster was not sent");
 		return 0;
 	}
-	CASE("lan-four")
+	CASE("lan-sixteen")
 	{
-		lobby(game_engine_slayer, 16);
+		lobby(game_engine_slayer, 32);
 		player(0, 0);
 		player(1, 0);
 		local_game = FALSE;
 		system_link_wanted = 99;
 		network_game_server_port_bots(&server);
-		CHECK(bots_in(&team0, &team1) == 4, "LAN bot limit did not clamp to four");
-		CHECK(server.game.player_count == 6, "LAN bot roster has wrong player count");
+		CHECK(bots_in(&team0, &team1) == 16, "LAN bot limit did not clamp to sixteen");
+		CHECK(server.game.player_count == 18, "LAN bot roster has wrong player count");
+		CHECK(bot_in(0) && bot_in(15), "LAN bot range should reach machines 112..127");
 		return 0;
 	}
 	CASE("internet-never")
@@ -451,18 +452,18 @@ int main(int argc, char **argv)
 		return 0;
 	}
 	/* port: the 127-offline cap MUST NOT reserve a normal guest's LAN
-	   machine slot 1: only machines 124..127 are synthetic in LAN mode. */
+	   machine slot 1: only machines 112..127 are synthetic in LAN mode. */
 	CASE("lan-low-real-slot")
 	{
 		struct network_player joining;
 		lobby(game_engine_slayer, 16);
 		player(0, 0);
 		local_game = FALSE;
-		system_link_wanted = 4;
+		system_link_wanted = 16;
 		CHECK(!bots_machine_is_bot(1), "the first LAN guest machine is reserved for bots");
 		CHECK(bots_machine_is_bot(BOTS_LAN_FIRST_MACHINE) &&
 			!bots_machine_is_bot(BOTS_LAN_FIRST_MACHINE - 1),
-			"LAN bot machine range differs from four high slots");
+			"LAN bot machine range differs from sixteen high slots");
 		memset(&joining, 0, sizeof(joining));
 		joining.name[0] = L'G';
 		joining.machine_index = 1;
@@ -473,9 +474,9 @@ int main(int argc, char **argv)
 		server.client_machines[1].machine_index = 1;
 		CHECK(network_game_add_player(&server.game, &joining), "guest on machine 1 cannot join");
 		network_game_server_port_bots(&server);
-		CHECK(server.game.player_count == 6, "two humans + four LAN bots did not fit");
-		CHECK(bots_in(&team0, &team1) == 4, "LAN bots not present alongside guest");
-		CHECK(bot_in(0) && bot_in(3), "LAN bots not placed in high reserved machines");
+		CHECK(server.game.player_count == 16, "lobby max must limit 2 humans to 14 bots");
+		CHECK(bots_in(&team0, &team1) == 14, "LAN bots not present alongside guest");
+		CHECK(bot_in(0) && bot_in(13) && !bot_in(14), "LAN bots not placed in high reserved machines");
 		return 0;
 	}
 	fprintf(stderr, "unknown case: %s\n", case_name);
