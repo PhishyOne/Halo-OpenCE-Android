@@ -112,11 +112,18 @@ public final class LanConfigSmokeTest {
                 + "\n[display]\nshow_fps = true\n", StandardCharsets.UTF_8);
             check(LanConfig.load(botsConfig).systemLinkBotCount == 3,
                 "bot count read with inline comment");
+            check(LanConfig.load(botsConfig).botSkill.equals("veteran"),
+                "LAN skill loaded from the original [bots] section");
+            LanConfig.save(botsConfig, "", "", true, 16, "heroic");
+            check(LanConfig.load(botsConfig).systemLinkBotCount == 16,
+                "new 16-bot LAN maximum saved and read back");
+            check(LanConfig.load(botsConfig).botSkill.equals("heroic"),
+                "LAN bot difficulty saved and read back");
             LanConfig.save(botsConfig, "", "", true, 4);
             String botSaved = Files.readString(botsConfig.toPath());
             check(botSaved.contains("system_link_count = 4"), "bot count was updated");
             check(botSaved.contains("count = 15"), "offline bot count was preserved");
-            check(botSaved.contains("skill = \"veteran\""), "offline bot skill was preserved");
+            check(botSaved.contains("skill = \"heroic\""), "LAN-selected bot skill persisted");
             check(botSaved.contains("teams = \"against\""), "offline team setup was preserved");
             check(botSaved.contains("show_fps = true"), "display config preserved");
             check(botSaved.split("system_link_count", -1).length == 2,
@@ -126,6 +133,8 @@ public final class LanConfigSmokeTest {
                 "existing callers preserve experimental bot setting");
             // A joining phone or internet invite turns the host-only bots off.
             LanConfig.save(botsConfig, "", "10.28.111.42", true, 0);
+            check(LanConfig.load(botsConfig).botSkill.equals("heroic"),
+                "joining phone does not overwrite saved bot skill");
             check(LanConfig.load(botsConfig).systemLinkBotCount == 0,
                 "joining phone cleared host's prior LAN bot count");
             check(LanConfig.load(botsConfig).peer.equals("10.28.111.42"),
@@ -134,7 +143,7 @@ public final class LanConfigSmokeTest {
             check(!LanConfig.load(botsConfig).lanOnly
                 && LanConfig.load(botsConfig).systemLinkBotCount == 0,
                 "internet mode disables host-only bots and LAN-only mode");
-            for (int count : new int[] { -1, 5, 99 }) {
+            for (int count : new int[] { -1, 17, 99 }) {
                 String previous = Files.readString(botsConfig.toPath());
                 boolean rejected = false;
                 try {
@@ -147,17 +156,37 @@ public final class LanConfigSmokeTest {
             }
             for (String bad : new String[] {
                     "[bots]\nsystem_link_count = 1\n[bots]\ncount = 4\n",
-                    "[bots]\nsystem_link_count = 1\nsystem_link_count = 2\n"}) {
+                    "[bots]\nsystem_link_count = 1\nsystem_link_count = 2\n",
+                    "[bots]\nskill = \"easy\"\nskill = \"veteran\"\n"}) {
                 Files.writeString(botsConfig.toPath(), bad, StandardCharsets.UTF_8);
                 boolean rejected = false;
                 try {
-                    LanConfig.save(botsConfig, "", "", true, 1);
+                    LanConfig.save(botsConfig, "", "", true, 1, "legendary");
                 } catch (IOException expected) {
                     rejected = true;
                 }
                 check(rejected && Files.readString(botsConfig.toPath()).equals(bad),
                     "duplicate bot config refused atomically");
             }
+
+            // All six valid host skill values must survive a complete TOML round-trip.
+            Files.writeString(botsConfig.toPath(), "[network]\nonline = false\n");
+            for (String skill : LanConfig.BOT_SKILLS) {
+                LanConfig.save(botsConfig, "", "", true, 8, skill);
+                check(LanConfig.load(botsConfig).botSkill.equals(skill),
+                    "host bot skill round-trip failed for " + skill);
+            }
+            String previous = Files.readString(botsConfig.toPath());
+            boolean badSkillCaught = false;
+            try {
+                LanConfig.save(botsConfig, "", "", true, 8, "legendairy");
+            } catch (IOException expected) {
+                badSkillCaught = true;
+            }
+            check(badSkillCaught && previous.equals(Files.readString(botsConfig.toPath())),
+                "invalid difficulty must be refused without changing the config");
+            check(!LanConfig.validBotSkill("\"heroic\"") && !LanConfig.validBotSkill("easy\\n[evil]"),
+                "bot difficulty validator must reject TOML injection");
 
             System.out.println("LanConfigSmokeTest PASS");
         } finally {

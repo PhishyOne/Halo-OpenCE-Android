@@ -411,10 +411,25 @@ int main(int argc, char **argv)
 		player(0, 0);
 		player(1, 0);
 		local_game = FALSE;
+		system_link_wanted = 4;
+		network_game_server_port_bots(&server);
+		CHECK(bots_in(&team0, &team1) == 4, "four LAN bots no longer work");
+		CHECK(server.game.player_count == 6, "four LAN bots have the wrong roster count");
+		return 0;
+	}
+	/* With two humans, cap even excessive requests to 16 LAN bots. */
+	CASE("lan-sixteen")
+	{
+		lobby(game_engine_slayer, 32);
+		player(0, 0);
+		player(1, 0);
+		local_game = FALSE;
 		system_link_wanted = 99;
 		network_game_server_port_bots(&server);
-		CHECK(bots_in(&team0, &team1) == 4, "LAN bot limit did not clamp to four");
-		CHECK(server.game.player_count == 6, "LAN bot roster has wrong player count");
+		CHECK(bots_in(&team0, &team1) == 16, "%ld LAN bots, not 16", bots_in(&team0, &team1));
+		CHECK(server.game.player_count == 18, "two humans + sixteen LAN bots != 18");
+		CHECK(bot_in(0) && bot_in(15), "LAN bot slots 112..127 not populated");
+		CHECK(sends == 1, "LAN bot roster was not sent");
 		return 0;
 	}
 	CASE("internet-never")
@@ -450,8 +465,8 @@ int main(int argc, char **argv)
 		CHECK(bots_in(&team0, &team1) == 0, "fake bot collided with a real machine");
 		return 0;
 	}
-	/* port: the 127-offline cap MUST NOT reserve a normal guest's LAN
-	   machine slot 1: only machines 124..127 are synthetic in LAN mode. */
+	/* port: offline bot capacity MUST NOT reserve a normal LAN guest's
+	   machine slot 1: only machines 112..127 are synthetic in LAN mode. */
 	CASE("lan-low-real-slot")
 	{
 		struct network_player joining;
@@ -462,7 +477,7 @@ int main(int argc, char **argv)
 		CHECK(!bots_machine_is_bot(1), "the first LAN guest machine is reserved for bots");
 		CHECK(bots_machine_is_bot(BOTS_LAN_FIRST_MACHINE) &&
 			!bots_machine_is_bot(BOTS_LAN_FIRST_MACHINE - 1),
-			"LAN bot machine range differs from four high slots");
+			"LAN bot machine range differs from high reserved slots");
 		memset(&joining, 0, sizeof(joining));
 		joining.name[0] = L'G';
 		joining.machine_index = 1;

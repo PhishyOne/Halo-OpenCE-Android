@@ -5,7 +5,7 @@ code instead of a controller: it is in the lobby, the scores and the game's
 rules as any player is, spawns, respawns and scores. Each bot is the one
 player of a machine of its own at the top of the machine indices. Offline
 bots use machine indices 1..127 (the only real machine is 0), while LAN
-bots use 124..127 and yield if a real guest already occupies one. The bots have no view and no controller: nothing is
+bots use 112..127 and yield if a real guest already occupies one. The bots have no view and no controller: nothing is
 drawn for them. */
 #ifndef HALO_BOTS_H
 #define HALO_BOTS_H
@@ -14,13 +14,13 @@ struct player_action;
 struct network_player;
 
 /* Offline stress-test ceiling: 127 synthetic machines + host machine 0.
-   LAN bots are a SEPARATE four-bot experiment and MUST NOT reserve the
-   other 123 slots from real joining clients. */
+   LAN bots are a SEPARATE sixteen-bot experiment and reserve only
+   their upper 16 slots, keeping 111 guest machine slots available. */
 #define BOTS_MAXIMUM 127
-#define BOTS_SYSTEM_LINK_MAXIMUM 4
+#define BOTS_SYSTEM_LINK_MAXIMUM 16
 /* offline local split screen only: simulated machine indices 1..127 */
 #define BOTS_FIRST_MACHINE (HALO_PORT_MAXIMUM_NETWORK_MACHINES - BOTS_MAXIMUM)
-/* LAN only: simulated machine indices 124..127, leaving room for real guests */
+/* LAN only: synthetic machine indices 112..127; other clients use lower slots */
 #define BOTS_LAN_FIRST_MACHINE (HALO_PORT_MAXIMUM_NETWORK_MACHINES - BOTS_SYSTEM_LINK_MAXIMUM)
 
 enum
@@ -33,12 +33,12 @@ enum
 
 /* the settings (bots.count, bots.skill, bots.teams) */
 long bots_wanted_count(void);
-/* port: opt-in count for LAN-only Slayer host; capped at 4 in prototype. */
+/* port: opt-in count for LAN-only Slayer host; capped at 16 for testing. */
 long bots_system_link_wanted_count(void);
 short bots_skill(void);
 short bots_teams(void);
 
-/* Bot machine-number range is mode-specific: local 1..127, LAN 124..127. */
+/* Bot machine-number range is mode-specific: local 1..127, LAN 112..127. */
 long bots_first_machine(void);
 /* a machine is in that mode's synthetic bot range */
 int bots_machine_is_bot(long machine_index);

@@ -450,12 +450,25 @@ public class LauncherActivity extends Activity {
         shareActions.addView(share, new LinearLayout.LayoutParams(0,
             LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         hostPanel.addView(shareActions);
-        Spinner lanBots = botChoice(hostPanel, "Experimental LAN Slayer bots (host only)",
-            new String[] { "Off (0)", "1 bot", "2 bots", "3 bots", "4 bots" },
-            settings.systemLinkBotCount);
-        hostPanel.addView(lanText("Start with one bot in a System Link Slayer match. "
-            + "These bots are experimental and do not run in co-op campaign. "
-            + "Your friends must use the same experimental APK.", 13));
+        String[] lanBotChoices = new String[LanConfig.MAX_LAN_BOTS + 1];
+        lanBotChoices[0] = "Off (0)";
+        for (int index = 1; index < lanBotChoices.length; index++)
+            lanBotChoices[index] = index + (index == 1 ? " bot" : " bots");
+        Spinner lanBots = botChoice(hostPanel, "LAN Slayer bots (host only)",
+            lanBotChoices, settings.systemLinkBotCount);
+        String[] lanSkillChoices = { "Recruit", "Easy", "Normal", "Heroic", "Veteran", "Legendary" };
+        int lanSkillSelection = 2;
+        for (int index = 0; index < LanConfig.BOT_SKILLS.length; index++) {
+            if (LanConfig.BOT_SKILLS[index].equals(settings.botSkill)) {
+                lanSkillSelection = index;
+                break;
+            }
+        }
+        Spinner lanSkill = botChoice(hostPanel, "LAN bot difficulty",
+            lanSkillChoices, lanSkillSelection);
+        hostPanel.addView(lanText("4 bots have been tested on LAN. Try 8, then 16 "
+            + "and watch synchronization and performance. Difficulty is set by the host. "
+            + "System Link Slayer only; no campaign bots.", 13));
         layout.addView(hostPanel);
 
         LinearLayout joinPanel = new LinearLayout(this);
@@ -561,10 +574,12 @@ public class LauncherActivity extends Activity {
             try {
                 String peer = LanConfig.peerForRole(hostRole.isChecked(),
                     hostIp.getText().toString(), offline.isChecked());
-                int count = hostRole.isChecked() && offline.isChecked() && !invitePending
-                    ? lanBots.getSelectedItemPosition() : 0;
+                boolean lanHosting = hostRole.isChecked() && offline.isChecked() && !invitePending;
+                int count = lanHosting ? lanBots.getSelectedItemPosition() : 0;
+                String skill = lanHosting
+                    ? LanConfig.BOT_SKILLS[lanSkill.getSelectedItemPosition()] : null;
                 LanConfig.save(new File(dataRoot, "config.toml"),
-                    local.getText().toString(), peer, offline.isChecked(), count);
+                    local.getText().toString(), peer, offline.isChecked(), count, skill);
                 if (invitePending)
                     publishPendingInvite();
             } catch (java.io.IOException e) {

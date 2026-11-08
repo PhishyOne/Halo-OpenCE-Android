@@ -514,7 +514,7 @@ static const struct config_setting config_settings[] =
 	   the host alone adds this many bot players to a LAN Slayer lobby. */
 	{ "bots.system_link_count", _config_integer, "0", "HALO_BOTS_SYSTEM_LINK", _environment_value, _platform_all,
 		"Experimental LAN System Link Slayer bots on the hosting machine only.\n"
-		"0 (default): off; 1-4: try that many. Not for internet or campaign co-op.\n"
+		"0 (default): off; 1-16: try that many. Not for internet or campaign co-op.\n"
 		"Requires all players to use a matching experimental network version." },
 	{ "bots.skill", _config_string, "\"normal\"", "HALO_BOT_SKILL", _environment_value, _platform_all,
 		"How well the bots play: \"recruit\", \"easy\", \"normal\", \"heroic\",\n"
