@@ -352,6 +352,8 @@ static void *game_main(void *launch_options)
 		environment_set(&environment, "HALO_BOTS", offline_bots[0]);
 		environment_set(&environment, "HALO_BOT_SKILL", offline_bots[1]);
 		environment_set(&environment, "HALO_BOT_TEAMS", offline_bots[2]);
+        if (offline_bots[3])
+            environment_set(&environment, "HALO_BOT_VEHICLE_SEATS", offline_bots[3]);
 		environment_set(&environment, "HALO_NET_ONLINE", "false");
 		environment_set(&environment, "HALO_NET_JOIN_FROM_CLIPBOARD", "false");
 	}
@@ -471,7 +473,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
 int main(int argc, char *argv[])
 {
 	/* SDLActivity prepends argv[0] to its getArguments() result. */
-	char **offline_bots = argc == 5 && !strcmp(argv[1], "--offline-bots") ? argv + 2 : NULL;
+	char **offline_bots = (argc == 5 || argc == 6) && !strcmp(argv[1], "--offline-bots")
+        ? argv + 2 : NULL;
 
 	host_logf(HOST_LOG_INFO, "Halo for Android starting");
 	host_install_signal_handlers();

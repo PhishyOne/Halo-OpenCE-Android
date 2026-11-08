@@ -308,6 +308,10 @@ public class LauncherActivity extends Activity {
         options.addView(maxBots);
         Spinner skill = botChoice(options, "Difficulty", skills, preferences.getInt("skill", 2));
         Spinner team = botChoice(options, "Team Slayer setup", teams, preferences.getInt("team", 0));
+        CheckBox vehicleSeatsOffline = new CheckBox(this);
+        vehicleSeatsOffline.setText("Experimental: bots board Warthog gunner/passenger seats");
+        vehicleSeatsOffline.setChecked(preferences.getBoolean("vehicle_seats", false));
+        options.addView(vehicleSeatsOffline);
 
         ScrollView scroll = new ScrollView(this);
         scroll.addView(options);
@@ -321,13 +325,15 @@ public class LauncherActivity extends Activity {
                 int botCount = count.getSelectedItemPosition() + 1;
                 int skillIndex = skill.getSelectedItemPosition();
                 int teamIndex = team.getSelectedItemPosition();
+                boolean vehicleSeats = vehicleSeatsOffline.isChecked();
                 preferences.edit().putInt("count", botCount).putInt("skill", skillIndex)
-                    .putInt("team", teamIndex).apply();
+                    .putInt("team", teamIndex).putBoolean("vehicle_seats", vehicleSeats).apply();
                 Intent game = new Intent(this, HaloActivity.class);
                 game.putExtra(HaloActivity.OFFLINE_BOT_ARGUMENTS, new String[] {
                     "--offline-bots", Integer.toString(botCount),
                     skills[skillIndex].toLowerCase(java.util.Locale.ROOT),
-                    teamIndex == 0 ? "even" : "against"
+                    teamIndex == 0 ? "even" : "against",
+                    Boolean.toString(vehicleSeats)
                 });
                 startGame(game);
             })
@@ -466,6 +472,11 @@ public class LauncherActivity extends Activity {
         }
         Spinner lanSkill = botChoice(hostPanel, "LAN bot difficulty",
             lanSkillChoices, lanSkillSelection);
+        CheckBox vehicleSeatsLan = new CheckBox(this);
+        vehicleSeatsLan.setText("Experimental: bots can board vehicle seats (no driving)");
+        vehicleSeatsLan.setTextColor(Color.WHITE);
+        vehicleSeatsLan.setChecked(settings.vehicleSeats);
+        hostPanel.addView(vehicleSeatsLan);
         hostPanel.addView(lanText("4 bots have been tested on LAN. Try 8, then 16 "
             + "and watch synchronization and performance. Difficulty is set by the host. "
             + "System Link Slayer only; no campaign bots.", 13));
@@ -579,7 +590,8 @@ public class LauncherActivity extends Activity {
                 String skill = lanHosting
                     ? LanConfig.BOT_SKILLS[lanSkill.getSelectedItemPosition()] : null;
                 LanConfig.save(new File(dataRoot, "config.toml"),
-                    local.getText().toString(), peer, offline.isChecked(), count, skill);
+                    local.getText().toString(), peer, offline.isChecked(), count, skill,
+                    lanHosting && vehicleSeatsLan.isChecked());
                 if (invitePending)
                     publishPendingInvite();
             } catch (java.io.IOException e) {

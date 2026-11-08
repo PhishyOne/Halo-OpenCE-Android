@@ -131,6 +131,12 @@ void platform_log(char const *format, ...);
 #define BOTS_PATHFINDING_WALKABLE_BIT 6
 /* the items a bot remembers it found no way to, at once */
 #define BOTS_UNREACHABLE_ITEMS 8
+/* Vehicle seats are optional and require no autonomous driving. The AI
+   campaigned with enterable vehicles, but our bots are players: the player
+   action key does the final seat entry, not actor_action_try_to_enter_vehicle. */
+#define BOTS_VEHICLE_SEEK_RADIUS 16.0f
+#define BOTS_VEHICLE_RESERVATION_TICKS (TICKS_PER_SECOND * 14)
+#define BOTS_VEHICLE_RETRY_TICKS (TICKS_PER_SECOND * 12)
 
 /* where a bot is going */
 enum
@@ -140,6 +146,7 @@ enum
 	_bots_goal_roam,
 	/* a better weapon to pick up */
 	_bots_goal_item,
+	_bots_goal_vehicle,
 };
 
 /* the fight's counts in halo.log's minute line */
@@ -285,6 +292,14 @@ struct bots_bot
 	long item_index;
 	long item_press_tick;
 	long item_first_press_tick;
+	/* target vehicle and non-driver seat; controlled through the normal player
+	   Action bit so LAN replication uses the existing player/vehicle path */
+	long vehicle_index;
+	short vehicle_seat_index;
+	long next_vehicle_scan_tick;
+	long vehicle_press_tick;
+	long vehicle_ignore_index;
+	long vehicle_ignore_until_tick;
 	/* the path there (steps of the engine's path), and when it was found */
 	struct path_result path;
 	long path_tick;
@@ -1775,6 +1790,151 @@ static void bots_set_goal(struct bots_bot *bot, short kind, real_point3d const *
 	bot->climb_until_tick = 0;
 }
 
+/* Campaign actor_action_try_to_enter_vehicle chooses by distance, seat
+   availability, and a non-driver preference. Reuse the unit/seat engine but
+   drive it via the player's normal Action key, not an actor order. */
+static boolean bots_vehicle_seat_usable(long bot_unit_index, long vehicle_index,
+    short seat_index, real_point3d *entrance, boolean *gunner)
+{
+    struct unit_datum *vehicle = (struct unit_datum *)object_try_and_get_and_verify_type(
+        vehicle_index, _object_mask_vehicle);
+    struct unit_definition *definition;
+    struct unit_seat *seat;
+
+    if (!vehicle || TEST_FLAG(vehicle->object.damage_flags, _object_dead_bit) ||
+        TEST_FLAG(vehicle->unit.flags, _unit_not_enterable_by_player_bit))
+        return FALSE;
+    definition = unit_definition_get(vehicle->definition_index);
+    if (seat_index < 0 || seat_index >= definition->unit.seats.count)
+        return FALSE;
+    seat = TAG_BLOCK_GET_ELEMENT(&definition->unit.seats, seat_index, struct unit_seat);
+    /* Driving and flying need a different navigation controller. Do not
+       take a human's driver seat or evict an occupant, even when possible. */
+    if (TEST_FLAG(seat->flags, _unit_seat_driver_bit))
+        return FALSE;
+    *gunner = TEST_FLAG(seat->flags, _unit_seat_gunner_bit);
+    /* A passenger in an immobile vehicle isn't useful; an empty Warthog
+       turret is useful. */
+    if (!*gunner && vehicle->unit.driver_object_index == NONE)
+        return FALSE;
+    /* The player's nearby-action scanner performs the private seat-label
+       compatibility test before offering an Action prompt. This policy
+       uses only public unit/seat APIs and waits for that final prompt. */
+    if (!seat->label[0] ||
+        !unit_has_animation_to_enter_seat(bot_unit_index, vehicle_index, seat_index) ||
+        !unit_can_enter_seat(bot_unit_index, vehicle_index, seat_index, NULL))
+        return FALSE;
+    /* Match the vanilla player prompt's seat-entrance geometry. */
+    return unit_get_seat_entrance_point(bot_unit_index, vehicle_index, seat_index,
+        entrance, NULL, NULL);
+}
+
+static void bots_vehicle_stop_seeking(struct bots_bot *bot, long now)
+{
+    bot->vehicle_ignore_index = bot->vehicle_index;
+    bot->vehicle_ignore_until_tick = now + BOTS_VEHICLE_RETRY_TICKS;
+    bot->vehicle_index = NONE;
+    bot->vehicle_seat_index = NONE;
+    bot->goal_kind = _bots_goal_none;
+    bot->path.valid = FALSE;
+    bot->next_vehicle_scan_tick = now + TICKS_PER_SECOND * 2;
+}
+
+/* Every few seconds, scan the level's real vehicles, preferring a turret
+   to a passenger seat. Approach only a nearly stationary vehicle. */
+static boolean bots_vehicle_pick(struct bots_bot *bot, long bot_unit_index,
+    real_point3d const *position)
+{
+    struct object_iterator iterator;
+    long best_vehicle = NONE;
+    short best_seat = NONE;
+    real best_score = REAL_MAX;
+    real_point3d best_ground;
+    long best_surface = NONE;
+
+    object_iterator_new(&iterator, _object_mask_vehicle, 0);
+    while (object_iterator_next(&iterator))
+    {
+        struct unit_datum *vehicle = unit_get(iterator.index);
+        struct unit_definition *definition;
+        short seat_index;
+        real vehicle_distance;
+        real speed_squared;
+        if (bot->vehicle_ignore_index == iterator.index &&
+            game_time_get() < bot->vehicle_ignore_until_tick)
+            continue;
+        vehicle_distance = bots_distance3d(position, &vehicle->object.position);
+        if (vehicle_distance > BOTS_VEHICLE_SEEK_RADIUS)
+            continue;
+        speed_squared = vehicle->object.translational_velocity.i * vehicle->object.translational_velocity.i +
+            vehicle->object.translational_velocity.j * vehicle->object.translational_velocity.j +
+            vehicle->object.translational_velocity.k * vehicle->object.translational_velocity.k;
+        if (speed_squared > 0.02f * 0.02f ||
+            TEST_FLAG(vehicle->object.damage_flags, _object_dead_bit))
+            continue;
+        definition = unit_definition_get(vehicle->definition_index);
+        for (seat_index = 0; seat_index < definition->unit.seats.count; seat_index++)
+        {
+            real_point3d entrance, ground;
+            boolean gunner;
+            long surface;
+            real score;
+            if (!bots_vehicle_seat_usable(bot_unit_index, iterator.index, seat_index,
+                &entrance, &gunner))
+                continue;
+            surface = bots_surface_below(&entrance, &ground);
+            if (surface == NONE)
+                continue;
+            score = bots_distance3d(position, &entrance) + (gunner ? 0.0f : 5.0f);
+            if (score < best_score)
+            {
+                best_score = score;
+                best_vehicle = iterator.index;
+                best_seat = seat_index;
+                best_ground = ground;
+                best_surface = surface;
+            }
+        }
+    }
+    if (best_vehicle == NONE)
+        return FALSE;
+    bot->vehicle_index = best_vehicle;
+    bot->vehicle_seat_index = best_seat;
+    bots_set_goal(bot, _bots_goal_vehicle, &best_ground, best_surface);
+    platform_log("bots: bot player %ld seeking vehicle %ld seat %d",
+        (long)DATUM_INDEX_TO_ABSOLUTE_INDEX(bot->player_index),
+        best_vehicle, (int)best_seat);
+    return TRUE;
+}
+
+/* Keep the seat available until the Action prompt appears, or abandon it.
+   This never teleports a bot or forces a seat change from the simulation. */
+static boolean bots_vehicle_keep_goal(struct bots_bot *bot, long bot_unit_index)
+{
+    real_point3d entrance, ground;
+    boolean gunner;
+    long surface;
+    long now = game_time_get();
+    if (bot->vehicle_index == NONE ||
+        now - bot->goal_tick >= BOTS_VEHICLE_RESERVATION_TICKS ||
+        !bots_vehicle_seat_usable(bot_unit_index, bot->vehicle_index,
+            bot->vehicle_seat_index, &entrance, &gunner))
+    {
+        bots_vehicle_stop_seeking(bot, now);
+        return FALSE;
+    }
+    surface = bots_surface_below(&entrance, &ground);
+    if (surface == NONE)
+    {
+        bots_vehicle_stop_seeking(bot, now);
+        return FALSE;
+    }
+    /* If a player drives off while the bot approaches, the goal moves.
+       bots_set_goal keeps the current path while the entrance moves <1.5. */
+    bots_set_goal(bot, _bots_goal_vehicle, &ground, surface);
+    return TRUE;
+}
+
 /* a roaming place picked at random (index), or a higher one (VETERAN and
 up): two more places at random, not within 6 units,
 and the one of the most credit for its height above the bot */
@@ -1884,6 +2044,26 @@ static void bots_choose_goal(struct bots_bot *bot, long player_index, real_point
 	{
 		bots_set_goal(bot, _bots_goal_enemy, &bot->target_last_position, bot->target_last_surface_index);
 		return;
+	}
+	/* Vehicle goals are subordinate to a fight, but can replace roaming.
+	   A failed reservation backs off rather than making the bot circle a seat. */
+	if (config_boolean("bots.vehicle_seats"))
+	{
+		if (bot->goal_kind == _bots_goal_vehicle)
+		{
+			if (bots_vehicle_keep_goal(bot, player_get(player_index)->unit_index))
+				return;
+		}
+		if (now >= bot->next_vehicle_scan_tick)
+		{
+			bot->next_vehicle_scan_tick = now + TICKS_PER_SECOND * 3;
+			if (bots_vehicle_pick(bot, player_get(player_index)->unit_index, position))
+				return;
+		}
+	}
+	else if (bot->goal_kind == _bots_goal_vehicle)
+	{
+		bots_vehicle_stop_seeking(bot, now);
 	}
 	/* a better weapon near (looked for once a second; given up after a
 	while) */
@@ -2027,6 +2207,9 @@ static void bots_bot_reset(struct bots_bot *bot, long player_index, long bot_ind
 	bot->goal_surface_index = NONE;
 	bot->random = 0x2545F491UL * (unsigned long)(bot_index + 1) ^ (unsigned long)network_game_get_random_seed();
 	bot->strafe_sign = 1.0f;
+	bot->vehicle_index = NONE;
+	bot->vehicle_seat_index = NONE;
+	bot->vehicle_ignore_index = NONE;
 }
 
 /* a bot's tick: what it knows of itself, and the controls it builds */
@@ -2801,6 +2984,78 @@ static void bots_bot_weapons(struct bots_bot *bot, struct bots_tick *tick)
 	}
 }
 
+/* Halo players already get a nearby vehicle-seat action result from
+   player_examine_nearby_vehicle. Send the same action bit as the user, never
+   call unit_enter_seat directly. The host relays this through the usual
+   network input and unit replication path. */
+static void bots_bot_vehicle_action(struct bots_bot *bot, struct bots_tick *tick)
+{
+    if (bot->goal_kind != _bots_goal_vehicle || bot->vehicle_index == NONE ||
+        tick->object->object.parent_object_index != NONE ||
+        tick->now < bot->vehicle_press_tick)
+        return;
+
+    if (tick->player->action_object_index == bot->vehicle_index &&
+        tick->player->action_seat_index == bot->vehicle_seat_index &&
+        tick->player->action_result == _player_action_result_enter_vehicle)
+    {
+        /* ACTION_ONLY prevents a pointless fallback reload if the prompt
+           disappears on this tick; both bits are already networked. */
+        tick->flags |= FLAG(_unit_control_action_bit) |
+            FLAG(UNIT_CONTROL_PORT_ACTION_ONLY_BIT);
+        bot->vehicle_press_tick = tick->now + TICKS_PER_SECOND;
+    }
+}
+
+/* A seated gunner still thinks like an ordinary bot, but uses its vehicle's
+   gun instead of its holstered rifle. The unit update already forwards a
+   gunner's trigger and aim to the parent vehicle. Passengers never fire or
+   steer, and bots never become drivers in this experiment. */
+static boolean bots_bot_vehicle_occupied(struct bots_bot *bot, long bot_index,
+    struct bots_tick *tick)
+{
+    long vehicle_index = tick->object->object.parent_object_index;
+    struct unit_datum *vehicle;
+    if (vehicle_index == NONE)
+        return FALSE;
+
+    if (bot->vehicle_index != NONE)
+        platform_log("bots: bot %ld entered vehicle %ld seat %d",
+            bot_index + 1, vehicle_index, (int)tick->unit->unit.parent_seat_index);
+    bot->goal_kind = _bots_goal_none;
+    bot->vehicle_index = NONE;
+    bot->vehicle_seat_index = NONE;
+    bot->path.valid = FALSE;
+    vehicle = (struct unit_datum *)object_try_and_get_and_verify_type(
+        vehicle_index, _object_mask_vehicle);
+    if (vehicle && unit_seat_is_gunner(vehicle_index, tick->unit->unit.parent_seat_index))
+    {
+        bots_bot_look(bot, tick);
+        tick->weapon_index = bots_current_weapon(vehicle);
+        if (bot->target_player_index != NONE &&
+            tick->now - bot->target_seen_tick <= TICKS_PER_SECOND / 2)
+        {
+            bots_bot_fight(bot, tick);
+            /* Ordinary infantry melee, grenades, crouch and strafing make
+               no sense while manning a fixed turret. */
+            tick->flags &= FLAG(_unit_control_weapon_primary_trigger_bit);
+        }
+        tick->action->desired_facing.yaw = bot->yaw;
+        tick->action->desired_facing.pitch = PIN(bot->pitch, -1.4f, 1.4f);
+        tick->action->control_flags = tick->flags;
+        tick->action->primary_trigger =
+            TEST_FLAG(tick->flags, _unit_control_weapon_primary_trigger_bit) ? 1.0f : 0.0f;
+    }
+    else
+    {
+        /* Passenger with no mounted weapon, or nonvehicle parent. */
+        tick->action->control_flags = 0;
+        tick->action->primary_trigger = 0.0f;
+    }
+    bot->previous_control_flags = 0;
+    return TRUE;
+}
+
 /* stuck: not moving for a second while it walks - a jump and a sidestep,
 then another path; somewhere else after three */
 static void bots_bot_unstick(struct bots_bot *bot, struct bots_tick *tick)
@@ -2895,6 +3150,8 @@ static void bots_bot_update(struct bots_bot *bot, long bot_index, struct player_
 		bot->target_player_index = NONE;
 		bot->path.valid = FALSE;
 		bot->goal_kind = _bots_goal_none;
+		bot->vehicle_index = NONE;
+		bot->vehicle_seat_index = NONE;
 		bot->previous_control_flags = 0;
 		return;
 	}
@@ -2912,6 +3169,10 @@ static void bots_bot_update(struct bots_bot *bot, long bot_index, struct player_
 		bot->stuck_tick = tick.now;
 		bot->stuck_count = 0;
 		bot->goal_kind = _bots_goal_none;
+		bot->vehicle_index = NONE;
+		bot->vehicle_seat_index = NONE;
+		bot->vehicle_ignore_index = NONE;
+		bot->next_vehicle_scan_tick = tick.now + (bot_index % (TICKS_PER_SECOND * 3));
 		bot->next_look_tick = tick.now + (bot_index % 3);
 		bot->climb_until_tick = 0;
 		bot->path_short = FALSE;
@@ -2936,6 +3197,9 @@ static void bots_bot_update(struct bots_bot *bot, long bot_index, struct player_
 		bot->hurt_tick = tick.now;
 	bot->last_vitality = vitality;
 
+	if (config_boolean("bots.vehicle_seats") &&
+		bots_bot_vehicle_occupied(bot, bot_index, &tick))
+		return;
 	bots_bot_look(bot, &tick);
 	tick.weapon_index = bots_current_weapon(tick.unit);
 	if (bot->target_player_index != NONE && tick.now - bot->target_seen_tick <= TICKS_PER_SECOND / 2)
@@ -2958,6 +3222,7 @@ static void bots_bot_update(struct bots_bot *bot, long bot_index, struct player_
 			tick.move_direction = direction;
 	}
 	bots_bot_weapons(bot, &tick);
+	bots_bot_vehicle_action(bot, &tick);
 	bots_bot_unstick(bot, &tick);
 
 	if (tick.moving)
