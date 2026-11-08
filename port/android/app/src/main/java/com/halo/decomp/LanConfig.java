@@ -16,6 +16,9 @@ final class LanConfig {
     private static final Pattern SECTION = Pattern.compile("^\\s*\\[([^]\\r\\n]+)\\]\\s*(?:#.*)?$");
     private static final Pattern KEY = Pattern.compile("^\\s*(address|broadcast|online)\\s*=.*$");
     private static final Pattern BOT_KEY = Pattern.compile("^\\s*system_link_count\\s*=.*$");
+    private static final Pattern BOT_SKILL_KEY = Pattern.compile("^\\s*skill\\s*=.*$");
+    static final int MAX_LAN_BOTS = 16;
+    static final String[] BOT_SKILLS = { "recruit", "easy", "normal", "heroic", "veteran", "legendary" };
     private static final long MAX_BYTES = 1024 * 1024;
 
     static final class Settings {
@@ -23,9 +26,18 @@ final class LanConfig {
         String peer = "";
         boolean lanOnly = true;
         int systemLinkBotCount = 0;
+        String botSkill = "normal";
     }
 
     private LanConfig() { }
+
+    static boolean validBotSkill(String value) {
+        for (String skill : BOT_SKILLS) {
+            if (skill.equals(value))
+                return true;
+        }
+        return false;
+    }
 
     static boolean validAddress(String value) {
         if (value.isEmpty())
@@ -96,10 +108,12 @@ final class LanConfig {
             } else if (bots && key.equals("system_link_count")) {
                 try {
                     int count = Integer.parseInt(value);
-                    settings.systemLinkBotCount = count >= 0 && count <= 4 ? count : 0;
+                    settings.systemLinkBotCount = count >= 0 && count <= MAX_LAN_BOTS ? count : 0;
                 } catch (NumberFormatException e) {
                     settings.systemLinkBotCount = 0;
                 }
+            } else if (bots && key.equals("skill")) {
+                settings.botSkill = validBotSkill(value) ? value : "normal";
             }
         }
         return settings;
@@ -144,8 +158,15 @@ final class LanConfig {
      * null preserves the existing [bots] section for callers not managing bots. */
     static void save(File file, String local, String peer, boolean lanOnly,
             Integer lanBotCount) throws IOException {
-        if (lanBotCount != null && (lanBotCount < 0 || lanBotCount > 4))
-            throw new IOException("LAN bot count must be from 0 to 4.");
+        save(file, local, peer, lanOnly, lanBotCount, null);
+    }
+
+    static void save(File file, String local, String peer, boolean lanOnly,
+            Integer lanBotCount, String lanBotSkill) throws IOException {
+        if (lanBotCount != null && (lanBotCount < 0 || lanBotCount > MAX_LAN_BOTS))
+            throw new IOException("LAN bot count must be from 0 to 16.");
+        if (lanBotSkill != null && (lanBotCount == null || !validBotSkill(lanBotSkill)))
+            throw new IOException("LAN bot difficulty must be Recruit through Legendary.");
         local = local.trim();
         peer = peer.trim();
         if (!validAddress(local) || !validAddress(peer))
@@ -158,6 +179,7 @@ final class LanConfig {
         boolean seenNetwork = false;
         boolean seenBots = false;
         boolean foundBotCount = false;
+        boolean foundBotSkill = false;
         boolean[] found = new boolean[3];
         for (String line : original) {
             Matcher section = SECTION.matcher(line);
@@ -166,6 +188,8 @@ final class LanConfig {
                     insertMissing(result, found, local, peer, lanOnly);
                 if (bots && lanBotCount != null && !foundBotCount)
                     result.add("system_link_count = " + lanBotCount);
+                if (bots && lanBotSkill != null && !foundBotSkill)
+                    result.add("skill = \"" + lanBotSkill + "\"");
                 network = bots = false;
                 if (section.group(1).trim().equals("network")) {
                     if (seenNetwork)
@@ -192,6 +216,11 @@ final class LanConfig {
                     throw new IOException("Duplicate system_link_count in [bots].");
                 foundBotCount = true;
                 result.add("system_link_count = " + lanBotCount);
+            } else if (bots && lanBotSkill != null && BOT_SKILL_KEY.matcher(line).matches()) {
+                if (foundBotSkill)
+                    throw new IOException("Duplicate skill in [bots].");
+                foundBotSkill = true;
+                result.add("skill = \"" + lanBotSkill + "\"");
             } else {
                 result.add(line);
             }
@@ -200,6 +229,8 @@ final class LanConfig {
             insertMissing(result, found, local, peer, lanOnly);
         if (bots && lanBotCount != null && !foundBotCount)
             result.add("system_link_count = " + lanBotCount);
+        if (bots && lanBotSkill != null && !foundBotSkill)
+            result.add("skill = \"" + lanBotSkill + "\"");
         if (!seenNetwork) {
             if (!result.isEmpty())
                 result.add("");
@@ -210,6 +241,8 @@ final class LanConfig {
             result.add("");
             result.add("[bots]");
             result.add("system_link_count = " + lanBotCount);
+            if (lanBotSkill != null)
+                result.add("skill = \"" + lanBotSkill + "\"");
         }
         File parent = file.getParentFile();
         if (parent == null || !parent.isDirectory())
