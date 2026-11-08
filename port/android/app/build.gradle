@@ -17,6 +17,24 @@ def buildNumber = buildNumberText.isInteger() ? buildNumberText.toInteger() : 0
 // debug key of the computer that builds
 def signingKey = System.getenv("HALO_ANDROID_KEYSTORE")
 
+// Test APKs are not numbered by CI (HALO_BUILD_NUMBER=0), but Android
+// requires a higher versionCode to update an installed app. Give each
+// locally signed test build an increasing code without enabling the
+// public-release updater, which uses HALO_BUILD_NUMBER.
+def testVersionCodeText = System.getenv("HALO_ANDROID_VERSION_CODE")
+def androidVersionCode = Math.max(1, buildNumber)
+if (testVersionCodeText) {
+    if (!testVersionCodeText.isInteger() ||
+        testVersionCodeText.toInteger() < 1 ||
+        testVersionCodeText.toInteger() > 2100000000) {
+        throw new GradleException("HALO_ANDROID_VERSION_CODE must be an integer from 1 to 2100000000")
+    }
+    if (!signingKey || !System.getenv("HALO_ANDROID_KEYSTORE_PASSWORD")) {
+        throw new GradleException("Update test builds require HALO_ANDROID_KEYSTORE and HALO_ANDROID_KEYSTORE_PASSWORD")
+    }
+    androidVersionCode = testVersionCodeText.toInteger()
+}
+
 android {
     namespace "com.halo.decomp"
     compileSdk 35
@@ -25,8 +43,9 @@ android {
         applicationId "com.halo.decomp"
         minSdk 28
         targetSdk 35
-        versionCode Math.max(1, buildNumber)
-        versionName buildNumber > 0 ? "build " + buildNumber : "1.0"
+        versionCode androidVersionCode
+        versionName buildNumber > 0 ? "build " + buildNumber :
+            (testVersionCodeText ? "test " + androidVersionCode : "1.0")
         buildConfigField "int", "HALO_BUILD_NUMBER", "${buildNumber}"
         ndk {
             abiFilters "arm64-v8a"

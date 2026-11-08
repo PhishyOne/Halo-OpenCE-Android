@@ -316,6 +316,49 @@ repository. If you installed a build that has a different signature, remove
 that build before you install a new build. Removing the app deletes its data
 folder: first make a copy of `maps/` and `save/u`.
 
+### Updating manually built test APKs
+
+The app's package name remains `com.halo.decomp`. To install one test APK
+over another without deleting maps, saves and touch layouts, **all builds must
+use the same private signing key** and each new APK must have a higher Android
+`versionCode`. Use the original keystore every time; a new debug keystore
+is not interchangeable.
+
+On a build machine with the Android toolchain installed, set the signing
+environment and explicitly number each experimental APK:
+
+```sh
+export HALO_ANDROID_KEYSTORE="/private/path/halo-signing.p12"
+export HALO_ANDROID_KEYSTORE_PASSWORD="$(cat /private/path/keystore-password)"
+export HALO_ANDROID_VERSION_CODE=2  # use 3, 4, ... for later test builds
+python configure.py
+ninja android_apk
+unset HALO_ANDROID_KEYSTORE_PASSWORD
+```
+
+The keystore path and password file are placeholders. Keep both files outside
+the Git checkout, readable only by the owner. Never put their contents in
+source, logs, artifacts or a commit. GitHub Actions instead uses the
+`ANDROID_KEYSTORE_BASE64` and `ANDROID_KEYSTORE_PASSWORD` repository secrets
+already supported by `.github/workflows/build.yml`.
+
+`HALO_ANDROID_VERSION_CODE` is independent of `HALO_BUILD_NUMBER`. It
+sets the Android installation version, but does not enable the public-release
+self-updater for a test build. The Gradle configuration rejects invalid
+version codes and refuses an explicitly versioned test build without signing
+credentials. The normal main-branch CI numbering remains unchanged.
+
+A new permanent key **cannot update an app signed by an old debug key**.
+Preserve the old APK, arrange a verified backup of maps and saves, then
+uninstall and install the permanent-key build **once**. After that, matching
+signatures and increasing version codes allow normal in-place updates.
+Do not uninstall an app merely to test the signing setup.
+
+Back up the permanent keystore securely and separately from the password:
+losing the private key means future APKs cannot update apps installed with it.
+GitHub secrets are not a recoverable keystore backup. Before distributing an
+APK, verify its signing certificate fingerprint and version code.
+
 ## Widescreen
 
 The game shows 480 lines in the shape of the display, not the 640x480 of
