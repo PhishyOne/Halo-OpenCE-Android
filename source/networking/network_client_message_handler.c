@@ -1486,7 +1486,13 @@ static boolean network_game_client_handle_message_server_switch_to_pregame(
 
 	if (network_game_client_address_matches_server(client, source_address))
 	{
-		if (network_game_client_get_state(client, NULL) == _network_game_client_state_postgame)
+		short state = network_game_client_get_state(client, NULL);
+
+		/* Reliable messages can still arrive after the client has switched.
+		   A second valid switch-to-pregame must not disconnect a client that
+		   is already in the next lobby. */
+		if (state == _network_game_client_state_postgame ||
+			state == _network_game_client_state_pregame)
 		{
 			struct message_server_switch_to_pregame switch_to_pregame;
 			short packet_type = _message_server_switch_to_pregame;
@@ -1502,6 +1508,13 @@ static boolean network_game_client_handle_message_server_switch_to_pregame(
 				_network_game_packet_class_postgame))
 			{
 				network_event("failed to decode a message_server_switch_to_pregame packet");
+				return FALSE;
+			}
+
+			if (state == _network_game_client_state_pregame)
+			{
+				network_event("ignoring a repeat server switch-to-pregame: already in next lobby");
+				return TRUE;
 			}
 
 			result = network_game_client_switch_to_pregame(client);
@@ -1512,7 +1525,7 @@ static boolean network_game_client_handle_message_server_switch_to_pregame(
 		}
 		else
 		{
-			network_event("failed to handle a message_server_switch_to_pregame message; we are not in post-game");
+			network_event("failed to handle a message_server_switch_to_pregame message; client is neither postgame nor pregame");
 		}
 	}
 	else

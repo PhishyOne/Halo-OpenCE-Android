@@ -90,7 +90,13 @@ boolean touch_postgame_draw(
 	boolean host,
 	real_argb_color const *color)
 {
-	static wchar_t const *const labels[NUMBER_OF_TOUCH_POSTGAME_BUTTONS] = { L"CONTINUE", L"LEAVE" };
+	/* The guest stays connected while its host chooses the next round.
+	   Previously the guest saw only LEAVE: tapping the only visible button
+	   disconnected it from the host before the next pregame lobby. */
+	static wchar_t const *const host_labels[NUMBER_OF_TOUCH_POSTGAME_BUTTONS] =
+		{ L"CONTINUE", L"LEAVE" };
+	static wchar_t const *const guest_labels[NUMBER_OF_TOUCH_POSTGAME_BUTTONS] =
+		{ L"WAIT FOR HOST", L"LEAVE" };
 	pixel32 fill = (pixel32)(PIN(color->alpha, 0.0f, 1.0f) * 160.0f + 0.5f) << 24 | 0x283848;
 	short index;
 
@@ -101,7 +107,9 @@ boolean touch_postgame_draw(
 		rectangle2d button;
 		rectangle2d text;
 
-		touch_postgame.shown[index] = index == _touch_postgame_leave || host;
+		/* A on guests is a safe no-op in game_engine_update_non_deterministic:
+		   only a local host can reset the server to the next pregame. */
+		touch_postgame.shown[index] = TRUE;
 		if (!touch_postgame.shown[index])
 			continue;
 		button.x1 = (short)(TOUCH_POSTGAME_RIGHT -
@@ -120,7 +128,8 @@ boolean touch_postgame_draw(
 		text.y0 = (short)(button.y0 + (button.y1 - button.y0 - TOUCH_POSTGAME_LINE_HEIGHT) / 2);
 		text.y1 = (short)(text.y0 + TOUCH_POSTGAME_LINE_HEIGHT);
 		draw_string_set_draw_mode(font_index, NONE, _touch_postgame_text_centred, 0, color);
-		rasterizer_draw_unicode_string(&text, NULL, NULL, 0, labels[index]);
+		rasterizer_draw_unicode_string(&text, NULL, NULL, 0,
+			host ? host_labels[index] : guest_labels[index]);
 	}
 	touch_postgame.drawn_at = system_milliseconds();
 	return TRUE;
