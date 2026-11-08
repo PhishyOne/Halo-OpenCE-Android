@@ -44,7 +44,7 @@ enum {
 static struct unit_seat test_seats[3];
 static struct unit_definition test_definition;
 static struct unit_datum test_vehicle;
-static int animation_ok = 1, seat_available = 1, label_ok = 1;
+static int animation_ok = 1, seat_available = 1;
 static int seat_entry_calls = 0, direct_board_calls = 0;
 static void *object_try_and_get_and_verify_type(long index, long type)
 {
@@ -54,12 +54,6 @@ static struct unit_definition *unit_definition_get(long index)
 {
     (void)index;
     return &test_definition;
-}
-static boolean unit_set_or_test_seat_and_weapon_label(long u, char const *l,
-                                                       char const *w, boolean do_it)
-{
-    (void)u; (void)l; (void)w; (void)do_it;
-    return label_ok;
 }
 static boolean unit_has_animation_to_enter_seat(long u, long v, short s)
 {
@@ -163,6 +157,13 @@ int main(int argc, char **argv)
         animation_ok = 0;
         CHECK(!bots_vehicle_seat_usable(7, 33, 1, &entrance, &gunner),
               "entered a seat with no Spartan animation");
+        return 0;
+    }
+    CASE("empty-seat-label")
+    {
+        test_seats[1].label[0] = 0;
+        CHECK(!bots_vehicle_seat_usable(7, 33, 1, &entrance, &gunner),
+              "accepted an unlabeled vehicle seat");
         return 0;
     }
     CASE("action-press")

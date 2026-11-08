@@ -65,7 +65,7 @@ calling unit_enter_seat directly, preserving the LAN host action relay.
 ## Source tests
 
 - tools/harness/tests/test_bot_vehicle_seats.py extracts the actual
-  production seat filter and player Action function. Twelve cases cover
+  production seat filter and player Action function. Thirteen cases cover
   valid gunner/passenger, driver/occupied/bad/disabled seats, missing
   animation and correct/incorrect/cooldown Action behavior. Two mutation
   controls catch intentional safety bugs.

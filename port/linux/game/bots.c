@@ -1817,8 +1817,10 @@ static boolean bots_vehicle_seat_usable(long bot_unit_index, long vehicle_index,
        turret is useful. */
     if (!*gunner && vehicle->unit.driver_object_index == NONE)
         return FALSE;
+    /* The player's nearby-action scanner performs the private seat-label
+       compatibility test before offering an Action prompt. This policy
+       uses only public unit/seat APIs and waits for that final prompt. */
     if (!seat->label[0] ||
-        !unit_set_or_test_seat_and_weapon_label(bot_unit_index, seat->label, NULL, FALSE) ||
         !unit_has_animation_to_enter_seat(bot_unit_index, vehicle_index, seat_index) ||
         !unit_can_enter_seat(bot_unit_index, vehicle_index, seat_index, NULL))
         return FALSE;

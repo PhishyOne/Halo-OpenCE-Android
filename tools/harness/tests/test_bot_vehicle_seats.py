@@ -7,7 +7,7 @@ from harness import build, function, read, run, mutated, CHECK_FAILED
 
 CASES = (
     "gunner-empty-vehicle", "no-driver-control", "passenger-needs-driver",
-    "occupied-seat", "disabled-vehicle", "dead-vehicle", "invalid-vehicle", "no-animation",
+    "occupied-seat", "disabled-vehicle", "dead-vehicle", "invalid-vehicle", "no-animation", "empty-seat-label",
     "action-press", "wrong-action", "already-seated", "cooldown"
 )
 
