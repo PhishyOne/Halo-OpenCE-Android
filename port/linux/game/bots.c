@@ -102,6 +102,7 @@ and each bot's kills and deaths; debug.bot_trace logs each bot's state.
 
 #include "bots.h"
 #include "bots_combat.h"
+#include "bots_objectives_policy.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -147,6 +148,7 @@ enum
 	/* a better weapon to pick up */
 	_bots_goal_item,
 	_bots_goal_vehicle,
+	_bots_goal_objective,
 };
 
 /* the fight's counts in halo.log's minute line */
@@ -380,6 +382,12 @@ static struct
 	after three */
 	long stuck_events;
 	long stuck_giveups;
+	/* Intermittent enemy-vehicle non-engagement: counters per map so the
+	   host log distinguishes unseen occupants from blocked line of sight. */
+	long vehicle_enemy_checks;
+	long vehicle_enemy_candidates;
+	long vehicle_los_visible;
+	long vehicle_los_blocked;
 	long last_report_tick;
 } bots_globals;
 
@@ -1359,6 +1367,10 @@ void bots_initialize_for_new_map(void)
 	bots_globals.search_unsmoothed = 0;
 	bots_globals.stuck_events = 0;
 	bots_globals.stuck_giveups = 0;
+	bots_globals.vehicle_enemy_checks = 0;
+	bots_globals.vehicle_enemy_candidates = 0;
+	bots_globals.vehicle_los_visible = 0;
+	bots_globals.vehicle_los_blocked = 0;
 	csmemset(bots_globals.combat_counts, 0, sizeof(bots_globals.combat_counts));
 	/* (the first line a minute into the game) */
 	bots_globals.last_report_tick = 0;
@@ -1616,16 +1628,27 @@ static boolean bots_line_of_sight(long unit_index, real_point3d const *eye, real
 	vector.i = point->x - eye->x;
 	vector.j = point->y - eye->y;
 	vector.k = point->z - eye->z;
-	if (!collision_test_vector(_collision_test_for_line_of_sight_flags, eye, &vector, unit_index, &collision))
-		return TRUE;
-	/* (the target's vehicle: seen) */
-	if (collision.type == _collision_result_object && target_unit_index != NONE &&
-		(collision.object_index == target_unit_index ||
-			collision.object_index == object_get(target_unit_index)->object.parent_object_index))
+	/* A seated player's bounding center can be obscured by vehicle
+	   geometry. The existing parent-vehicle exception is intentional:
+	   record which outcome it took, without inventing a new aim point. */
 	{
-		return TRUE;
+		long parent = target_unit_index == NONE ? NONE :
+			object_get(target_unit_index)->object.parent_object_index;
+		boolean blocked = collision_test_vector(_collision_test_for_line_of_sight_flags,
+			eye, &vector, unit_index, &collision);
+		boolean visible = !blocked || (collision.type == _collision_result_object &&
+			(collision.object_index == target_unit_index ||
+			 (parent != NONE && collision.object_index == parent)));
+
+		if (parent != NONE)
+		{
+			if (visible)
+				bots_globals.vehicle_los_visible++;
+			else
+				bots_globals.vehicle_los_blocked++;
+		}
+		return visible;
 	}
-	return FALSE;
 }
 
 static boolean bots_is_enemy(struct player_datum *player, struct player_datum *other)
@@ -1667,6 +1690,8 @@ static boolean bots_target_score(struct bots_bot *bot, struct player_datum *play
 		return FALSE;
 	object = object_get(other->unit_index);
 	other_unit = unit_get(other->unit_index);
+	if (object->object.parent_object_index != NONE)
+		bots_globals.vehicle_enemy_checks++;
 	if (TEST_FLAG(object->object.damage_flags, _object_dead_bit))
 		return FALSE;
 	candidate->point = object->object.bounding_sphere_center;
@@ -1702,6 +1727,8 @@ static boolean bots_target_score(struct bots_bot *bot, struct player_datum *play
 	candidate->player_index = player_index;
 	candidate->unit_index = other->unit_index;
 	candidate->score = distance + bearing * 4.0f - (player_index == bot->target_player_index ? 6.0f : 0.0f);
+	if (object->object.parent_object_index != NONE)
+		bots_globals.vehicle_enemy_candidates++;
 	return TRUE;
 }
 
@@ -1788,6 +1815,76 @@ static void bots_set_goal(struct bots_bot *bot, short kind, real_point3d const *
 	bot->path.valid = FALSE;
 	bot->path_failures = 0;
 	bot->climb_until_tick = 0;
+}
+
+/* The engine's flag carrier check also uses unit_has_weapon. The flag
+   belongs to the weapon inventory, not a fake target item to fetch. */
+static boolean bots_carries_flag(struct player_datum *player)
+{
+	struct unit_datum *unit;
+	short slot;
+
+	if (!player || player->unit_index == NONE)
+		return FALSE;
+	unit = unit_get(player->unit_index);
+	for (slot = 0; slot < MAXIMUM_WEAPONS_PER_UNIT; slot++)
+	{
+		long weapon_index = unit->unit.weapon_object_indices[slot];
+
+		if (weapon_index != NONE && weapon_is_flag(weapon_index))
+			return TRUE;
+	}
+	return FALSE;
+}
+
+/* Goal selection is independent of the game mode's scoring code.
+   Only the actual host picks goals. A moved hill, carried flag, dropped
+   flag or returned flag is naturally read from game_engine's current goals.
+   When the destination is unreachable, the normal bot pathfinder can try
+   an approach and eventually abandon it without changing the flag state. */
+static boolean bots_objectives_active(void)
+{
+	struct game_variant *variant = game_engine_get_variant();
+
+	return config_boolean("bots.objective_modes") && variant &&
+		(variant->game_engine_index == game_engine_ctf ||
+		 variant->game_engine_index == game_engine_king);
+}
+
+static boolean bots_choose_objective_goal(struct bots_bot *bot, long player_index)
+{
+	struct game_variant *variant;
+	struct player_datum *player;
+	unsigned int active = 0;
+	int goal_slot = -1, slot, count, bot_index;
+	real_point3d point, ground;
+	long surface;
+
+	if (!bots_objectives_active())
+		return FALSE;
+	variant = game_engine_get_variant();
+	if (!variant || (variant->game_engine_index != game_engine_ctf &&
+		variant->game_engine_index != game_engine_king))
+		return FALSE;
+	player = player_get(player_index);
+	bot_index = (int)(player->network_player_data.machine_index - bots_first_machine());
+	count = variant->game_engine_index == game_engine_king ? BOTS_OBJECTIVE_MAX_KING_HILLS : 4;
+	for (slot = 0; slot < count; slot++)
+		if (game_engine_get_goal_in_use((short)slot))
+			active |= (1u << slot);
+	if (variant->game_engine_index == game_engine_king)
+		goal_slot = bots_king_goal_slot(bot_index, active);
+	else
+		goal_slot = bots_ctf_goal_slot(bot_index, player->team_index,
+			bots_carries_flag(player), active);
+	if (goal_slot < 0)
+		return FALSE;
+	game_engine_get_goal_position(&point, (short)goal_slot);
+	surface = bots_surface_below(&point, &ground);
+	if (surface == NONE)
+		return FALSE;
+	bots_set_goal(bot, _bots_goal_objective, &ground, surface);
+	return TRUE;
 }
 
 /* Campaign actor_action_try_to_enter_vehicle chooses by distance, seat
@@ -2039,6 +2136,10 @@ static void bots_choose_goal(struct bots_bot *bot, long player_index, real_point
 {
 	long now = game_time_get();
 
+	/* Capture/defend a flag or occupy the current hill before roaming.
+	   Slayer and unconfigured modes continue through the old planner. */
+	if (bots_choose_objective_goal(bot, player_index))
+		return;
 	if (!fighting && bot->target_player_index != NONE && bot->target_last_surface_index != NONE &&
 		now - bot->target_seen_tick < TICKS_PER_SECOND * 8)
 	{
@@ -2984,6 +3085,34 @@ static void bots_bot_weapons(struct bots_bot *bot, struct bots_tick *tick)
 	}
 }
 
+/* Some flag pickups use the player's nearby-weapon action prompt.
+   The main CTF engine still validates flag ownership, pickup and scoring;
+   this only presses the same button a human would, and leaves ordinary
+   weapon pickups to bots_bot_weapons. Walking over an automatic flag
+   pickup needs no special input. */
+static void bots_bot_objective_action(struct bots_bot *bot, struct bots_tick *tick)
+{
+    long item_index;
+    struct weapon_datum *weapon;
+    struct game_variant *variant;
+
+    if (bot->goal_kind != _bots_goal_objective || !bots_objectives_active() ||
+        bots_carries_flag(tick->player))
+        return;
+    variant = game_engine_get_variant();
+    if (!variant || variant->game_engine_index != game_engine_ctf)
+        return;
+    if (tick->player->action_result != _player_action_result_pickup_weapon &&
+        tick->player->action_result != _player_action_result_swap_for_weapon &&
+        tick->player->action_result != _player_action_result_add_weapon_to_inventory)
+        return;
+    item_index = tick->player->action_object_index;
+    weapon = (struct weapon_datum *)object_try_and_get_and_verify_type(item_index, _object_mask_weapon);
+    if (weapon && weapon_is_flag(item_index) &&
+        weapon->object.owner_team_index != tick->player->team_index)
+        tick->flags |= FLAG(_unit_control_swap_weapons_bit);
+}
+
 /* Halo players already get a nearby vehicle-seat action result from
    player_examine_nearby_vehicle. Send the same action bit as the user, never
    call unit_enter_seat directly. The host relays this through the usual
@@ -3202,11 +3331,15 @@ static void bots_bot_update(struct bots_bot *bot, long bot_index, struct player_
 		return;
 	bots_bot_look(bot, &tick);
 	tick.weapon_index = bots_current_weapon(tick.unit);
-	if (bot->target_player_index != NONE && tick.now - bot->target_seen_tick <= TICKS_PER_SECOND / 2)
+	/* A flag carrier runs home rather than abandoning the capture to duel.
+	   Everyone else still fights normally, including hill defenders. */
+	if (!(bots_objectives_active() && bots_carries_flag(tick.player)) &&
+		bot->target_player_index != NONE && tick.now - bot->target_seen_tick <= TICKS_PER_SECOND / 2)
 		bots_bot_fight(bot, &tick);
-	/* the goal, and the path to it (while fighting, only a weapon close by:
-	towards it, still facing the enemy) */
-	if (!tick.fighting || bot->goal_kind == _bots_goal_item)
+	/* Objectives may change while we are fighting; update the destination
+	   without waiting for the enemy to disappear. */
+	if (!tick.fighting || bot->goal_kind == _bots_goal_item ||
+		bots_objectives_active())
 		bots_choose_goal(bot, bot->player_index, &tick.position, tick.fighting);
 	if (!tick.fighting)
 	{
@@ -3214,14 +3347,22 @@ static void bots_bot_update(struct bots_bot *bot, long bot_index, struct player_
 		bots_bot_yield(bot_index, &tick);
 		bots_level_prenade(bot, &tick);
 	}
-	else if (bot->goal_kind == _bots_goal_item)
+	else if (bot->goal_kind == _bots_goal_item || bot->goal_kind == _bots_goal_objective)
 	{
 		real direction;
-
+		/* On objectives, keep moving toward the goal while firing if more
+		   than a few units away. Inside the hill, fight normally. */
 		if (bots_follow_path(bot, tick.player->unit_index, &tick.position, &direction))
+		{
 			tick.move_direction = direction;
+			if (bot->goal_kind == _bots_goal_objective &&
+				bots_distance2d(&tick.position, &bot->goal_point) > 3.0f)
+				tick.moving = TRUE;
+		}
 	}
-	bots_bot_weapons(bot, &tick);
+	if (!(bots_objectives_active() && bots_carries_flag(tick.player)))
+		bots_bot_weapons(bot, &tick);
+	bots_bot_objective_action(bot, &tick);
 	bots_bot_vehicle_action(bot, &tick);
 	bots_bot_unstick(bot, &tick);
 
@@ -3295,6 +3436,9 @@ static void bots_report(void)
 			counts[_bots_combat_count_halts], counts[_bots_combat_count_paced], counts[_bots_combat_count_rescopes],
 			counts[_bots_combat_count_high_ground], counts[_bots_combat_count_out_of_view]);
 	}
+	platform_log("bots: seated enemy checks %ld, in-range/in-view %ld, LOS clear %ld, blocked %ld",
+		bots_globals.vehicle_enemy_checks, bots_globals.vehicle_enemy_candidates,
+		bots_globals.vehicle_los_visible, bots_globals.vehicle_los_blocked);
 }
 
 void bots_update_actions(struct player_action *actions)

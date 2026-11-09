@@ -218,6 +218,43 @@ public final class LanConfigSmokeTest {
             check(!LanConfig.load(botsConfig).vehicleSeats
                 && !LanConfig.load(botsConfig).lanOnly,
                 "internet-mode seat AI not disabled");
+            // Objective mode bots: off by default; an opt-in host setting
+            // must be atomic and must not change offline/Slayer behavior.
+            Files.writeString(botsConfig.toPath(),
+                "[bots]\ncount = 31\nsystem_link_count = 8\nobjective_modes = false\n",
+                StandardCharsets.UTF_8);
+            check(!LanConfig.load(botsConfig).objectiveModes,
+                "objective modes should be off by default");
+            LanConfig.save(botsConfig, "", "", true, 8, "normal", false, true);
+            check(LanConfig.load(botsConfig).objectiveModes,
+                "CTF/King checkbox failed to save");
+            String objectives = Files.readString(botsConfig.toPath());
+            check(objectives.contains("objective_modes = true")
+                && objectives.contains("count = 31"),
+                "objective option changed offline bots");
+            LanConfig.save(botsConfig, "", "", true, 8, "heroic");
+            check(LanConfig.load(botsConfig).objectiveModes,
+                "old save overload erased objective mode");
+            LanConfig.save(botsConfig, "", "10.28.111.42", true, 0, null, false, false);
+            check(!LanConfig.load(botsConfig).objectiveModes,
+                "guest retained host-only CTF/King behavior");
+            LanConfig.save(botsConfig, "", "", false, 0, null, false, false);
+            check(!LanConfig.load(botsConfig).objectiveModes,
+                "internet mode retained objective mode");
+            String duplicateObjectives =
+                "[bots]\nobjective_modes = true\nobjective_modes = false\n";
+            Files.writeString(botsConfig.toPath(), duplicateObjectives,
+                StandardCharsets.UTF_8);
+            boolean objectiveRejected = false;
+            try {
+                LanConfig.save(botsConfig, "", "", true, 8, "normal", false, true);
+            } catch (IOException expected) {
+                objectiveRejected = true;
+            }
+            check(objectiveRejected
+                && Files.readString(botsConfig.toPath()).equals(duplicateObjectives),
+                "duplicate objective settings were not refused atomically");
+            // Reuse the existing vehicle duplicate test next.
             String duplicate = "[bots]\nvehicle_seats = false\nvehicle_seats = true\n";
             Files.writeString(botsConfig.toPath(), duplicate, StandardCharsets.UTF_8);
             boolean refused = false;

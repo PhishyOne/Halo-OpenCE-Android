@@ -1584,7 +1584,12 @@ static void network_game_server_port_bots(
 
 	if (server->state != _network_game_server_state_pregame || server->sent_start_game_message)
 		return;
-	if (server->game.variant.game_engine_index == game_engine_slayer)
+	/* CTF and King are opt-in experiments; keep the proven Slayer default
+	   and never spawn LAN bots in internet games or during a match. */
+	if (server->game.variant.game_engine_index == game_engine_slayer ||
+		(config_boolean("bots.objective_modes") &&
+		 (server->game.variant.game_engine_index == game_engine_ctf ||
+		  server->game.variant.game_engine_index == game_engine_king)))
 	{
 		if (network_game_is_splitscreen_local())
 			wanted = PIN(bots_wanted_count(), 0, BOTS_MAXIMUM);

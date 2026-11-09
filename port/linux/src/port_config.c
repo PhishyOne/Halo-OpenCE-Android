@@ -513,13 +513,17 @@ static const struct config_setting config_settings[] =
 	/* port: opt-in experiment: separate from the proven offline bots.count;
 	   the host alone adds this many bot players to a LAN Slayer lobby. */
 	{ "bots.system_link_count", _config_integer, "0", "HALO_BOTS_SYSTEM_LINK", _environment_value, _platform_all,
-		"Experimental LAN System Link Slayer bots on the hosting machine only.\n"
+		"Experimental LAN System Link bots on the hosting machine only.\n"
 		"0 (default): off; 1-16: try that many. Not for internet or campaign co-op.\n"
 		"Requires all players to use a matching experimental network version." },
 	{ "bots.skill", _config_string, "\"normal\"", "HALO_BOT_SKILL", _environment_value, _platform_all,
 		"How well the bots play: \"recruit\", \"easy\", \"normal\", \"heroic\",\n"
 		"\"veteran\" or \"legendary\" (how soon they react, how well they aim,\n"
 		"how far they see, and how they fight: blows, grenades, strafes, retreats)." },
+	{ "bots.objective_modes", _config_boolean, "false", "HALO_BOT_OBJECTIVES", _environment_value, _platform_all,
+		"Experimental host-only bots in Capture the Flag and King of the Hill.\n"
+		"Off by default; Slayer bots are unchanged. Bots use the ordinary\n"
+		"game objective and team-scoring rules.\n" },
 	{ "bots.vehicle_seats", _config_boolean, "false", "HALO_BOT_VEHICLE_SEATS", _environment_value, _platform_all,
 		"Experimental multiplayer bots can walk to and board open vehicle\n"
 		"gunner seats, and passenger seats when a driver is present. Bots do\n"
