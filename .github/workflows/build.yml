@@ -186,22 +186,23 @@ jobs:
           HALO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: python3 tools/ci_build.py android debug
 
-      - name: Release
-        env:
-          HALO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-        run: python3 tools/ci_build.py android release
-
       # Source-only objective policy and launcher checks run before
       # expensive native compilation when the isolated build is selected.
-      - name: Test experimental objective bots
+      - name: Test bot objectives and Android launcher
         if: ${{ inputs.android_only }}
         run: |
           python3 tools/test_bot_objective_policy.py -v
+          python3 tools/test_android_launcher_layout.py -v
           mkdir -p "$RUNNER_TEMP/halo-test-classes"
           javac -d "$RUNNER_TEMP/halo-test-classes" \
             port/android/app/src/main/java/com/halo/decomp/LanConfig.java \
             tools/lan/LanConfigSmokeTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LanConfigSmokeTest
+
+      - name: Release
+        env:
+          HALO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: python3 tools/ci_build.py android release
 
       # the touch controls' layout and gyroscope maths (the runner's JDK)
       - name: Test the touch layout
