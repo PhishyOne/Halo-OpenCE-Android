@@ -18,6 +18,7 @@ final class LanConfig {
     private static final Pattern BOT_KEY = Pattern.compile("^\\s*system_link_count\\s*=.*$");
     private static final Pattern BOT_SKILL_KEY = Pattern.compile("^\\s*skill\\s*=.*$");
     private static final Pattern BOT_VEHICLE_KEY = Pattern.compile("^\\s*vehicle_seats\\s*=.*$");
+    private static final Pattern BOT_OBJECTIVE_KEY = Pattern.compile("^\\s*objective_modes\\s*=.*$");
     static final int MAX_LAN_BOTS = 16;
     static final String[] BOT_SKILLS = { "recruit", "easy", "normal", "heroic", "veteran", "legendary" };
     private static final long MAX_BYTES = 1024 * 1024;
@@ -29,6 +30,7 @@ final class LanConfig {
         int systemLinkBotCount = 0;
         String botSkill = "normal";
         boolean vehicleSeats = false;
+        boolean objectiveModes = false;
     }
 
     private LanConfig() { }
@@ -118,6 +120,8 @@ final class LanConfig {
                 settings.botSkill = validBotSkill(value) ? value : "normal";
             } else if (bots && key.equals("vehicle_seats")) {
                 settings.vehicleSeats = value.equals("true");
+            } else if (bots && key.equals("objective_modes")) {
+                settings.objectiveModes = value.equals("true");
             }
         }
         return settings;
@@ -172,6 +176,14 @@ final class LanConfig {
 
     static void save(File file, String local, String peer, boolean lanOnly,
             Integer lanBotCount, String lanBotSkill, Boolean vehicleSeats) throws IOException {
+        save(file, local, peer, lanOnly, lanBotCount, lanBotSkill, vehicleSeats, null);
+    }
+
+    static void save(File file, String local, String peer, boolean lanOnly,
+            Integer lanBotCount, String lanBotSkill, Boolean vehicleSeats,
+            Boolean objectiveModes) throws IOException {
+        if (objectiveModes != null && lanBotCount == null)
+            throw new IOException("Objective mode settings require an explicit bot count.");
         if (vehicleSeats != null && lanBotCount == null)
             throw new IOException("Vehicle seat settings require an explicit bot count.");
         if (lanBotCount != null && (lanBotCount < 0 || lanBotCount > MAX_LAN_BOTS))
@@ -192,6 +204,7 @@ final class LanConfig {
         boolean foundBotCount = false;
         boolean foundBotSkill = false;
         boolean foundVehicleSeats = false;
+        boolean foundObjectiveModes = false;
         boolean[] found = new boolean[3];
         for (String line : original) {
             Matcher section = SECTION.matcher(line);
@@ -204,6 +217,8 @@ final class LanConfig {
                     result.add("skill = \"" + lanBotSkill + "\"");
                 if (bots && vehicleSeats != null && !foundVehicleSeats)
                     result.add("vehicle_seats = " + vehicleSeats);
+                if (bots && objectiveModes != null && !foundObjectiveModes)
+                    result.add("objective_modes = " + objectiveModes);
                 network = bots = false;
                 if (section.group(1).trim().equals("network")) {
                     if (seenNetwork)
@@ -240,6 +255,11 @@ final class LanConfig {
                     throw new IOException("Duplicate vehicle_seats in [bots].");
                 foundVehicleSeats = true;
                 result.add("vehicle_seats = " + vehicleSeats);
+            } else if (bots && objectiveModes != null && BOT_OBJECTIVE_KEY.matcher(line).matches()) {
+                if (foundObjectiveModes)
+                    throw new IOException("Duplicate objective_modes in [bots].");
+                foundObjectiveModes = true;
+                result.add("objective_modes = " + objectiveModes);
             } else {
                 result.add(line);
             }
@@ -252,6 +272,8 @@ final class LanConfig {
             result.add("skill = \"" + lanBotSkill + "\"");
         if (bots && vehicleSeats != null && !foundVehicleSeats)
             result.add("vehicle_seats = " + vehicleSeats);
+        if (bots && objectiveModes != null && !foundObjectiveModes)
+            result.add("objective_modes = " + objectiveModes);
         if (!seenNetwork) {
             if (!result.isEmpty())
                 result.add("");
@@ -266,6 +288,8 @@ final class LanConfig {
                 result.add("skill = \"" + lanBotSkill + "\"");
             if (vehicleSeats != null)
                 result.add("vehicle_seats = " + vehicleSeats);
+            if (objectiveModes != null)
+                result.add("objective_modes = " + objectiveModes);
         }
         File parent = file.getParentFile();
         if (parent == null || !parent.isDirectory())

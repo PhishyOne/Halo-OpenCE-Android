@@ -33,7 +33,7 @@ enum
 
 /* the settings (bots.count, bots.skill, bots.teams) */
 long bots_wanted_count(void);
-/* port: opt-in count for LAN-only Slayer host; capped at 16 for testing. */
+/* port: opt-in count for LAN host; CTF/King require bots.objective_modes. */
 long bots_system_link_wanted_count(void);
 short bots_skill(void);
 short bots_teams(void);

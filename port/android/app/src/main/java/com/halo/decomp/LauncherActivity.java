@@ -477,9 +477,14 @@ public class LauncherActivity extends Activity {
         vehicleSeatsLan.setTextColor(Color.WHITE);
         vehicleSeatsLan.setChecked(settings.vehicleSeats);
         hostPanel.addView(vehicleSeatsLan);
+        CheckBox objectiveBotsLan = new CheckBox(this);
+        objectiveBotsLan.setText("Experimental: bots play CTF and King of the Hill");
+        objectiveBotsLan.setTextColor(Color.WHITE);
+        objectiveBotsLan.setChecked(settings.objectiveModes);
+        hostPanel.addView(objectiveBotsLan);
         hostPanel.addView(lanText("4 bots have been tested on LAN. Try 8, then 16 "
             + "and watch synchronization and performance. Difficulty is set by the host. "
-            + "System Link Slayer only; no campaign bots.", 13));
+            + "CTF/King bots require the experimental checkbox. No campaign bots.", 13));
         layout.addView(hostPanel);
 
         LinearLayout joinPanel = new LinearLayout(this);
@@ -591,7 +596,8 @@ public class LauncherActivity extends Activity {
                     ? LanConfig.BOT_SKILLS[lanSkill.getSelectedItemPosition()] : null;
                 LanConfig.save(new File(dataRoot, "config.toml"),
                     local.getText().toString(), peer, offline.isChecked(), count, skill,
-                    lanHosting && vehicleSeatsLan.isChecked());
+                    lanHosting && vehicleSeatsLan.isChecked(),
+                    lanHosting && objectiveBotsLan.isChecked());
                 if (invitePending)
                     publishPendingInvite();
             } catch (java.io.IOException e) {
