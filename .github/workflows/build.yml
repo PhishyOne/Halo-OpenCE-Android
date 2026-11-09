@@ -30,6 +30,14 @@ on:
         description: "Also build the profiling flavour (configure.py --profile) on Linux"
         type: boolean
         default: false
+      android_only:
+        description: "Build only Android; skip Linux, Windows, web, release and Pages jobs"
+        type: boolean
+        default: false
+      android_version_code:
+        description: "Monotonic Android version code for separately signed experimental APK"
+        type: string
+        default: "2"
 
 concurrency:
   group: build-${{ github.ref }}
@@ -46,6 +54,7 @@ env:
 
 jobs:
   linux:
+    if: ${{ !inputs.android_only }}
     # Arch Linux has what the build needs as packages: clang 22 (for the
     # profile-guided optimisation in pgo/), and CMake, pkg-config and
     # wayland-scanner for the SDL 3 that the portable build brings. The build
@@ -117,6 +126,8 @@ jobs:
     # The runner image has the Android SDK and NDK, a JDK and CMake.
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    env:
+      HALO_ANDROID_VERSION_CODE: ${{ inputs.android_only && inputs.android_version_code || '' }}
     steps:
       - name: Install the toolchain
         run: |
@@ -170,6 +181,7 @@ jobs:
           fi
 
       - name: Debug
+        if: ${{ !inputs.android_only }}
         env:
           HALO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: python3 tools/ci_build.py android debug
@@ -179,6 +191,18 @@ jobs:
           HALO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: python3 tools/ci_build.py android release
 
+      # Source-only objective policy and launcher checks run before
+      # expensive native compilation when the isolated build is selected.
+      - name: Test experimental objective bots
+        if: ${{ inputs.android_only }}
+        run: |
+          python3 tools/test_bot_objective_policy.py -v
+          mkdir -p "$RUNNER_TEMP/halo-test-classes"
+          javac -d "$RUNNER_TEMP/halo-test-classes" \
+            port/android/app/src/main/java/com/halo/decomp/LanConfig.java \
+            tools/lan/LanConfigSmokeTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LanConfigSmokeTest
+
       # the touch controls' layout and gyroscope maths (the runner's JDK)
       - name: Test the touch layout
         run: python3 tools/test_touch_layout.py
@@ -187,6 +211,7 @@ jobs:
         run: ccache --show-stats
 
       - uses: actions/upload-artifact@v4
+        if: ${{ !inputs.android_only }}
         with:
           name: halo-android-debug
           path: dist/halo-android-debug
@@ -199,6 +224,7 @@ jobs:
           retention-days: 3
 
   windows:
+    if: ${{ !inputs.android_only }}
     # The runner image has LLVM, Python and Visual Studio's x86 libraries and
     # Windows SDK.
     runs-on: windows-2025
@@ -273,6 +299,7 @@ jobs:
           retention-days: 3
 
   web:
+    if: ${{ !inputs.android_only }}
     # Emscripten (emsdk, the version below, cached) builds the web port's
     # site (port/web/README.md); the tests check its graph, the page's
     # importer and service worker, its sockets, that it starts in a
@@ -544,12 +571,12 @@ jobs:
         uses: actions/deploy-pages@v4
 
   notify:
+    if: ${{ !inputs.android_only && !cancelled() }}
     # A Discord embed for the run, to the DISCORD_WEBHOOK secret (nothing
     # without it): green when every platform built, red when one did not,
     # with each platform's result, this run's release (main only), and links
     # to the latest release's builds and the site.
     needs: [linux, android, windows, web, release, pages]
-    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
