@@ -72,6 +72,24 @@ of the whole `save` folder stops there.
 
 `ninja android` builds only the game image and the native libraries.
 
+## Launcher
+
+The native Android launcher uses a game-style HUD with a fixed Play footer.
+Select **OFFLINE BOTS** or **LAN / SYSTEM LINK** using the two checkboxes
+above Play. They are mutually exclusive; both unchecked starts normal Halo
+without modifying the saved network configuration.
+
+The scrollable panel shows only the selected mode's settings. Offline bot
+count, skill, team assignment and vehicle crews use the existing offline
+launch arguments and saved preferences. LAN host/join IPs, host bots, vehicle
+crews and CTF/King objectives retain their existing configuration validation
+and atomic writes. Internet invitations must still be resolved explicitly.
+On a small landscape screen the options scroll, but mode selection and Play
+stay visible at the bottom. No extra confirmation dialog is used.
+
+The experimental CTF/King gameplay code remains opt-in and not yet
+qualified on devices; changing the launcher does not change that status.
+
 ## Game data
 
 The game needs the `maps/` folder from an Xbox disc image (`.xiso` or
