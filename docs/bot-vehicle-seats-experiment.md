@@ -16,9 +16,10 @@ calling unit_enter_seat directly, preserving the LAN host action relay.
 
 ## Intended behavior
 
-- Off by default. Toggle bots.vehicle_seats on in the Android host launcher
-  (or Offline Bot Match options). A joining client or internet-mode launch
-  disables vehicle AI, and the LAN host keeps the existing max-16 bot count.
+- Enabled automatically in current Halo Android builds: the launcher no
+  longer requires toggling bots.vehicle_seats. Seat AI remains confined to
+  actual bot control on the local machine or hosting LAN machine; clients
+  consume the host's actions, and there are still at most 16 LAN bots.
 - Scan parked vehicles within 16 world units every few seconds, with a
   preference for gunner seats. Passenger requires an occupied driver seat.
 - Never enter driver seats or evict an occupant. Never enter a dead or

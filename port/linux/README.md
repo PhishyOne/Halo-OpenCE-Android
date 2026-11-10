@@ -427,7 +427,16 @@ backs off along a path when it is losing, and from `"veteran"` as soon as
 its shields pop; from `"heroic"` it runs in to finish a won fight; it does
 not see a player far above or below where it looks (unless near, or shot by
 them); and from `"veteran"` it prefers high ground as it roams. halo.log's
-bots line each minute is followed by the fight's counts.
+bots line each minute is followed by the fight's counts. A separate
+bots: perf line reports total objects, active objects, dead bipeds and
+contiguous object-pool memory pressure, also available in Android's
+diagnostic report. A 48+-player **offline** bot match caps garbage limits
+at the 32-player equivalent and ignores virtual bot viewers (which have
+no screen) when protecting visible bodies. Bodies the actual player can
+see remain protected; ineffective active collections back off for one
+second. Network games, co-op and smaller bot games are unchanged. This
+is a candidate for physical stress tests, not a guarantee that 127 bots
+will stay at a stable frame rate.
 
 ## OpenCE gametypes
 

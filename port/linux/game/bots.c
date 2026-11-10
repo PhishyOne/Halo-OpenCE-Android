@@ -75,6 +75,7 @@ and each bot's kills and deaths; debug.bot_trace logs each bot's state.
 */
 
 #include "cseries.h"
+#include "cseries/errors.h"
 #include "game/game.h"
 #include "game/game_engine.h"
 #include "game/players.h"
@@ -395,6 +396,11 @@ static struct
 	long vehicle_enemy_candidates;
 	long vehicle_los_visible;
 	long vehicle_los_blocked;
+	/* Lightweight cumulative counters: distinguish target-scanning costs
+	 * from corpse/object pressure in a high-bot stress run. */
+	long target_scans;
+	long target_scores;
+	long target_los;
 	long last_report_tick;
 } bots_globals;
 
@@ -1739,6 +1745,15 @@ static boolean bots_target_score(struct bots_bot *bot, struct player_datum *play
 	return TRUE;
 }
 
+/* Only count targeting-related line-of-sight tests, not every collision
+ * or vehicle visibility test. Never alter the result or target ordering. */
+static boolean bots_target_line_of_sight(long unit_index,
+	real_point3d const *eye, real_point3d const *point, long target_unit_index)
+{
+	bots_globals.target_los++;
+	return bots_line_of_sight(unit_index, eye, point, target_unit_index);
+}
+
 static long bots_find_target(struct bots_bot *bot, struct player_datum *player, real_point3d const *eye)
 {
 	struct bots_skill_definition const *skill = &bots_skills[bots_globals.skill];
@@ -1749,19 +1764,27 @@ static long bots_find_target(struct bots_bot *bot, struct player_datum *player, 
 	long candidate_count = 0, index;
 	boolean ordered = TRUE;
 
+	bots_globals.target_scans++;
 	data_iterator_new(&iterator, player_data);
 	while ((other = (struct player_datum *)data_iterator_next(&iterator)) != NULL && ordered)
 	{
 		if (candidate_count >= (long)NUMBEROF(candidates))
 			ordered = FALSE;
-		else if (bots_target_score(bot, player, other, iterator.datum_index, eye, skill, hurt, &candidates[candidate_count]))
+		else
 		{
-			real score = candidates[candidate_count].score;
+			/* An examined player may be rejected before any costly
+			   line-of-sight test; count both accepted and rejected. */
+			bots_globals.target_scores++;
+			if (bots_target_score(bot, player, other, iterator.datum_index,
+				eye, skill, hurt, &candidates[candidate_count]))
+			{
+				real score = candidates[candidate_count].score;
 
-			if (score != score)
-				ordered = FALSE;
-			else if (score < REAL_MAX)
-				candidate_count++;
+				if (score != score)
+					ordered = FALSE;
+				else if (score < REAL_MAX)
+					candidate_count++;
+			}
 		}
 	}
 	if (!ordered)
@@ -1774,9 +1797,10 @@ static long bots_find_target(struct bots_bot *bot, struct player_datum *player, 
 		data_iterator_new(&iterator, player_data);
 		while ((other = (struct player_datum *)data_iterator_next(&iterator)) != NULL)
 		{
+			bots_globals.target_scores++;
 			if (!bots_target_score(bot, player, other, iterator.datum_index, eye, skill, hurt, &candidate) ||
 				candidate.score >= best_score ||
-				!bots_line_of_sight(player->unit_index, eye, &candidate.point, candidate.unit_index))
+				!bots_target_line_of_sight(player->unit_index, eye, &candidate.point, candidate.unit_index))
 			{
 				continue;
 			}
@@ -1795,7 +1819,7 @@ static long bots_find_target(struct bots_bot *bot, struct player_datum *player, 
 			if (candidates[index].score < candidates[least].score)
 				least = index;
 		}
-		if (bots_line_of_sight(player->unit_index, eye, &candidates[least].point, candidates[least].unit_index))
+		if (bots_target_line_of_sight(player->unit_index, eye, &candidates[least].point, candidates[least].unit_index))
 			return candidates[least].player_index;
 		/* (out, the others kept in their order) */
 		candidate_count--;
@@ -3586,6 +3610,33 @@ static void bots_report(void)
 	platform_log("bots: seated enemy checks %ld, in-range/in-view %ld, LOS clear %ld, blocked %ld",
 		bots_globals.vehicle_enemy_checks, bots_globals.vehicle_enemy_candidates,
 		bots_globals.vehicle_los_visible, bots_globals.vehicle_los_blocked);
+	/* One observation per minute, not per bot or per tick. Differentiate a
+	   crowded object pool and piles of corpses from expensive path searches.
+	   These are observational counters only; no physics/corpse deletion. */
+	{
+		struct objects_information information;
+		struct object_iterator iterator;
+		struct object_datum *object;
+		long dead_bipeds = 0;
+
+		objects_information_get(&information);
+		object_iterator_new(&iterator, _object_mask_biped, 0);
+		while ((object = (struct object_datum *)object_iterator_next(&iterator)) != NULL)
+		{
+			if (TEST_FLAG(object->object.damage_flags, _object_dead_bit))
+				dead_bipeds++;
+		}
+		platform_log("bots: perf objects %d active %d dead_bipeds %ld contiguous_pool_pressure %.1f%% target_scans %ld evaluated %ld los %ld",
+			(int)information.object_count, (int)information.active_object_count,
+			dead_bipeds, (double)information.used_memory * 100.0,
+			bots_globals.target_scans, bots_globals.target_scores, bots_globals.target_los);
+		/* Platform log is stderr; this single periodic record also goes
+		   into debug.txt for the Android SAVE DIAGNOSTIC REPORT flow. */
+		error(_error_silent, "bots: perf objects %d active %d dead_bipeds %ld contiguous_pool_pressure %.1f%% target_scans %ld evaluated %ld los %ld",
+			(int)information.object_count, (int)information.active_object_count,
+			dead_bipeds, (double)information.used_memory * 100.0,
+			bots_globals.target_scans, bots_globals.target_scores, bots_globals.target_los);
+	}
 }
 
 void bots_update_actions(struct player_action *actions)

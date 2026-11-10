@@ -25,7 +25,8 @@ final class HaloDiagnostics {
     private static final Pattern RELEVANT = Pattern.compile(
         "(?i)(co-op:|network objects|distributed:|respawn|spectat|"
         + "cache file|game_load\\(\\)|map sharing|network connection|"
-        + "network went down|objects:|failed to load|host has local player)");
+        + "network went down|objects:|bots: perf|bots: tick|"
+        + "failed to load|host has local player)");
     private static final Pattern PRIVATE_LINE = Pattern.compile(
         "(?i)(password|authorization|bearer|secret|token|credential|"
         + "hardware.id|session.key|invitation.key)");
@@ -120,7 +121,7 @@ final class HaloDiagnostics {
 
         report.append("\n## Relevant recent game log lines\n");
         int found = 0;
-        for (String name : new String[] {"debug_previous.txt", "debug.txt"}) {
+        for (String name : new String[] {"debug.old.txt", "debug_previous.txt", "debug.txt"}) {
             File log = safeRegular(root, name);
             if (log == null)
                 log = safeRegular(new File(root, "logs"), name);

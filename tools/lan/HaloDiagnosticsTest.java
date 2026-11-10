@@ -28,6 +28,8 @@ public final class HaloDiagnosticsTest {
             Files.write(custom.resolve("gephyrophobia.map"),new byte[43]);
             Files.writeString(root.resolve("config.toml"),
                 "[network]\npassword=\"SECRET_DONT_EXPORT\"\n");
+            Files.writeString(root.resolve("debug.old.txt"),
+                "bots: perf objects 374 active 300 dead_bipeds 158 contiguous_pool_pressure 48.1%\n");
             Files.writeString(root.resolve("debug_previous.txt"),
                 "co-op: missing object on client at 192.168.1.22\n" +
                 "user password=PASSWORD_DONT_EXPORT co-op: secret\n" +
@@ -44,6 +46,7 @@ public final class HaloDiagnosticsTest {
             check(report.contains("sidewinder.map"),"Missing Xbox map inventory");
             check(report.contains("gephyrophobia.map"),"Missing custom map inventory");
             check(report.contains("co-op: missing object"),"Missing relevant older co-op log");
+            check(report.contains("dead_bipeds 158"),"Periodic corpse-performance record omitted");
             check(report.contains("[IP]"),"IP address not redacted");
             check(report.contains("[email]"),"Email not redacted");
             check(!report.contains("192.168.1.22"),"Private IP leaked");
