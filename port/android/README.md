@@ -118,6 +118,39 @@ actions are attempted only with the existing vehicle AI opt-in.
 This behavior has source-level tests but still needs an actual Warthog
 rollover test in a live offline/LAN match.
 
+### Importing Custom Edition maps on Android
+
+Use **CUSTOM MAPS > IMPORT CUSTOM MAP FILES** in Halo Experiment's launcher.
+The Android file picker allows selecting multiple standalone .map files.
+Long-press a map to select it and select more in the same picker. Choose
+the four multiplayer maps and the bitmaps.map, sounds.map and loc.map shared
+resource files from Downloads/Halo-Custom-Maps.
+
+Halo imports each selected file into its own custom_maps directory, never
+the original Xbox maps folder. Maps require a v609 Custom Edition cache
+header, a matching internal scenario name and valid file/tag boundaries.
+The three shared resource maps require the expected resource type and
+structurally valid resource index bounds. Halo refuses invalid input
+before installation and never silently overwrites a file already present.
+A failure cleans up the temporary copy; any files successfully installed
+earlier in the same selection are retained. Importing needs no root, ADB
+or broad Android storage permission.
+
+After import, use **CUSTOM MULTIPLAYER** in Halo's map chooser. The built-in
+LAN and Internet map-sharing protocol downloads missing maps and resource
+files from the host (and other peers). Both SHARE MAPS and DOWNLOAD MAPS
+default to enabled. Sharing uses port 5153, with a 1,024 KB/s host upload
+limit by default. Android hotspot transfers and individual map runtime
+compatibility still need a physical playtest.
+
+The four maps placed in Downloads on November 10, 2026 are
+urban_warfare_beta.map, municipality.map, the_narrows.map, and
+h2_zanzibar.map. Along with the three resources they total 327,693,612
+bytes and passed the Android Java structural validator. The 2fort map by
+Snark is currently confirmed only for the MCC Steam Workshop, not as a
+Halo Custom Edition version-609 cache; no compatible file has been found
+or installed. A valid future 2fort.map would be accepted by this importer.
+
 ### Repairing Sidewinder and The Silent Cartographer
 
 The launcher has a collapsed **MAP REPAIR** panel for Sidewinder

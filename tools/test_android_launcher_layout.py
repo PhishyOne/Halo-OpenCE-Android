@@ -84,6 +84,22 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         self.assertIn('PICK_SIDEWINDER = 2;', s)
         self.assertIn('PICK_CARTOGRAPHER = 3;', s)
 
+    def test_custom_edition_import_via_document_picker(self):
+        s = self.source
+        self.assertIn('customMapsToggle.setText("CUSTOM MAPS");', s)
+        self.assertIn('customMapImportButton.setText("IMPORT CUSTOM MAP FILES");', s)
+        self.assertIn('picker.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);', s)
+        self.assertIn('startActivityForResult(picker, PICK_CUSTOM_MAPS);', s)
+        self.assertIn('if (requestCode == PICK_CUSTOM_MAPS)', s)
+        self.assertIn('importCustomMaps(data);', s)
+        self.assertIn('CustomMapImporter.install(input, dataRoot, name)', s)
+        self.assertIn('customMapDisplayName(document)', s)
+        self.assertIn('getContentResolver().query(document,', s)
+        self.assertIn('OpenableColumns.DISPLAY_NAME', s)
+        self.assertIn('customMapImportButton.setEnabled(false);', s)
+        self.assertIn('customMapImportButton.setEnabled(true);', s)
+        self.assertIn('runMapRepair("Importing "', s)
+
     def test_disc_import_is_preserved(self):
         s = self.source
         self.assertIn('Intent.ACTION_OPEN_DOCUMENT', s)
