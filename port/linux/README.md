@@ -443,6 +443,17 @@ range_culled and LOS work to distinguish cheap culling from real collision
 tests. This is a candidate for physical stress tests, not a guarantee
 that 127 bots will stay at a stable frame rate.
 
+## Commander Mode feature permissions (opt-in)
+
+The 2142-inspired command system is gated by commander.enabled (default
+false) and independent Satellite Track, UAV, spotting, orders, killstreak,
+orbital and audio-announcement options. Permissions are meaningful only
+in team multiplayer; orbital also depends on killstreaks. The host sends
+a reliable, validated feature mask to each client. Clients cannot grant
+themselves abilities using their own config.toml. This phase implements
+settings and authoritative synchronization only, not a working tactical
+laptop or support powers. Details: docs/commander_mode.md.
+
 ## Pregame bot count buttons
 
 In the host's multiplayer lobby, the bottom button row adds **BOTS -**

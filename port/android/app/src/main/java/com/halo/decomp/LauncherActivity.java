@@ -655,6 +655,65 @@ public class LauncherActivity extends Activity {
             + "CTF and King bots play their objectives; other modes "
             + "are unaffected. Choose the game type inside Halo.", 12));
 
+        // Host-only, opt-in commander support. All saved choices stay
+        // independent from the network and bot preferences. The native
+        // host alone decides which features every client is allowed.
+        SharedPreferences commanderPrefs =
+            getSharedPreferences("commander_controls", MODE_PRIVATE);
+        CommanderConfig.Options commanderChoices = new CommanderConfig.Options();
+        for (String key : CommanderConfig.KEYS)
+            commanderChoices.set(key, commanderPrefs.getBoolean(key,
+                commanderChoices.get(key)));
+        Button commanderToggle = new Button(this);
+        hudButton(commanderToggle, false);
+        content.addView(commanderToggle);
+        LinearLayout commanderPanel = hudPanel();
+        commanderPanel.setVisibility(View.GONE);
+        content.addView(commanderPanel);
+        commanderPanel.addView(hudSection("2142-STYLE COMMANDER MODE"));
+        commanderPanel.addView(lanText("OFF by default. Host-controlled in "
+            + "team multiplayer. Disabling the master switch disables all "
+            + "commander abilities without touching ordinary Halo.", 12));
+        String[] commanderLabels = {
+            "ENABLE COMMANDER MODE",
+            "SATELLITE TRACK (COMMANDER ONLY)",
+            "UAV RECON (SHARE WITH TEAM)",
+            "ENEMY SPOTTING",
+            "ATTACK / DEFEND ORDERS",
+            "KILLSTREAK REWARDS",
+            "ORBITAL BOMBARDMENT",
+            "RADIO ANNOUNCEMENTS"
+        };
+        CheckBox[] commanderChecks = new CheckBox[CommanderConfig.KEYS.length];
+        for (int i = 0; i < CommanderConfig.KEYS.length; i++) {
+            CheckBox check = new CheckBox(this);
+            check.setText(commanderLabels[i]);
+            check.setChecked(commanderChoices.get(CommanderConfig.KEYS[i]));
+            hudCheck(check);
+            commanderPanel.addView(check);
+            commanderChecks[i] = check;
+        }
+        Runnable updateCommanderChecks = () -> {
+            boolean enabled = commanderChecks[0].isChecked();
+            boolean killstreaks = commanderChecks[5].isChecked();
+            commanderToggle.setText("COMMANDER MODE: "
+                + (enabled ? "ON" : "OFF") + " / OPTIONS");
+            for (int i = 1; i < commanderChecks.length; i++)
+                commanderChecks[i].setEnabled(enabled
+                    && (i != 6 || killstreaks));
+        };
+        for (CheckBox check : commanderChecks)
+            check.setOnCheckedChangeListener((button, checked) ->
+                updateCommanderChecks.run());
+        updateCommanderChecks.run();
+        commanderToggle.setOnClickListener(view ->
+            commanderPanel.setVisibility(commanderPanel.getVisibility()
+                == View.VISIBLE ? View.GONE : View.VISIBLE));
+        commanderPanel.addView(lanText(
+            "3 kills: camo + overshield; 5: refresh + recon; "
+            + "10: orbital strike. Only policy controls are available "
+            + "in this build; tactical map and rewards are still in development.", 11));
+
         // Collapsed utility, out of the way of normal Play. Android's picker
         // grants this app read access to a selected .map; this app alone
         // writes its own protected Android/data/<package>/files/maps folder.
@@ -864,9 +923,23 @@ public class LauncherActivity extends Activity {
             launcherPreferences.getString("play_mode", "lan");
         offlineMode.setChecked("offline".equals(savedMode));
         lanMode.setChecked("lan".equals(savedMode));
+        Runnable updateCommanderVisibility = () -> {
+            boolean available = offlineMode.isChecked() ||
+                (lanMode.isChecked() && hostRole.isChecked() &&
+                    lanOnly.isChecked() && !invitePending);
+            commanderToggle.setVisibility(available ? View.VISIBLE : View.GONE);
+            commanderPanel.setVisibility(View.GONE);
+        };
+        roles.setOnCheckedChangeListener((group, id) -> {
+            updateRole.run();
+            updateCommanderVisibility.run();
+        });
+        lanOnly.setOnCheckedChangeListener((button, checked) ->
+            updateCommanderVisibility.run());
         Runnable updateMode = () -> {
             offlinePanel.setVisibility(offlineMode.isChecked() ? View.VISIBLE : View.GONE);
             lanPanel.setVisibility(lanMode.isChecked() ? View.VISIBLE : View.GONE);
+            updateCommanderVisibility.run();
             scroll.scrollTo(0, 0);
         };
         offlineMode.setOnCheckedChangeListener((button, selected) -> {
@@ -925,6 +998,8 @@ public class LauncherActivity extends Activity {
                     OfflineBotConfig.enable(new File(dataRoot, "config.toml"), count,
                         offlineSkills[skill].toLowerCase(java.util.Locale.ROOT),
                         team == 0 ? "even" : "against", crews, objectives);
+                    saveCommanderChoices(new File(dataRoot, "config.toml"),
+                        commanderChecks, commanderPrefs, true);
                 } catch (java.io.IOException error) {
                     feedback.setText("Couldn't configure offline bots: " + error.getMessage());
                     return;
@@ -958,6 +1033,8 @@ public class LauncherActivity extends Activity {
                     LanConfig.save(new File(dataRoot, "config.toml"),
                         local.getText().toString(), peer, lanOnly.isChecked(),
                         count, skill, true, true);
+                    saveCommanderChoices(new File(dataRoot, "config.toml"),
+                        commanderChecks, commanderPrefs, hosting);
                     if (invitePending)
                         publishPendingInvite();
                 } catch (java.io.IOException e) {
@@ -970,8 +1047,9 @@ public class LauncherActivity extends Activity {
                 // offline bots, while preserving network setup and saves.
                 try {
                     OfflineBotConfig.disable(new File(dataRoot, "config.toml"));
+                    CommanderConfig.disable(new File(dataRoot, "config.toml"));
                 } catch (java.io.IOException error) {
-                    feedback.setText("Couldn't disable offline bots: " + error.getMessage());
+                    feedback.setText("Couldn't configure normal Halo: " + error.getMessage());
                     return;
                 }
                 launcherPreferences.edit().putString("play_mode", "standard").apply();
@@ -984,6 +1062,25 @@ public class LauncherActivity extends Activity {
         footer.addView(play, playParams);
         root.addView(footer);
         setContentView(root);
+    }
+
+    private void saveCommanderChoices(File file, CheckBox[] checks,
+            SharedPreferences preferences, boolean hosting)
+            throws java.io.IOException {
+        if (!hosting) {
+            CommanderConfig.disable(file);
+            return;
+        }
+        CommanderConfig.Options selected = new CommanderConfig.Options();
+        SharedPreferences.Editor saved = preferences.edit();
+        for (int i = 0; i < CommanderConfig.KEYS.length; i++) {
+            String key = CommanderConfig.KEYS[i];
+            boolean checked = checks[i].isChecked();
+            selected.set(key, checked);
+            saved.putBoolean(key, checked);
+        }
+        CommanderConfig.save(file, selected);
+        saved.apply();
     }
 
     private interface RepairOperation {

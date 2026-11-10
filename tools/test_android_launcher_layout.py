@@ -141,6 +141,19 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         self.assertIn('HaloDiagnostics.write(dataRoot, output);', s)
         self.assertIn('Review it before sharing.', s)
 
+    def test_host_opt_in_commander_controls(self):
+        s = self.source
+        self.assertIn('commanderToggle.setText("COMMANDER MODE: "', s)
+        self.assertIn('CheckBox[] commanderChecks = new CheckBox[CommanderConfig.KEYS.length];', s)
+        self.assertIn('commanderChecks[0].isChecked()', s)
+        self.assertIn('commanderChecks[5].isChecked()', s)
+        self.assertIn('saveCommanderChoices(new File(dataRoot, "config.toml"),', s)
+        self.assertIn('CommanderConfig.save(file, selected);', s)
+        self.assertIn('CommanderConfig.disable(file);', s)
+        self.assertIn('hostRole.isChecked()', s)
+        self.assertIn('!invitePending', s)
+        self.assertIn('Only policy controls are available', s)
+
     def test_disc_import_is_preserved(self):
         s = self.source
         self.assertIn('Intent.ACTION_OPEN_DOCUMENT', s)

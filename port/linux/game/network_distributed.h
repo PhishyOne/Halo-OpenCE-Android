@@ -156,6 +156,9 @@ enum
 	stream */
 	_distributed_message_map_vote = 94,
 	_distributed_message_map_vote_choice = 95,
+	/* The host's optional Commander Mode capability mask, sent reliably
+	   to clients. No client can use this message to enable a capability. */
+	_distributed_message_commander_settings = 96,
 
 	NUMBER_OF_DISTRIBUTED_MESSAGES
 };

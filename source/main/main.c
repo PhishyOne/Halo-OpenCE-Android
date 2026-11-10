@@ -385,6 +385,7 @@ symbols in this file:
 #include "network_chat.h" /* port: port/linux/game/network_chat.c */
 #include "network_aim_assist.h" /* port: port/linux/game/network_aim_assist.c */
 #include "network_shield_effects.h" /* port: port/linux/game/network_shield_effects.c */
+#include "commander_features.h" /* port: host-authoritative optional Commander Mode */
 #include "map_share.h" /* port: port/linux/game/map_share.c */
 #include "profile_sections.h" /* port: port/linux/include/profile_sections.h */
 #ifdef HALO_PROFILE
@@ -3592,6 +3593,8 @@ static boolean main_loop_iteration(
 			network_aim_assist_update();
 			/* port: the host's shield effects, for every machine (port/linux/game/network_shield_effects.c) */
 			network_shield_effects_update();
+			/* The host's optional Commander Mode policy, sent reliably to clients. */
+			commander_features_update();
 			/* port: map sharing, in the lobby and in game (port/linux/game/map_share.c) */
 			map_share_update();
 			/* port: network games' text chat (port/linux/game/network_chat.c) */
