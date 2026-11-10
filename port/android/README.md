@@ -90,6 +90,17 @@ stay visible at the bottom. No extra confirmation dialog is used.
 The experimental CTF/King gameplay code remains opt-in and not yet
 qualified on devices; changing the launcher does not change that status.
 
+### Isolated experimental APKs
+
+Manual Android-only CI builds (workflow_dispatch with android_only=true)
+use HALO_ANDROID_EXPERIMENT_PACKAGE=true. This creates Halo Experiment
+(applicationId com.halo.decomp.experiment), with its own update-provider
+authority and data directory. The test build keeps the same permanent
+signing keystore and increments the Android version code. A version 4
+experiment installs in place over versions 2 or 3 signed with the same
+certificate, while the original com.halo.decomp app remains untouched.
+Normal builds without this flag continue to use com.halo.decomp.
+
 ### Repairing Sidewinder
 
 The launcher has a collapsed **MAP REPAIR** panel. It works inside the app's

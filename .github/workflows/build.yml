@@ -128,6 +128,7 @@ jobs:
     timeout-minutes: 40
     env:
       HALO_ANDROID_VERSION_CODE: ${{ inputs.android_only && inputs.android_version_code || '' }}
+      HALO_ANDROID_EXPERIMENT_PACKAGE: ${{ inputs.android_only && 'true' || 'false' }}
     steps:
       - name: Install the toolchain
         run: |
@@ -193,6 +194,7 @@ jobs:
         run: |
           python3 tools/test_bot_objective_policy.py -v
           python3 tools/test_android_launcher_layout.py -v
+          python3 tools/test_android_experiment_package.py -v
           mkdir -p "$RUNNER_TEMP/halo-test-classes"
           javac -d "$RUNNER_TEMP/halo-test-classes" \
             port/android/app/src/main/java/com/halo/decomp/LanConfig.java \
