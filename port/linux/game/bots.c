@@ -106,6 +106,7 @@ and each bot's kills and deaths; debug.bot_trace logs each bot's state.
 #include "bots.h"
 #include "bots_combat.h"
 #include "bots_objectives_policy.h"
+#include "bot_target_range_gate.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -401,6 +402,8 @@ static struct
 	long target_scans;
 	long target_scores;
 	long target_los;
+	/* Out-of-range players rejected before sqrt/atan2 on each bot scan. */
+	long target_range_rejections;
 	long last_report_tick;
 } bots_globals;
 
@@ -1708,7 +1711,6 @@ static boolean bots_target_score(struct bots_bot *bot, struct player_datum *play
 	if (TEST_FLAG(object->object.damage_flags, _object_dead_bit))
 		return FALSE;
 	candidate->point = object->object.bounding_sphere_center;
-	distance = bots_distance3d(eye, &candidate->point);
 	reach = skill->sight_distance;
 	/* (active camouflage: seen only close) */
 	if (TEST_FLAG(other_unit->unit.flags, _unit_active_camouflaged_bit))
@@ -1716,6 +1718,17 @@ static boolean bots_target_score(struct bots_bot *bot, struct player_datum *play
 	/* (the one it fights: a little further) */
 	if (player_index == bot->target_player_index)
 		reach *= 1.25f;
+	/* Reject obvious out-of-range players with six cheap comparisons.
+	   The rest still use the original sqrt + angle tests for identical
+	   target selection and aiming near the sight boundary. */
+	if (halo_bot_target_outside_reach_box(
+		candidate->point.x - eye->x, candidate->point.y - eye->y,
+		candidate->point.z - eye->z, reach))
+	{
+		bots_globals.target_range_rejections++;
+		return FALSE;
+	}
+	distance = bots_distance3d(eye, &candidate->point);
 	if (distance > reach)
 		return FALSE;
 	bearing = (real)fabs(bots_angle_difference((real)atan2(candidate->point.y - eye->y, candidate->point.x - eye->x),
@@ -1745,6 +1758,41 @@ static boolean bots_target_score(struct bots_bot *bot, struct player_datum *play
 	return TRUE;
 }
 
+/* The previous target selector repeatedly searched for its minimum and
+   shifted the array after each obstructed candidate: O(n^2) comparisons
+   with 100+ simultaneous Spartans. A min-heap checks the exact same
+   candidates in the same priority order (ties use original player order)
+   using O(n log n) comparisons. NaN/overflow still take the old fallback
+   in bots_find_target, before a heap is constructed. */
+static boolean bots_target_heap_less(
+	struct bots_target_candidate const *candidates, short a, short b)
+{
+	return candidates[a].score < candidates[b].score ||
+		(candidates[a].score == candidates[b].score && a < b);
+}
+
+static void bots_target_heap_sift(
+	struct bots_target_candidate const *candidates,
+	short *heap, short start, short count)
+{
+	short position = start;
+	short held = heap[position];
+
+	while ((long)position * 2 + 1 < count)
+	{
+		short child = (short)(2 * position + 1);
+
+		if (child + 1 < count &&
+			bots_target_heap_less(candidates, heap[child + 1], heap[child]))
+			child++;
+		if (!bots_target_heap_less(candidates, heap[child], held))
+			break;
+		heap[position] = heap[child];
+		position = child;
+	}
+	heap[position] = held;
+}
+
 /* Only count targeting-related line-of-sight tests, not every collision
  * or vehicle visibility test. Never alter the result or target ordering. */
 static boolean bots_target_line_of_sight(long unit_index,
@@ -1752,6 +1800,45 @@ static boolean bots_target_line_of_sight(long unit_index,
 {
 	bots_globals.target_los++;
 	return bots_line_of_sight(unit_index, eye, point, target_unit_index);
+}
+
+/* Heap entries are original candidate ordinals; never move their
+ * points or scores, and preserve the first player when scores tie. Keeping
+ * this as a separate function lets asset-free tests execute the exact
+ * selection logic with a fake line-of-sight result. */
+static long bots_target_ordered_visible(
+	struct bots_target_candidate const *candidates,
+	long count, long shooter_unit_index, real_point3d const *eye)
+{
+	short heap[BOTS_MAXIMUM + MAXIMUM_LOCAL_PLAYERS];
+	short remaining, ordinal;
+	long index;
+
+	if (count < 0 || count > (long)NUMBEROF(heap))
+		return NONE;
+	remaining = (short)count;
+	for (ordinal = 0; ordinal < remaining; ordinal++)
+		heap[ordinal] = ordinal;
+	for (index = remaining / 2; index > 0;)
+	{
+		index--;
+		bots_target_heap_sift(candidates, heap, (short)index, remaining);
+	}
+	while (remaining > 0)
+	{
+		short least = heap[0];
+
+		if (bots_target_line_of_sight(shooter_unit_index, eye,
+			&candidates[least].point, candidates[least].unit_index))
+			return candidates[least].player_index;
+		remaining--;
+		if (remaining > 0)
+		{
+			heap[0] = heap[remaining];
+			bots_target_heap_sift(candidates, heap, 0, remaining);
+		}
+	}
+	return NONE;
 }
 
 static long bots_find_target(struct bots_bot *bot, struct player_datum *player, real_point3d const *eye)
@@ -1809,24 +1896,8 @@ static long bots_find_target(struct bots_bot *bot, struct player_datum *player, 
 		}
 		return best_index;
 	}
-	while (candidate_count > 0)
-	{
-		long least = 0;
-
-		/* (the least score, the first of it in the players' order) */
-		for (index = 1; index < candidate_count; index++)
-		{
-			if (candidates[index].score < candidates[least].score)
-				least = index;
-		}
-		if (bots_target_line_of_sight(player->unit_index, eye, &candidates[least].point, candidates[least].unit_index))
-			return candidates[least].player_index;
-		/* (out, the others kept in their order) */
-		candidate_count--;
-		for (index = least; index < candidate_count; index++)
-			candidates[index] = candidates[index + 1];
-	}
-	return NONE;
+	return bots_target_ordered_visible(candidates, candidate_count,
+		player->unit_index, eye);
 }
 
 /* ---------- moving */
@@ -3626,16 +3697,18 @@ static void bots_report(void)
 			if (TEST_FLAG(object->object.damage_flags, _object_dead_bit))
 				dead_bipeds++;
 		}
-		platform_log("bots: perf objects %d active %d dead_bipeds %ld contiguous_pool_pressure %.1f%% target_scans %ld evaluated %ld los %ld",
+		platform_log("bots: perf objects %d active %d dead_bipeds %ld contiguous_pool_pressure %.1f%% target_scans %ld evaluated %ld range_culled %ld los %ld",
 			(int)information.object_count, (int)information.active_object_count,
 			dead_bipeds, (double)information.used_memory * 100.0,
-			bots_globals.target_scans, bots_globals.target_scores, bots_globals.target_los);
+			bots_globals.target_scans, bots_globals.target_scores,
+			bots_globals.target_range_rejections, bots_globals.target_los);
 		/* Platform log is stderr; this single periodic record also goes
 		   into debug.txt for the Android SAVE DIAGNOSTIC REPORT flow. */
-		error(_error_silent, "bots: perf objects %d active %d dead_bipeds %ld contiguous_pool_pressure %.1f%% target_scans %ld evaluated %ld los %ld",
+		error(_error_silent, "bots: perf objects %d active %d dead_bipeds %ld contiguous_pool_pressure %.1f%% target_scans %ld evaluated %ld range_culled %ld los %ld",
 			(int)information.object_count, (int)information.active_object_count,
 			dead_bipeds, (double)information.used_memory * 100.0,
-			bots_globals.target_scans, bots_globals.target_scores, bots_globals.target_los);
+			bots_globals.target_scans, bots_globals.target_scores,
+			bots_globals.target_range_rejections, bots_globals.target_los);
 	}
 }
 
