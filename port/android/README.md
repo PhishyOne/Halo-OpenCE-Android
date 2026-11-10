@@ -90,6 +90,49 @@ stay visible at the bottom. No extra confirmation dialog is used.
 The experimental CTF/King gameplay code remains opt-in and not yet
 qualified on devices; changing the launcher does not change that status.
 
+### Isolated experimental APKs
+
+Manual Android-only CI builds (workflow_dispatch with android_only=true)
+use HALO_ANDROID_EXPERIMENT_PACKAGE=true. This creates Halo Experiment
+(applicationId com.halo.decomp.experiment), with its own update-provider
+authority and data directory. The test build keeps the same permanent
+signing keystore and increments the Android version code. A version 4
+experiment installs in place over versions 2 or 3 signed with the same
+certificate, while the original com.halo.decomp app remains untouched.
+Normal builds without this flag continue to use com.halo.decomp.
+
+### Repairing Sidewinder
+
+The launcher has a collapsed **MAP REPAIR** panel. It works inside the app's
+own Android storage, so it does not require root, ADB, or access to
+Android/data from Termux.
+
+1. Stop any running Halo game and open **MAP REPAIR**.
+2. Select **SELECT SIDEWINDER.MAP** and choose a standalone Xbox
+   sidewinder.map file from Android's document picker. It does **not**
+   accept a whole XISO/ISO/ZIP, nor a map from another scenario.
+3. Halo copies the selected file to its own temporary file, checks the Xbox
+   cache header (version, size, name and tag range), verifies the complete
+   zlib stream and output length when compressed, and verifies the internal
+   tag header signature and count. A damaged map is rejected *without*
+   modifying the installed map.
+4. After successful verification, the installed map is renamed to
+   maps/sidewinder.map.previous (if present) and the verified file becomes
+   maps/sidewinder.map. Both renames occur in the same map directory.
+5. **RESTORE PREVIOUS SIDEWINDER** reverses the replacement with explicit
+   confirmation, saving the newer file as sidewinder.map.replaced. The
+   older file might itself be damaged. Existing backups are never silently
+   overwritten; attempting a second repair while .previous exists is
+   refused.
+
+The importer runs off the UI thread and temporarily disables **PLAY**;
+it also refuses to start if Halo's game process is running or its state
+cannot be confirmed. It cannot guarantee that assets from a different Xbox
+disc revision have compatible shared bitmap/sound references. Test the
+repaired map before trusting a multiplayer match. The repair modifies only
+the app version whose launcher you opened: Halo Experiment does not change
+the original Halo app's protected maps folder.
+
 ## Game data
 
 The game needs the `maps/` folder from an Xbox disc image (`.xiso` or

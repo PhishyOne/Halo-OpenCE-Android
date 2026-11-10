@@ -2,6 +2,7 @@ package com.halo.decomp;
 
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -40,6 +41,7 @@ import java.util.Enumeration;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.channels.FileChannel;
 
@@ -55,6 +57,7 @@ import java.nio.channels.FileChannel;
  */
 public class LauncherActivity extends Activity {
     private static final int PICK_IMAGE = 1;
+    private static final int PICK_SIDEWINDER = 2;
     // Halo-style HUD colours. Native Android widgets remain accessible,
     // including the system file picker and LAN diagnostics.
     private static final int HUD_TEXT = Color.rgb(226, 237, 231);
@@ -68,6 +71,11 @@ public class LauncherActivity extends Activity {
     private TextView status;
     private ProgressBar progress;
     private Button pick;
+    private TextView repairStatus;
+    private Button repairRestoreButton;
+    private Button repairChooseButton;
+    private Button playButton;
+    private volatile boolean repairBusy;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     @Override
@@ -636,6 +644,56 @@ public class LauncherActivity extends Activity {
         hudCheck(vehicleSeatsOffline);
         offlinePanel.addView(vehicleSeatsOffline);
 
+        // Collapsed utility, out of the way of normal Play. Android's picker
+        // grants this app read access to a selected .map; this app alone
+        // writes its own protected Android/data/<package>/files/maps folder.
+        Button mapsToggle = new Button(this);
+        mapsToggle.setText("MAP REPAIR");
+        hudButton(mapsToggle, false);
+        content.addView(mapsToggle);
+        LinearLayout repairPanel = hudPanel();
+        repairPanel.setVisibility(View.GONE);
+        content.addView(repairPanel);
+        mapsToggle.setOnClickListener(view -> repairPanel.setVisibility(
+            repairPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+        repairPanel.addView(hudSection("SIDEWINDER"));
+        repairPanel.addView(lanText("Choose a standalone Sidewinder .map file. "
+            + "Halo verifies its contents before replacing the old map.", 12));
+        repairChooseButton = new Button(this);
+        repairChooseButton.setText("SELECT SIDEWINDER.MAP");
+        hudButton(repairChooseButton, false);
+        repairChooseButton.setOnClickListener(view -> {
+            if (repairBusy)
+                return;
+            if (gameProcessStatus() != 0) {
+                feedback.setText("Force-stop the running Halo game before repairing maps.");
+                return;
+            }
+            Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            picker.addCategory(Intent.CATEGORY_OPENABLE);
+            picker.setType("*/*");
+            startActivityForResult(picker, PICK_SIDEWINDER);
+        });
+        repairPanel.addView(repairChooseButton);
+
+        repairRestoreButton = new Button(this);
+        repairRestoreButton.setText("RESTORE PREVIOUS SIDEWINDER");
+        hudButton(repairRestoreButton, false);
+        repairRestoreButton.setVisibility(
+            SidewinderRepair.hasPrevious(dataRoot) ? View.VISIBLE : View.GONE);
+        repairRestoreButton.setOnClickListener(view ->
+            new AlertDialog.Builder(this)
+                .setTitle("Restore previous Sidewinder?")
+                .setMessage("This restores your old Sidewinder map, which may still be "
+                    + "damaged. The current replacement is preserved separately.")
+                .setNegativeButton("CANCEL", null)
+                .setPositiveButton("RESTORE", (dialog, choice) -> restoreSidewinder())
+                .show());
+        repairPanel.addView(repairRestoreButton);
+        repairStatus = lanText("", 12);
+        repairStatus.setTextColor(HUD_WARNING);
+        repairPanel.addView(repairStatus);
+
         // Fixed footer stays on screen even when the host options are long.
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.VERTICAL);
@@ -697,9 +755,14 @@ public class LauncherActivity extends Activity {
         footer.addView(appSettings);
 
         Button play = new Button(this);
+        playButton = play;
         play.setText("PLAY");
         hudButton(play, true);
         play.setOnClickListener(view -> {
+            if (repairBusy) {
+                feedback.setText("Finish the Sidewinder map repair before starting Halo.");
+                return;
+            }
             if (invitePending && !lanMode.isChecked()) {
                 feedback.setText("Discard the pending invitation before playing offline.");
                 return;
@@ -760,6 +823,78 @@ public class LauncherActivity extends Activity {
         footer.addView(play, playParams);
         root.addView(footer);
         setContentView(root);
+    }
+
+    private interface RepairOperation {
+        String apply() throws Exception;
+    }
+
+    private void runMapRepair(String initialStatus, RepairOperation operation) {
+        if (repairBusy)
+            return;
+        if (gameProcessStatus() != 0) {
+            if (repairStatus != null)
+                repairStatus.setText("Close or force-stop Halo before repairing maps.");
+            return;
+        }
+        repairBusy = true;
+        if (repairStatus != null)
+            repairStatus.setText(initialStatus);
+        if (playButton != null)
+            playButton.setEnabled(false);
+        if (repairChooseButton != null)
+            repairChooseButton.setEnabled(false);
+        if (repairRestoreButton != null)
+            repairRestoreButton.setEnabled(false);
+
+        new Thread(() -> {
+            String result;
+            try {
+                if (gameProcessStatus() != 0)
+                    throw new java.io.IOException("Halo started while the repair was being prepared.");
+                result = operation.apply();
+            } catch (Exception error) {
+                result = "Map repair failed: " + (error.getMessage() == null
+                    ? error.getClass().getSimpleName() : error.getMessage());
+            }
+            final String message = result;
+            handler.post(() -> {
+                repairBusy = false;
+                if (repairStatus != null)
+                    repairStatus.setText(message);
+                if (playButton != null)
+                    playButton.setEnabled(true);
+                if (repairChooseButton != null)
+                    repairChooseButton.setEnabled(true);
+                if (repairRestoreButton != null) {
+                    repairRestoreButton.setEnabled(true);
+                    repairRestoreButton.setVisibility(
+                        SidewinderRepair.hasPrevious(dataRoot) ? View.VISIBLE : View.GONE);
+                }
+            });
+        }, "Halo-Sidewinder-Repair").start();
+    }
+
+    private void importSidewinder(Uri document) {
+        runMapRepair("Checking Sidewinder's cache and compressed map data...", () -> {
+            try (InputStream input = getContentResolver().openInputStream(document)) {
+                if (input == null)
+                    throw new java.io.IOException("Android could not open the selected file.");
+                SidewinderRepair.Result repaired = SidewinderRepair.install(input, dataRoot);
+                return "Sidewinder installed and verified (SHA-256 "
+                    + repaired.sha256.substring(0, 12) + "...). "
+                    + (repaired.backedUpOriginal
+                        ? "The previous map is preserved for restoration."
+                        : "No previous map was present.");
+            }
+        });
+    }
+
+    private void restoreSidewinder() {
+        runMapRepair("Restoring your previous Sidewinder map...", () -> {
+            SidewinderRepair.restorePrevious(dataRoot);
+            return "Previous Sidewinder restored. The newer map is preserved separately.";
+        });
     }
 
     private void buildInterface() {
@@ -836,6 +971,11 @@ public class LauncherActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == PICK_SIDEWINDER) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null)
+                importSidewinder(data.getData());
+            return;
+        }
         if (requestCode != PICK_IMAGE || resultCode != RESULT_OK || data == null || data.getData() == null)
             return;
         Uri image = data.getData();

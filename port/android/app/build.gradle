@@ -16,6 +16,13 @@ def buildNumber = buildNumberText.isInteger() ? buildNumberText.toInteger() : 0
 // main signed with it can install over the one before; without it, the
 // debug key of the computer that builds
 def signingKey = System.getenv("HALO_ANDROID_KEYSTORE")
+// Manually scoped test builds are a separate, updatable app. The normal
+// package remains unchanged when this environment flag is absent.
+def experimentalPackage = System.getenv("HALO_ANDROID_EXPERIMENT_PACKAGE") == "true"
+if (experimentalPackage && (!signingKey ||
+    !System.getenv("HALO_ANDROID_KEYSTORE_PASSWORD"))) {
+    throw new GradleException("Halo Experiment builds require permanent signing credentials")
+}
 
 // Test APKs are not numbered by CI (HALO_BUILD_NUMBER=0), but Android
 // requires a higher versionCode to update an installed app. Give each
@@ -40,7 +47,12 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId "com.halo.decomp"
+        applicationId experimentalPackage ? "com.halo.decomp.experiment" : "com.halo.decomp"
+        manifestPlaceholders = [
+            haloAppLabel: experimentalPackage ? "Halo Experiment" : "Halo",
+            haloUpdateAuthority: experimentalPackage ?
+                "com.halo.decomp.experiment.update" : "com.halo.decomp.update"
+        ]
         minSdk 28
         targetSdk 35
         versionCode androidVersionCode
