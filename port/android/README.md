@@ -79,11 +79,16 @@ Select **OFFLINE BOTS** or **LAN / SYSTEM LINK** using the two checkboxes
 above Play. They are mutually exclusive; both unchecked starts normal Halo
 without modifying the saved network configuration.
 
-The scrollable panel shows only the selected mode's settings. Offline bot
-count, skill, team assignment and vehicle crews use the existing offline
-launch arguments and saved preferences. LAN host/join IPs, host bots, vehicle
-crews and CTF/King objectives retain their existing configuration validation
-and atomic writes. Internet invitations must still be resolved explicitly.
+The scrollable panel shows only the selected mode's settings. Offline bot count, skill, team assignment, vehicle crews and the optional
+**CTF / KING BOT OBJECTIVES** control are saved as native settings under
+[bots] in config.toml before Halo starts. This fixes Android launchers relying
+only on unhandled --offline-bots arguments. In Halo's game-type selector,
+choose Capture the Flag or King of the Hill to use their real scoring rules;
+the launcher opt-in enables flag/hill objectives for computer players. Normal
+Halo and LAN launches disable the offline count and reset the offline team
+policy, while LAN mode applies its own saved settings. Existing network
+addresses and user display/game settings are preserved.
+Internet invitations must still be resolved explicitly.
 On a small landscape screen the options scroll, but mode selection and Play
 stay visible at the bottom. No extra confirmation dialog is used.
 
@@ -150,6 +155,30 @@ bytes and passed the Android Java structural validator. The 2fort map by
 Snark is currently confirmed only for the MCC Steam Workshop, not as a
 Halo Custom Edition version-609 cache; no compatible file has been found
 or installed. A valid future 2fort.map would be accepted by this importer.
+
+#### If Android hides the .map files in its picker
+
+Some Android file providers filter unknown filename extensions despite
+the maps existing in Downloads. The launcher offers two alternate
+**CUSTOM MAPS** import routes alongside multi-file selection:
+
+- **IMPORT A MAP FOLDER** uses Android's directory-access picker. Select
+  the Halo-Custom-Maps *subfolder* inside Downloads; Android 11+ does not
+  permit granting access to the Downloads root itself. Halo enumerates
+  map entries through DocumentsContract, validates each file, and installs
+  it in the app's custom_maps folder. It does not request storage permission
+  for any other folder.
+- **IMPORT A MAP PACK ZIP** opens one ZIP archive containing up to 32
+  map and resource files; the ZIP may optionally have one top-level folder.
+  The archive is streamed through the same validator, with strict limits
+  on filenames, path depth, per-file and total decompressed bytes, and no
+  overwrite of existing files. The unpacked data goes only into Halo's
+  custom_maps directory. Do not remove the original Xbox maps.
+
+A failed import never overwrites an existing map. If a multi-file import
+partially succeeds, files already imported remain present; subsequent imports
+of the same names are refused, not silently replaced. Restart the game
+after successful import so CUSTOM MULTIPLAYER re-reads its map list.
 
 ### Repairing Sidewinder and The Silent Cartographer
 
