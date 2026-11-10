@@ -65,6 +65,7 @@ same datum index (identifier and all), so that any message can name one:
 #include "cutscene/cinematics.h"
 #include "network_coop.h"
 #include "network_distributed.h"
+#include "coop_unit_resync_policy.h"
 #include "profile_sections.h"
 
 #include <math.h>
@@ -521,6 +522,10 @@ static long objects_client_ready_interval;
 it all), and how long it waits after the next failure */
 static long objects_client_failed_time;
 static long objects_client_retry_ticks;
+/* ... a local co-op player's living unit reported by the host but missing
+ * or unusable on this client. Trigger bounded reliable snapshot retries
+ * instead of making the host kill its perfectly living teammate. */
+static struct coop_unit_resync_watch objects_client_coop_unit_watch;
 /* ... past loading: its own objects from the upper half */
 static boolean objects_client_local_allocation;
 static short objects_client_local_identifier;
@@ -663,6 +668,45 @@ boolean network_objects_client_has(
 
 	return object_index != NONE && absolute_index >= 0 && absolute_index < MAXIMUM_TRACKED_OBJECTS &&
 		objects_client_has[absolute_index] == object_index && object_try_and_get(object_index);
+}
+
+/* A client can receive the host's live unit state without a usable copy
+of that object (e.g. its reliable create message failed after joining).
+That leaves the local co-op player spectating while the host still sees
+their Spartan alive. Do not manufacture a unit, count a death, or teleport:
+ask the host to resend its authoritative object list. The normal creation
+and player-binding paths will reconcile the new copy.
+
+Only an own-player co-op state calls this, and the policy waits two seconds
+and allows a single request per 12 seconds (longer than the host's 10-second
+full-snapshot limit). All other modes are unaffected. */
+void network_objects_client_watch_coop_unit(
+	long unit_index,
+	boolean available)
+{
+	long now;
+
+	if (!network_game_distributed_client())
+		return;
+	now = game_time_get();
+	if (!objects_client_synchronized)
+	{
+		/* The initial reliable object snapshot already covers this unit. */
+		return;
+	}
+	if (!coop_unit_resync_should_request(&objects_client_coop_unit_watch,
+		unit_index, now, !available && unit_index != NONE,
+		2 * TICKS_PER_SECOND, 12 * TICKS_PER_SECOND))
+	{
+		return;
+	}
+	error(_error_silent, "co-op: host has local player unit %08lx but client cannot use it; resending object list",
+		(unsigned long)unit_index);
+	objects_client_synchronized = FALSE;
+	objects_client_ask_again = TRUE;
+	objects_client_ready_time = NONE;
+	objects_client_ready_interval = CLIENT_READY_INTERVAL_TICKS;
+	objects_client_failed_time = NONE;
 }
 
 word network_objects_entry_size(
@@ -3646,6 +3690,7 @@ void network_objects_new_game(
 	objects_client_failed_time = NONE;
 	objects_client_retry_ticks = CLIENT_RETRY_TICKS;
 	objects_client_ask_again = FALSE;
+	csmemset(&objects_client_coop_unit_watch, 0, sizeof(objects_client_coop_unit_watch));
 	objects_client_local_allocation = FALSE;
 	objects_client_creating_index = NONE;
 	objects_client_creating = FALSE;

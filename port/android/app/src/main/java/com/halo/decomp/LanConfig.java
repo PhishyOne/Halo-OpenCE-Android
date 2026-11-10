@@ -29,8 +29,8 @@ final class LanConfig {
         boolean lanOnly = true;
         int systemLinkBotCount = 0;
         String botSkill = "normal";
-        boolean vehicleSeats = false;
-        boolean objectiveModes = false;
+        boolean vehicleSeats = true;
+        boolean objectiveModes = true;
     }
 
     private LanConfig() { }

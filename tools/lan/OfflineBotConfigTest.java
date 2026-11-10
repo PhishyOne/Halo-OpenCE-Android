@@ -61,8 +61,10 @@ public final class OfflineBotConfigTest {
             OfflineBotConfig.disable(config.toFile());
             String disabled = read(config);
             check(disabled.contains("count = 0\n"), "normal Halo did not disable bots");
-            check(disabled.contains("objective_modes = false"),
-                "disabling offline mode retained objective bot behavior");
+            check(disabled.contains("objective_modes = true"),
+                "disabling offline bots unnecessarily disabled CTF/King AI");
+            check(disabled.contains("vehicle_seats = true"),
+                "disabling offline bots unnecessarily disabled vehicle crews");
             check(disabled.contains("teams = \"even\""),
                 "offline team preference leaked into standard or LAN mode");
 
@@ -112,8 +114,8 @@ public final class OfflineBotConfigTest {
             check(lan.contains("count = 0\n"), "LAN launch left offline bots enabled");
             check(lan.contains("system_link_count = 4"),
                 "LAN count changed by offline-disable");
-            check(lan.contains("objective_modes = false"),
-                "LAN objective setting should be explicitly restored by LAN setup");
+            check(lan.contains("objective_modes = true"),
+                "LAN session lost mode-gated objective bot policy");
             check(lan.contains("address = \"10.10.1.2\""),
                 "LAN IP rewritten by offline-disable");
 

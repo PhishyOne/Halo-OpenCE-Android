@@ -194,6 +194,8 @@ jobs:
         run: |
           python3 tools/test_bot_objective_policy.py -v
           python3 tools/test_bot_vehicle_flip.py
+          python3 tools/test_bot_automatic_modes.py -v
+          python3 tools/test_coop_unit_resync.py -v
           python3 tools/test_android_launcher_layout.py -v
           python3 tools/test_android_experiment_package.py -v
           mkdir -p "$RUNNER_TEMP/halo-test-classes"
@@ -209,6 +211,8 @@ jobs:
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.CustomMapPackTest
           javac -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/OfflineBotConfig.java tools/lan/OfflineBotConfigTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.OfflineBotConfigTest
+          javac -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/HaloDiagnostics.java tools/lan/HaloDiagnosticsTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.HaloDiagnosticsTest
 
       - name: Release
         env:

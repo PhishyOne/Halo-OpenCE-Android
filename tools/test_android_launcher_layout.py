@@ -45,8 +45,9 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         s = self.source
         self.assertIn('LanConfig.peerForRole(hostRole.isChecked()', s)
         self.assertIn('LanConfig.save(new File(dataRoot, "config.toml")', s)
-        self.assertIn('hosting && objectiveBotsLan.isChecked()', s)
-        self.assertIn('hosting && vehicleSeatsLan.isChecked()', s)
+        self.assertIn('count, skill, true, true);', s)
+        self.assertNotIn('objectiveBotsLan', s)
+        self.assertNotIn('vehicleSeatsLan', s)
         self.assertIn('if (!canStartGame(feedback, appSettings))', s)
         self.assertIn('if (invitePending)', s)
 
@@ -119,14 +120,26 @@ class HaloLauncherLayoutTests(unittest.TestCase):
 
     def test_offline_ctf_king_uses_native_configuration(self):
         s = self.source
-        self.assertIn('objectiveBotsOffline.setText("CTF / KING BOT OBJECTIVES");', s)
-        self.assertIn('offlinePreferences.getBoolean("objective_modes", false)', s)
+        self.assertIn('boolean crews = true;', s)
+        self.assertIn('boolean objectives = true;', s)
+        self.assertNotIn('objectiveBotsOffline', s)
+        self.assertNotIn('vehicleSeatsOffline', s)
         self.assertIn('OfflineBotConfig.enable(new File(dataRoot, "config.toml"), count,', s)
         self.assertIn('team == 0 ? "even" : "against", crews, objectives)', s)
         self.assertIn('.putBoolean("objective_modes", objectives).apply()', s)
         self.assertIn('OfflineBotConfig.disable(new File(dataRoot, "config.toml"))', s)
         self.assertIn('LanConfig.save(new File(dataRoot, "config.toml")', s)
         self.assertIn('startGame(game);', s)
+
+    def test_diagnostic_report_is_user_initiated_and_local(self):
+        s = self.source
+        self.assertIn('diagnostics.setText("SAVE DIAGNOSTIC REPORT");', s)
+        self.assertIn('Intent.ACTION_CREATE_DOCUMENT', s)
+        self.assertIn('picker.putExtra(Intent.EXTRA_TITLE, "Halo-diagnostics.txt");', s)
+        self.assertIn('startActivityForResult(picker, SAVE_DIAGNOSTICS);', s)
+        self.assertIn('if (requestCode == SAVE_DIAGNOSTICS)', s)
+        self.assertIn('HaloDiagnostics.write(dataRoot, output);', s)
+        self.assertIn('Review it before sharing.', s)
 
     def test_disc_import_is_preserved(self):
         s = self.source

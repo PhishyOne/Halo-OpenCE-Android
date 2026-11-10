@@ -79,15 +79,16 @@ Select **OFFLINE BOTS** or **LAN / SYSTEM LINK** using the two checkboxes
 above Play. They are mutually exclusive; both unchecked starts normal Halo
 without modifying the saved network configuration.
 
-The scrollable panel shows only the selected mode's settings. Offline bot count, skill, team assignment, vehicle crews and the optional
-**CTF / KING BOT OBJECTIVES** control are saved as native settings under
-[bots] in config.toml before Halo starts. This fixes Android launchers relying
-only on unhandled --offline-bots arguments. In Halo's game-type selector,
-choose Capture the Flag or King of the Hill to use their real scoring rules;
-the launcher opt-in enables flag/hill objectives for computer players. Normal
-Halo and LAN launches disable the offline count and reset the offline team
-policy, while LAN mode applies its own saved settings. Existing network
-addresses and user display/game settings are preserved.
+The scrollable panel shows only the selected mode's settings. Offline bot count, skill and team assignment are saved as native settings
+under [bots] in config.toml before Halo starts. Vehicle crews and CTF/King
+bot objective behaviors are enabled automatically, without checkboxes:
+the objective AI is already gated by the CTF or King game engine, so Slayer
+and other game types are unaffected. Use Halo's game-type selector to choose
+CTF or King, with their existing scoring rules. Normal Halo and LAN launches
+disable offline-only bot count and restore balanced teams, while LAN mode
+applies its own host settings. Existing network addresses and user game
+settings remain unchanged. This also avoids relying on unhandled Android
+--offline-bots arguments.
 Internet invitations must still be resolved explicitly.
 On a small landscape screen the options scroll, but mode selection and Play
 stay visible at the bottom. No extra confirmation dialog is used.
@@ -108,6 +109,28 @@ installed maps, saved games and preferences. The original
 com.halo.decomp app remains untouched if present. Normal builds without
 the flag continue to use com.halo.decomp. Do not change the applicationId
 to achieve a display-name change: Android would treat it as a new app.
+
+### Co-op spectator repair and session diagnostics
+
+If a client receives a live player-unit state from its co-op host but
+does not have a usable local copy of that unit, it can become stuck
+spectating while the host still sees its Spartan. The client now watches
+that condition only for its own co-op player, waits two seconds for the
+usual reliable creation message, and then requests the host's full object
+snapshot. Further requests are rate-limited to one per twelve seconds
+(the host allows a full snapshot every ten seconds). No force-spawn,
+suicide, teleport or change to kill/death scoring is involved. This is
+a bounded recovery for the missing-object class of mismatch, not proof
+that every spectator problem is solved. Test it with two real co-op
+phones. The debug log records a short 'co-op: host has local player unit'
+line when a recovery begins.
+
+The launcher also offers **SAVE DIAGNOSTIC REPORT**. Android asks where
+to save Halo-diagnostics.txt; the app writes a short list of installed
+map filenames and selected recent co-op/network error lines, with
+obvious IPs and emails redacted. It does not include config.toml,
+credentials or map contents, and never sends anything automatically.
+Review any report before sharing it.
 
 ### Warthog recovery for computer players
 

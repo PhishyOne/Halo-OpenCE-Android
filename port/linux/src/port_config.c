@@ -520,14 +520,14 @@ static const struct config_setting config_settings[] =
 		"How well the bots play: \"recruit\", \"easy\", \"normal\", \"heroic\",\n"
 		"\"veteran\" or \"legendary\" (how soon they react, how well they aim,\n"
 		"how far they see, and how they fight: blows, grenades, strafes, retreats)." },
-	{ "bots.objective_modes", _config_boolean, "false", "HALO_BOT_OBJECTIVES", _environment_value, _platform_all,
+	{ "bots.objective_modes", _config_boolean, "true", "HALO_BOT_OBJECTIVES", _environment_value, _platform_all,
 		"Experimental host-only bots in Capture the Flag and King of the Hill.\n"
-		"Off by default; Slayer bots are unchanged. Bots use the ordinary\n"
+		"Always on for bot games; Slayer remains unchanged. Bots use ordinary\n"
 		"game objective and team-scoring rules.\n" },
-	{ "bots.vehicle_seats", _config_boolean, "false", "HALO_BOT_VEHICLE_SEATS", _environment_value, _platform_all,
+	{ "bots.vehicle_seats", _config_boolean, "true", "HALO_BOT_VEHICLE_SEATS", _environment_value, _platform_all,
 		"Experimental multiplayer bots can walk to and board open vehicle\n"
 		"gunner seats, and passenger seats when a driver is present. Bots do\n"
-		"not drive. Off by default for predictable infantry performance." },
+		"not drive. Enabled by default; infantry behavior remains bounded." },
 	{ "bots.teams", _config_string, "\"even\"", "HALO_BOT_TEAMS", _environment_value, _platform_all,
 		"In team games: \"even\" puts the bots on both teams, evening them with\n"
 		"the players; \"against\" puts them all on the team the players are not on." },
