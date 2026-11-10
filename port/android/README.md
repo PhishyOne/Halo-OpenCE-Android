@@ -132,6 +132,38 @@ obvious IPs and emails redacted. It does not include config.toml,
 credentials or map contents, and never sends anything automatically.
 Review any report before sharing it.
 
+### Large offline bot-match corpse and object performance
+
+Large local bot matches (48 or more simulated/real players) use a
+bounded cleanup policy. The original engine scaled its garbage allowance
+linearly with all players, including bots: 128 players allowed about eight
+times the active garbage of a 16-player match. Worse, the collector
+mistook bots for potential spectators of dead bodies even though bots
+have no rendered cameras, so it could preserve corpses that the human
+player could not see.
+
+In these **large offline matches only**, active garbage thresholds are
+capped at the equivalent of 32 players, and synthetic bot viewpoints
+are ignored when testing whether a garbage object can be removed. The
+real player's visibility still protects bodies and normal engine cleanup
+still chooses eligible objects. When a sweep cannot collect enough
+visible garbage, the next active-GC attempt is delayed by one second
+instead of repeatedly scanning and compacting every tick. Memory-critical
+and object-pool-critical cleanup still runs immediately.
+
+Campaign, network co-op, real LAN games, and local matches with fewer
+than 48 players retain their existing policies. The change does not
+delete live players, force cleanup of player-visible corpses, or change
+physics, kills, or scoring.
+
+Each bot match logs a bots: perf line with total objects, active objects,
+dead_bipeds and contiguous_pool_pressure once per minute to debug.txt
+and the platform log. The Android **SAVE DIAGNOSTIC REPORT** action includes
+these lines and rolled debug logs. To compare high-bot performance, test
+the same map with 32, 64 and 127 bots, note performance at one, five and
+ten minutes and compare dead_bipeds and object counts. Results on the
+user's phone, including whether 127 bots stay smooth, remain unverified.
+
 ### Warthog recovery for computer players
 
 With the existing **VEHICLE CREWS** setting enabled, bots now recognise

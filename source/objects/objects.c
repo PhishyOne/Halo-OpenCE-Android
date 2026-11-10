@@ -9,6 +9,8 @@ OBJECTS.C
 #include "objects.h"
 #include "coop_pickups.h" /* port: the host's extra campaign pickups */
 #include "coop_vehicles.h" /* port: the host's extra campaign vehicles */
+#include "bots.h" /* large local bot games: the virtual machines have no view */
+#include "bot_garbage_policy.h"
 
 #include "damage.h"
 #include "light_definitions.h"
@@ -33,6 +35,7 @@ OBJECTS.C
 #include "game/game.h"
 #include "game/game_engine.h"
 #include "game/players.h"
+#include "networking/network_game_globals.h"
 #include "items/weapons.h"
 #include "main/console.h"
 #include "interface/terminal.h"
@@ -1829,6 +1832,19 @@ void objects_disconnect_from_structure_bsp(
 	return;
 }
 
+/* The bots in a large offline match are real game players but have no
+ * rendered camera. Do not count their eyes when deciding which garbage
+ * bodies the *human* could see, and do not defer collection until the
+ * proportional 128-player garbage limit. Campaign/co-op/LAN are unchanged. */
+static boolean objects_large_local_bot_game(
+	void)
+{
+	long count = player_data ? player_data->actual_count : 0;
+
+	return halo_stress_bot_garbage_mode(game_engine_running(),
+		network_game_is_splitscreen_local(), count);
+}
+
 boolean object_visible_to_any_player(
 	long object_index)
 {
@@ -1855,6 +1871,7 @@ boolean object_visible_to_any_player(
 		if (cluster_index!=NONE)
 		{
 			long player_index;
+			boolean ignore_bot_views = objects_large_local_bot_game();
 			const real radius_squared = object->object.bounding_sphere_radius*object->object.bounding_sphere_radius;
 			
 			for (player_index = data_next_index(player_data, NONE);
@@ -1862,7 +1879,13 @@ boolean object_visible_to_any_player(
 				player_index = data_next_index(player_data, player_index))
 			{
 				struct player_datum *player = player_get(player_index);
-				
+
+				/* Offline bots have no rendered view. Never let a virtual
+				   machine's aim preserve a corpse the human cannot see. */
+				if (player->local_player_index == NONE &&
+					halo_bot_is_nonviewing_garbage_player(ignore_bot_views,
+						player->network_player_data.machine_index, BOTS_FIRST_MACHINE))
+					continue;
 				if (player->unit_index!=NONE)
 				{
 					real player_distance_squared;
@@ -4241,17 +4264,27 @@ static long active_garbage_limit(
 {
 	long player_count = player_data ? player_data->actual_count : 0;
 
-	return limit_per_16_players * MAX(16, player_count) / 16;
+	return limit_per_16_players *
+		halo_active_garbage_scale_players(player_count, objects_large_local_bot_game()) / 16;
+}
+
+/* A large bot match can retain many *human-visible* bodies, and no
+ * collector should scan the whole list and compact memory every tick
+ * when none can be removed. Co-op already uses the same retry throttle. */
+static boolean objects_garbage_retry_mode(
+	void)
+{
+	return network_coop_active() || objects_large_local_bot_game();
 }
 
 /* port: whether a collection of active garbage may be tried
-(GARBAGE_ACTIVE_RETRY_TICKS: in network co-op) */
+(GARBAGE_ACTIVE_RETRY_TICKS: in network co-op or large offline bot games) */
 static boolean objects_garbage_active_due(
 	void)
 {
 	long now = game_time_get();
 
-	if (!network_coop_active())
+	if (!objects_garbage_retry_mode())
 		return TRUE;
 	if (garbage_active_retry_time != NONE && garbage_active_retry_time - now > GARBAGE_ACTIVE_RETRY_TICKS)
 		garbage_active_retry_time = NONE;
@@ -4403,11 +4436,12 @@ void objects_garbage_collection(
 
 			}
 
-		/* port: in network co-op, active garbage left above its target is
-		tried again later, and nothing collected moves nothing to compact */
-		if (garbage_collect_mode == _garbage_collect_active_objects)
+		/* Co-op and large offline bot games delay an ineffective active
+		   collection, and avoid compacting after removing nothing. */
+		if (garbage_collect_mode == _garbage_collect_active_objects &&
+			objects_garbage_retry_mode())
 			garbage_active_retry_time = should_collect ? NONE : game_time_get() + GARBAGE_ACTIVE_RETRY_TICKS;
-		if (!network_coop_active() || collected_count > 0 ||
+		if (!objects_garbage_retry_mode() || collected_count > 0 ||
 			garbage_collect_mode != _garbage_collect_active_objects)
 			memory_pool_compact(object_memory_pool);
 		
