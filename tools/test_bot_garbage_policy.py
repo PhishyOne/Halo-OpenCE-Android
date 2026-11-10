@@ -94,7 +94,7 @@ class LargeBotGarbagePolicyTest(unittest.TestCase):
         self.assertIn("_object_mask_biped", report)
         self.assertIn("bots: perf objects", report)
         self.assertIn("error(_error_silent, \"bots: perf", report)
-        self.assertIn("target_scans %ld evaluated %ld los %ld", report)
+        self.assertIn("target_scans %ld evaluated %ld range_culled %ld los %ld", report)
         self.assertIn("bots: perf", diag)
         self.assertIn('"debug.old.txt"', diag)
         scan = bots.split("static long bots_find_target(", 1)[1].split(

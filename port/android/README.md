@@ -157,9 +157,17 @@ delete live players, force cleanup of player-visible corpses, or change
 physics, kills, or scoring.
 
 Each bot match logs a bots: perf line with total objects, active objects,
-dead_bipeds and contiguous_pool_pressure once per minute to debug.txt
-and the platform log. The Android **SAVE DIAGNOSTIC REPORT** action includes
-these lines and rolled debug logs. To compare high-bot performance, test
+dead_bipeds, contiguous_pool_pressure, target_scans, evaluated,
+range_culled, and los once per minute to debug.txt and the platform log.
+The Android **SAVE DIAGNOSTIC REPORT** action includes these lines and
+rolled debug logs. Candidate scoring now rejects clearly out-of-reach
+enemies with a cheap axis-aligned reach check before computing square
+roots; candidates near the range boundary still use the original distance
+and angle checks. When searching for a visible enemy, a stable min-heap
+replaces repeated quadratic find-and-shift scans while preserving all
+player-order ties and line-of-sight checks. The old nonfinite-score fallback
+is unchanged. Exact production selection passed 4,224 reference comparisons
+up to 131 candidates and the reach gate passed 350,000 acceptance checks. To compare high-bot performance, test
 the same map with 32, 64 and 127 bots, note performance at one, five and
 ten minutes and compare dead_bipeds and object counts. Results on the
 user's phone, including whether 127 bots stay smooth, remain unverified.

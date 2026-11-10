@@ -434,9 +434,14 @@ diagnostic report. A 48+-player **offline** bot match caps garbage limits
 at the 32-player equivalent and ignores virtual bot viewers (which have
 no screen) when protecting visible bodies. Bodies the actual player can
 see remain protected; ineffective active collections back off for one
-second. Network games, co-op and smaller bot games are unchanged. This
-is a candidate for physical stress tests, not a guarantee that 127 bots
-will stay at a stable frame rate.
+second. Network games, co-op and smaller bot games keep their original corpse
+cleanup. All bot matches also skip expensive square roots for obviously
+out-of-range candidate enemies, then choose the best visible candidate
+through a stable min-heap. The same target scores, tie ordering and line
+of sight determine the winner as before. The debug bots: perf line records
+range_culled and LOS work to distinguish cheap culling from real collision
+tests. This is a candidate for physical stress tests, not a guarantee
+that 127 bots will stay at a stable frame rate.
 
 ## OpenCE gametypes
 
