@@ -43,6 +43,7 @@ same datum index (identifier and all), so that any message can name one:
 */
 
 #include "cseries.h"
+#include "cseries/errors.h"
 #include "game/game.h"
 #include "game/game_engine.h"
 #include "game/players.h"
