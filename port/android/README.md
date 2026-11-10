@@ -132,6 +132,26 @@ obvious IPs and emails redacted. It does not include config.toml,
 credentials or map contents, and never sends anything automatically.
 Review any report before sharing it.
 
+### Optional 2142-style Commander Mode controls
+
+The Android launcher provides a collapsed **COMMANDER MODE: OFF / OPTIONS**
+panel, visible to offline players and the LAN host. The **master switch
+defaults OFF**; Satellite Track, UAV, spotting, orders, killstreaks, orbital
+support and radio announcements can then each be toggled separately.
+Turning off killstreaks automatically makes orbital ineffective, even if
+its checkbox remains selected.
+
+Only team multiplayer can use these abilities. Settings are saved in
+config.toml without changing existing maps, saves, LAN addresses or bot
+preferences. Every client starts with permissions off, and receives the
+host's effective selection as a validated reliable network message.
+A joining guest cannot grant themselves extra commander abilities.
+
+**At this stage these are policy controls only.** The laptop, tactical
+overhead map, spotting, killstreak power-ups, orders and orbital strike
+are not yet implemented. See docs/commander_mode.md for the feature
+matrix, host/client trust boundary, test requirements and future design.
+
 ### Changing the bot count without restarting Halo
 
 In the **multiplayer pregame lobby**, the hosting phone now shows **BOTS -**

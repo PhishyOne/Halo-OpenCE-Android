@@ -506,6 +506,26 @@ static const struct config_setting config_settings[] =
 		"as CUSTOM SINGLEPLAYER and CUSTOM MULTIPLAYER. Their tags are checked\n"
 		"as the game's own maps' are before they run; false refuses them\n"
 		"(docs/custom_edition_caches.md)." },
+	/* Commander Mode and optional support abilities are opt-in. The network
+	   host transmits its effective policy reliably; clients never grant
+	   themselves options based on their own config.toml. */
+	{ "commander.enabled", _config_boolean, "false", "HALO_COMMANDER", _environment_value, _platform_all,
+		"Master switch: optional Battlefield-2142-style commander support in team\n"
+		"multiplayer only. Off by default; vanilla Halo behavior is unchanged." },
+	{ "commander.satellite", _config_boolean, "true", "HALO_COMMANDER_SATELLITE", _environment_value, _platform_all,
+		"Commander-only satellite reconnaissance. Requires commander.enabled." },
+	{ "commander.uav", _config_boolean, "true", "HALO_COMMANDER_UAV", _environment_value, _platform_all,
+		"Localized UAV recon shared with the team. Requires commander.enabled." },
+	{ "commander.spotting", _config_boolean, "true", "HALO_COMMANDER_SPOTTING", _environment_value, _platform_all,
+		"Temporary hostile sightings shared through tactical markers." },
+	{ "commander.orders", _config_boolean, "true", "HALO_COMMANDER_ORDERS", _environment_value, _platform_all,
+		"Commander attack/defend orders for teams and bots." },
+	{ "commander.killstreaks", _config_boolean, "true", "HALO_COMMANDER_KILLSTREAKS", _environment_value, _platform_all,
+		"Opt-in host-validated killstreak support rewards." },
+	{ "commander.orbital", _config_boolean, "true", "HALO_COMMANDER_ORBITAL", _environment_value, _platform_all,
+		"Orbital support is available only if killstreaks and Commander Mode are on." },
+	{ "commander.announcements", _config_boolean, "true", "HALO_COMMANDER_ANNOUNCEMENTS", _environment_value, _platform_all,
+		"Non-positional command radio and killstreak warning announcements." },
 	{ "bots.count", _config_integer, "0", "HALO_BOTS", _environment_value, _platform_all,
 		"Computer players (bots) in a local (split screen) Slayer game: 0 to 127\n"
 		"join its lobby with the players, as far as the game has room. Not in\n"

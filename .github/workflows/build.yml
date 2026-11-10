@@ -196,6 +196,7 @@ jobs:
           python3 tools/test_bot_vehicle_flip.py
           python3 tools/test_bot_garbage_policy.py -v
           python3 tools/test_lobby_bot_count.py -v
+          python3 tools/test_commander_feature_policy.py -v
           python3 tools/test_bot_target_performance.py
           python3 tools/test_bot_automatic_modes.py -v
           python3 tools/test_coop_unit_resync.py -v
@@ -216,6 +217,8 @@ jobs:
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.OfflineBotConfigTest
           javac -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/HaloDiagnostics.java tools/lan/HaloDiagnosticsTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.HaloDiagnosticsTest
+          javac -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/CommanderConfig.java tools/lan/CommanderConfigTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.CommanderConfigTest
 
       - name: Release
         env:
