@@ -58,6 +58,7 @@ import java.nio.channels.FileChannel;
 public class LauncherActivity extends Activity {
     private static final int PICK_IMAGE = 1;
     private static final int PICK_SIDEWINDER = 2;
+    private static final int PICK_CARTOGRAPHER = 3;
     // Halo-style HUD colours. Native Android widgets remain accessible,
     // including the system file picker and LAN diagnostics.
     private static final int HUD_TEXT = Color.rgb(226, 237, 231);
@@ -74,6 +75,8 @@ public class LauncherActivity extends Activity {
     private TextView repairStatus;
     private Button repairRestoreButton;
     private Button repairChooseButton;
+    private Button repairCartographerChooseButton;
+    private Button repairCartographerRestoreButton;
     private Button playButton;
     private volatile boolean repairBusy;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -690,6 +693,41 @@ public class LauncherActivity extends Activity {
                 .setPositiveButton("RESTORE", (dialog, choice) -> restoreSidewinder())
                 .show());
         repairPanel.addView(repairRestoreButton);
+        repairPanel.addView(hudSection("THE SILENT CARTOGRAPHER"));
+        repairPanel.addView(lanText("Campaign mission 4. Select a standalone "
+            + "b30.map file to replace only this level.", 12));
+        repairCartographerChooseButton = new Button(this);
+        repairCartographerChooseButton.setText("SELECT B30.MAP");
+        hudButton(repairCartographerChooseButton, false);
+        repairCartographerChooseButton.setOnClickListener(view -> {
+            if (repairBusy)
+                return;
+            if (gameProcessStatus() != 0) {
+                feedback.setText("Force-stop Halo before repairing campaign maps.");
+                return;
+            }
+            Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            picker.addCategory(Intent.CATEGORY_OPENABLE);
+            picker.setType("*/*");
+            startActivityForResult(picker, PICK_CARTOGRAPHER);
+        });
+        repairPanel.addView(repairCartographerChooseButton);
+
+        repairCartographerRestoreButton = new Button(this);
+        repairCartographerRestoreButton.setText("RESTORE PREVIOUS B30.MAP");
+        hudButton(repairCartographerRestoreButton, false);
+        repairCartographerRestoreButton.setVisibility(
+            SidewinderRepair.hasPrevious(dataRoot, SidewinderRepair.CARTOGRAPHER_MAP)
+                ? View.VISIBLE : View.GONE);
+        repairCartographerRestoreButton.setOnClickListener(view ->
+            new AlertDialog.Builder(this)
+                .setTitle("Restore previous Silent Cartographer?")
+                .setMessage("This restores the old b30.map, which may still be damaged. "
+                    + "The new map is retained separately.")
+                .setNegativeButton("CANCEL", null)
+                .setPositiveButton("RESTORE", (dialog, choice) -> restoreCartographer())
+                .show());
+        repairPanel.addView(repairCartographerRestoreButton);
         repairStatus = lanText("", 12);
         repairStatus.setTextColor(HUD_WARNING);
         repairPanel.addView(repairStatus);
@@ -846,6 +884,10 @@ public class LauncherActivity extends Activity {
             repairChooseButton.setEnabled(false);
         if (repairRestoreButton != null)
             repairRestoreButton.setEnabled(false);
+        if (repairCartographerChooseButton != null)
+            repairCartographerChooseButton.setEnabled(false);
+        if (repairCartographerRestoreButton != null)
+            repairCartographerRestoreButton.setEnabled(false);
 
         new Thread(() -> {
             String result;
@@ -871,6 +913,14 @@ public class LauncherActivity extends Activity {
                     repairRestoreButton.setVisibility(
                         SidewinderRepair.hasPrevious(dataRoot) ? View.VISIBLE : View.GONE);
                 }
+                if (repairCartographerChooseButton != null)
+                    repairCartographerChooseButton.setEnabled(true);
+                if (repairCartographerRestoreButton != null) {
+                    repairCartographerRestoreButton.setEnabled(true);
+                    repairCartographerRestoreButton.setVisibility(
+                        SidewinderRepair.hasPrevious(dataRoot, SidewinderRepair.CARTOGRAPHER_MAP)
+                            ? View.VISIBLE : View.GONE);
+                }
             });
         }, "Halo-Sidewinder-Repair").start();
     }
@@ -894,6 +944,30 @@ public class LauncherActivity extends Activity {
         runMapRepair("Restoring your previous Sidewinder map...", () -> {
             SidewinderRepair.restorePrevious(dataRoot);
             return "Previous Sidewinder restored. The newer map is preserved separately.";
+        });
+    }
+
+    private void importCartographer(Uri document) {
+        runMapRepair("Verifying The Silent Cartographer's map data...", () -> {
+            try (InputStream input = getContentResolver().openInputStream(document)) {
+                if (input == null)
+                    throw new java.io.IOException("Android could not read the selected map.");
+                SidewinderRepair.Result repaired = SidewinderRepair.install(
+                    input, dataRoot, SidewinderRepair.CARTOGRAPHER_MAP);
+                return "The Silent Cartographer installed and verified (SHA-256 "
+                    + repaired.sha256.substring(0, 12) + "...). "
+                    + (repaired.backedUpOriginal
+                        ? "Your previous b30.map is available for restoration."
+                        : "No earlier b30.map was present.");
+            }
+        });
+    }
+
+    private void restoreCartographer() {
+        runMapRepair("Restoring your previous b30.map...", () -> {
+            SidewinderRepair.restorePrevious(dataRoot, SidewinderRepair.CARTOGRAPHER_MAP);
+            return "Previous Silent Cartographer map restored. "
+                + "The newer b30.map is preserved separately.";
         });
     }
 
@@ -974,6 +1048,11 @@ public class LauncherActivity extends Activity {
         if (requestCode == PICK_SIDEWINDER) {
             if (resultCode == RESULT_OK && data != null && data.getData() != null)
                 importSidewinder(data.getData());
+            return;
+        }
+        if (requestCode == PICK_CARTOGRAPHER) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null)
+                importCartographer(data.getData());
             return;
         }
         if (requestCode != PICK_IMAGE || resultCode != RESULT_OK || data == null || data.getData() == null)

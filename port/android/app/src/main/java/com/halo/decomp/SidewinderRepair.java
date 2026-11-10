@@ -16,13 +16,14 @@ import java.util.zip.DataFormatException;
 import java.util.zip.Inflater;
 
 /**
- * Import a replacement Xbox Sidewinder cache into Halo's own Android maps
- * directory. No root, ADB or direct access from another app is necessary.
- * Only a *standalone* sidewinder.map is accepted, not a full ISO or a ZIP.
+ * Import selected Xbox Halo map caches into the app's own Android maps
+ * directory. The allowlist is limited to Sidewinder and Silent Cartographer
+ * (b30), with separate backup and rollback paths. No root, ADB, full ISO,
+ * ZIP extraction, or arbitrary filesystem access is required.
  *
  * Verify the entire zlib stream, declared size and internal tags signature
  * before renaming the existing map to a backup. A crash between the two
- * renames leaves the old map in sidewinder.map.previous, recoverable using
+ * renames leaves the old map as <map>.previous, recoverable with
  * restorePrevious(). Never discard an existing backup implicitly.
  *
  * This class has no Android dependency so the source can be tested with a
@@ -35,10 +36,23 @@ final class SidewinderRepair {
     // Xbox cache reader uses at most 0x11600000 decompressed bytes.
     private static final long MAX_DECOMPRESSED_BYTES = 0x11600000L;
     // Allow different disc revisions while bounding untrusted input size.
-    private static final long MAX_SOURCE_BYTES = 128L * 1024 * 1024;
-    private static final String MAP = "sidewinder.map";
-    private static final String BACKUP = "sidewinder.map.previous";
-    private static final String RESTORED_NEW = "sidewinder.map.replaced";
+    private static final long MAX_SOURCE_BYTES = 256L * 1024 * 1024;
+    static final String SIDEWINDER_MAP = "sidewinder.map";
+    static final String CARTOGRAPHER_MAP = "b30.map";
+
+    /** Never use a filename from the document picker for an install path.
+     * Only these two hardcoded map IDs may become paths under maps/. */
+    private static String scenarioFor(String targetMap) throws IOException {
+        if (SIDEWINDER_MAP.equals(targetMap))
+            return "sidewinder";
+        if (CARTOGRAPHER_MAP.equals(targetMap))
+            return "b30";
+        throw new IOException("This map cannot be repaired by the launcher.");
+    }
+
+    private static String titleFor(String targetMap) {
+        return CARTOGRAPHER_MAP.equals(targetMap) ? "The Silent Cartographer" : "Sidewinder";
+    }
 
     static final class Result {
         final long sourceBytes;
@@ -86,21 +100,28 @@ final class SidewinderRepair {
         }
     }
 
-    private static void validateTagHeader(byte[] tagHeader) throws IOException {
+    private static void validateTagHeader(byte[] tagHeader, String title)
+            throws IOException {
         if (!matches(tagHeader, 0x20, "sgat"))
-            throw new IOException("Sidewinder's internal tag signature is invalid.");
+            throw new IOException(title + " tag signature is invalid.");
         long count = u32(tagHeader, 0x0C);
         if (count == 0 || count > 65535)
-            throw new IOException("Sidewinder's tag count is invalid.");
+            throw new IOException(title + " tag count is invalid.");
     }
 
     /** Check the full map, not just its header. No decompressed file is saved. */
     static long validate(File map) throws IOException {
+        return validate(map, SIDEWINDER_MAP);
+    }
+
+    static long validate(File map, String targetMap) throws IOException {
+        String expectedScenario = scenarioFor(targetMap);
+        String title = titleFor(targetMap);
         if (!map.isFile() || Files.isSymbolicLink(map.toPath()))
-            throw new IOException("The selected Sidewinder file is unavailable.");
+            throw new IOException("The selected " + title + " file is unavailable.");
         long size = map.length();
         if (size < HEADER_BYTES + 2 || size > MAX_SOURCE_BYTES)
-            throw new IOException("Sidewinder's file size is invalid.");
+            throw new IOException(title + "'s file size is invalid.");
 
         try (InputStream input = new FileInputStream(map)) {
             byte[] header = new byte[HEADER_BYTES];
@@ -109,15 +130,15 @@ final class SidewinderRepair {
                 || u32(header, 4) != 5)
                 throw new IOException("This is not a supported Xbox Halo map.");
 
-            // The cached scenario must be Sidewinder, even if the picked file
-            // is renamed in Downloads. A map named sidewinder.map is not proof.
+            // The internal scenario must match the requested repair.
+            // An arbitrary file renamed to b30.map is not evidence of identity.
             int nameEnd = 0x20;
             while (nameEnd < 0x40 && header[nameEnd] != 0)
                 nameEnd++;
             String name = new String(header, 0x20, nameEnd - 0x20,
                 StandardCharsets.US_ASCII);
-            if (!"sidewinder".equalsIgnoreCase(name))
-                throw new IOException("This map is " + name + ", not Sidewinder.");
+            if (!expectedScenario.equalsIgnoreCase(name))
+                throw new IOException("This map is " + name + ", not " + title + ".");
 
             long expectedSize = u32(header, 8);
             long tagOffset = u32(header, 0x10);
@@ -126,7 +147,7 @@ final class SidewinderRepair {
                 expectedSize > MAX_DECOMPRESSED_BYTES ||
                 tagOffset < HEADER_BYTES || tagSize < TAG_HEADER_BYTES ||
                 tagOffset > expectedSize - tagSize)
-                throw new IOException("Sidewinder has an invalid cache/tag range.");
+                throw new IOException(title + " has an invalid cache/tag range.");
 
             byte[] tagHeader = new byte[TAG_HEADER_BYTES];
             if (size == expectedSize) {
@@ -134,16 +155,16 @@ final class SidewinderRepair {
                 try (FileInputStream raw = new FileInputStream(map)) {
                     long skipped = raw.getChannel().position(tagOffset).position();
                     if (skipped != tagOffset)
-                        throw new IOException("Cannot seek to Sidewinder tags.");
+                        throw new IOException("Cannot seek to the map's tags.");
                     readExactly(raw, tagHeader);
                 }
             } else if (size < expectedSize) {
                 decodeCompressed(input, expectedSize - HEADER_BYTES,
                     tagOffset - HEADER_BYTES, tagHeader);
             } else {
-                throw new IOException("Sidewinder is larger than its declared map size.");
+                throw new IOException(title + " is larger than its declared map size.");
             }
-            validateTagHeader(tagHeader);
+            validateTagHeader(tagHeader, title);
             return expectedSize;
         }
     }
@@ -161,7 +182,7 @@ final class SidewinderRepair {
                 if (inflater.needsInput()) {
                     int count = input.read(compressed);
                     if (count < 0)
-                        throw new IOException("Sidewinder's compressed stream is truncated.");
+                        throw new IOException("The map's compressed stream is truncated.");
                     if (count == 0)
                         continue;
                     inflater.setInput(compressed, 0, count);
@@ -170,11 +191,11 @@ final class SidewinderRepair {
                 try {
                     count = inflater.inflate(expanded);
                 } catch (DataFormatException e) {
-                    throw new IOException("Sidewinder's compressed stream is corrupt.", e);
+                    throw new IOException("The map's compressed stream is corrupt.", e);
                 }
                 if (count > 0) {
                     if (produced > expectedBody - count)
-                        throw new IOException("Sidewinder decompresses beyond its declared size.");
+                        throw new IOException("The map decompresses beyond its declared size.");
                     long begin = Math.max(produced, tagBodyOffset);
                     long end = Math.min(produced + count,
                         tagBodyOffset + tagHeader.length);
@@ -184,13 +205,13 @@ final class SidewinderRepair {
                             (int) (end - begin));
                     produced += count;
                 } else if (inflater.needsDictionary()) {
-                    throw new IOException("Sidewinder requires an unsupported zlib dictionary.");
+                    throw new IOException("The map requires an unsupported zlib dictionary.");
                 } else if (!inflater.needsInput() && !inflater.finished()) {
-                    throw new IOException("Sidewinder's decompression stalled.");
+                    throw new IOException("The map's decompression stalled.");
                 }
             }
             if (produced != expectedBody)
-                throw new IOException("Sidewinder decompressed to the wrong size.");
+                throw new IOException("The map decompressed to the wrong size.");
         } finally {
             inflater.end();
         }
@@ -206,10 +227,19 @@ final class SidewinderRepair {
     }
 
     static boolean hasPrevious(File dataRoot) {
+        return hasPrevious(dataRoot, SIDEWINDER_MAP);
+    }
+
+    static boolean hasPrevious(File dataRoot, String targetMap) {
         if (dataRoot == null)
             return false;
+        try {
+            scenarioFor(targetMap);
+        } catch (IOException e) {
+            return false;
+        }
         File maps = new File(dataRoot, "maps");
-        return new File(maps, BACKUP).isFile();
+        return new File(maps, targetMap + ".previous").isFile();
     }
 
     private static void moveInSameDirectory(Path from, Path to) throws IOException {
@@ -222,19 +252,26 @@ final class SidewinderRepair {
 
     static synchronized Result install(InputStream source, File dataRoot)
             throws IOException {
+        return install(source, dataRoot, SIDEWINDER_MAP);
+    }
+
+    static synchronized Result install(InputStream source, File dataRoot,
+            String targetMap) throws IOException {
+        String scenario = scenarioFor(targetMap);
+        String title = titleFor(targetMap);
         if (source == null)
             throw new IOException("No map file was selected.");
         File maps = mapsDirectory(dataRoot);
-        Path target = new File(maps, MAP).toPath();
-        Path previous = new File(maps, BACKUP).toPath();
+        Path target = new File(maps, targetMap).toPath();
+        Path previous = new File(maps, targetMap + ".previous").toPath();
         if (Files.exists(previous))
-            throw new IOException("A previous Sidewinder backup already exists. "
+            throw new IOException("A previous " + title + " backup already exists. "
                 + "Restore it before attempting another replacement.");
         if (Files.exists(target) && (!Files.isRegularFile(target) ||
             Files.isSymbolicLink(target)))
-            throw new IOException("The existing Sidewinder map cannot be safely replaced.");
+            throw new IOException("The installed " + title + " map cannot be safely replaced.");
 
-        Path staged = Files.createTempFile(maps.toPath(), "sidewinder-repair-", ".pending");
+        Path staged = Files.createTempFile(maps.toPath(), scenario + "-repair-", ".pending");
         boolean madeBackup = false;
         try {
             MessageDigest digest;
@@ -258,7 +295,7 @@ final class SidewinderRepair {
                 }
                 output.getFD().sync();
             }
-            long decoded = validate(staged.toFile());
+            long decoded = validate(staged.toFile(), targetMap);
             byte[] hash = digest.digest();
             StringBuilder sha = new StringBuilder(hash.length * 2);
             for (byte value : hash)
@@ -289,17 +326,24 @@ final class SidewinderRepair {
     /** Explicit rollback, retaining the new map as .replaced for inspection.
      * The old map may itself be corrupt; this operation is only user driven. */
     static synchronized void restorePrevious(File dataRoot) throws IOException {
+        restorePrevious(dataRoot, SIDEWINDER_MAP);
+    }
+
+    static synchronized void restorePrevious(File dataRoot, String targetMap)
+            throws IOException {
+        scenarioFor(targetMap);
+        String title = titleFor(targetMap);
         File maps = mapsDirectory(dataRoot);
-        Path current = new File(maps, MAP).toPath();
-        Path previous = new File(maps, BACKUP).toPath();
-        Path replaced = new File(maps, RESTORED_NEW).toPath();
+        Path current = new File(maps, targetMap).toPath();
+        Path previous = new File(maps, targetMap + ".previous").toPath();
+        Path replaced = new File(maps, targetMap + ".replaced").toPath();
         if (!Files.isRegularFile(previous) || Files.isSymbolicLink(previous))
-            throw new IOException("No previous Sidewinder map is available.");
+            throw new IOException("No previous " + title + " map is available.");
         if (Files.exists(replaced))
-            throw new IOException("A previously replaced Sidewinder is already preserved.");
+            throw new IOException("A previously replaced " + title + " is already preserved.");
         if (Files.exists(current) && (!Files.isRegularFile(current)
             || Files.isSymbolicLink(current)))
-            throw new IOException("The current Sidewinder map cannot be safely restored.");
+            throw new IOException("The current " + title + " map cannot be safely restored.");
         boolean retainedNew = false;
         if (Files.exists(current)) {
             moveInSameDirectory(current, replaced);

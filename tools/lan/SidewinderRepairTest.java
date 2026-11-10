@@ -31,6 +31,11 @@ public final class SidewinderRepairTest {
     }
 
     private static byte[] createMap(boolean compressed, boolean goodTag) throws IOException {
+        return createMap(compressed, goodTag, "sidewinder");
+    }
+
+    private static byte[] createMap(boolean compressed, boolean goodTag,
+            String scenario) throws IOException {
         byte[] header = new byte[0x800];
         byte[] body = new byte[8192];
         for (int n = 0; n < body.length; n++)
@@ -40,7 +45,7 @@ public final class SidewinderRepairTest {
         put32(header, 8, header.length + body.length);
         put32(header, 0x10, header.length + 256);
         put32(header, 0x14, 128);
-        putAscii(header, 0x20, "sidewinder");
+        putAscii(header, 0x20, scenario);
         putAscii(header, 0x40, "01.10.12.2276");
         putAscii(header, 0x7FC, "toof");
         put32(body, 256 + 0x0C, 42);
@@ -187,6 +192,60 @@ public final class SidewinderRepairTest {
             check(!fresh.backedUpOriginal, "Missing old map reported as backed up");
             check(Arrays.equals(Files.readAllBytes(current), validRaw),
                 "Uncompressed map install failed");
+
+            // Silent Cartographer is independent of Sidewinder and uses a
+            // separate target and backup even when both are repaired.
+            byte[] cartographerCompressed = createMap(true, true, "b30");
+            byte[] cartographerRaw = createMap(false, true, "b30");
+            Path cartographer = maps.resolve("b30.map");
+            Path cartographerBackup = maps.resolve("b30.map.previous");
+            Path cartographerReplaced = maps.resolve("b30.map.replaced");
+            Files.write(reference, cartographerCompressed);
+            check(SidewinderRepair.validate(reference.toFile(), "b30.map") == 10240,
+                "Valid Silent Cartographer zlib cache rejected");
+            Files.write(reference, cartographerRaw);
+            check(SidewinderRepair.validate(reference.toFile(), "b30.map") == 10240,
+                "Valid uncompressed Silent Cartographer cache rejected");
+            reject(() -> SidewinderRepair.validate(reference.toFile(), "sidewinder.map"),
+                "not Sidewinder");
+            reject(() -> SidewinderRepair.validate(reference.toFile(), "../b30.map"),
+                "cannot be repaired");
+
+            byte[] badOldCartographer = "corrupt installed b30".getBytes();
+            Files.write(cartographer, badOldCartographer);
+            reject(() -> SidewinderRepair.install(
+                new ByteArrayInputStream(validCompressed), dataRoot, "b30.map"),
+                "not The Silent Cartographer");
+            check(Arrays.equals(Files.readAllBytes(cartographer), badOldCartographer),
+                "Wrong scenario corrupted b30");
+            check(!Files.exists(cartographerBackup), "Wrong scenario created backup");
+
+            SidewinderRepair.Result b30Result = SidewinderRepair.install(
+                new ByteArrayInputStream(cartographerCompressed), dataRoot, "b30.map");
+            check(b30Result.backedUpOriginal &&
+                b30Result.sourceBytes == cartographerCompressed.length,
+                "Silent Cartographer repair failed");
+            check(Arrays.equals(Files.readAllBytes(cartographerBackup), badOldCartographer),
+                "Silent Cartographer previous file not kept");
+            check(Arrays.equals(Files.readAllBytes(cartographer), cartographerCompressed),
+                "Silent Cartographer replacement incorrect");
+            check(SidewinderRepair.hasPrevious(dataRoot, "b30.map"),
+                "Silent Cartographer restore option missing");
+            check(!SidewinderRepair.hasPrevious(dataRoot, "../b30.map"),
+                "Path outside allowlist exposed backup");
+
+            // Sidewinder data must not change when Cartographer changes.
+            check(Arrays.equals(Files.readAllBytes(current), validRaw),
+                "Cartographer repair modified Sidewinder");
+            SidewinderRepair.restorePrevious(dataRoot, "b30.map");
+            check(Arrays.equals(Files.readAllBytes(cartographer), badOldCartographer),
+                "Silent Cartographer rollback failed");
+            check(Arrays.equals(Files.readAllBytes(cartographerReplaced), cartographerCompressed),
+                "Restoring b30 lost its verified candidate");
+            check(Arrays.equals(Files.readAllBytes(current), validRaw),
+                "Cartographer restore modified Sidewinder");
+            check(!SidewinderRepair.hasPrevious(dataRoot, "b30.map"),
+                "Silent Cartographer rollback left a backup behind");
 
             System.out.println("SidewinderRepairTest PASS (" + assertions + " assertions)");
         } finally {

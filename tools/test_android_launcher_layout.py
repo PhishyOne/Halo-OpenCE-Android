@@ -69,6 +69,21 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         self.assertIn('playButton.setEnabled(false)', s)
         self.assertIn('if (repairBusy)', s)
 
+    def test_silent_cartographer_repair_is_isolated(self):
+        s = self.source
+        self.assertIn('repairPanel.addView(hudSection("THE SILENT CARTOGRAPHER"));', s)
+        self.assertIn('repairCartographerChooseButton.setText("SELECT B30.MAP");', s)
+        self.assertIn('startActivityForResult(picker, PICK_CARTOGRAPHER);', s)
+        self.assertIn('importCartographer(data.getData());', s)
+        self.assertIn('repairCartographerRestoreButton.setText("RESTORE PREVIOUS B30.MAP");', s)
+        self.assertIn('SidewinderRepair.install(\n                    input, dataRoot, SidewinderRepair.CARTOGRAPHER_MAP)', s)
+        self.assertIn('SidewinderRepair.restorePrevious(dataRoot, SidewinderRepair.CARTOGRAPHER_MAP)', s)
+        self.assertIn('repairCartographerChooseButton.setEnabled(false)', s)
+        self.assertIn('repairCartographerRestoreButton.setEnabled(false)', s)
+        self.assertIn('repairCartographerRestoreButton.setVisibility(', s)
+        self.assertIn('PICK_SIDEWINDER = 2;', s)
+        self.assertIn('PICK_CARTOGRAPHER = 3;', s)
+
     def test_disc_import_is_preserved(self):
         s = self.source
         self.assertIn('Intent.ACTION_OPEN_DOCUMENT', s)

@@ -118,11 +118,12 @@ actions are attempted only with the existing vehicle AI opt-in.
 This behavior has source-level tests but still needs an actual Warthog
 rollover test in a live offline/LAN match.
 
-### Repairing Sidewinder
+### Repairing Sidewinder and The Silent Cartographer
 
-The launcher has a collapsed **MAP REPAIR** panel. It works inside the app's
-own Android storage, so it does not require root, ADB, or access to
-Android/data from Termux.
+The launcher has a collapsed **MAP REPAIR** panel for Sidewinder
+(sidewinder.map) and The Silent Cartographer (b30.map). These are separate
+allowlisted maps with independent backups. Halo accesses only its own Android
+storage, so no root, ADB, or access to Android/data from Termux is needed.
 
 1. Stop any running Halo game and open **MAP REPAIR**.
 2. Select **SELECT SIDEWINDER.MAP** and choose a standalone Xbox
@@ -141,6 +142,21 @@ Android/data from Termux.
    older file might itself be damaged. Existing backups are never silently
    overwritten; attempting a second repair while .previous exists is
    refused.
+
+For The Silent Cartographer, select **SELECT B30.MAP** and choose the
+standalone b30.map extracted from a healthy Xbox disc image. It validates
+the internal scenario name b30 and decompression stream, then backs up only
+maps/b30.map to maps/b30.map.previous before replacing it. **RESTORE PREVIOUS
+B30.MAP** reverses that replacement, preserving the newer copy as
+maps/b30.map.replaced. Sidewinder remains untouched. An entire ISO/ZIP will
+be rejected rather than silently replacing game data.
+
+The Rev 2 b30.map observed on Nov 9, 2026 was 162,877,440 bytes and passed a
+real Android Java validator run: expected decompressed size 224,887,296 bytes,
+valid zlib EOF, correct internal b30 name and sgat tag header. Its SHA-256
+was a6e2ae628f96b666922d6429541068c3e117e8aa5031d00d187b3c853630be0f.
+That validates its structure, but not gameplay or compatibility with maps
+from another disc revision.
 
 The importer runs off the UI thread and temporarily disables **PLAY**;
 it also refuses to start if Halo's game process is running or its state
