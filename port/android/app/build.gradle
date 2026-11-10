@@ -49,7 +49,9 @@ android {
     defaultConfig {
         applicationId experimentalPackage ? "com.halo.decomp.experiment" : "com.halo.decomp"
         manifestPlaceholders = [
-            haloAppLabel: experimentalPackage ? "Halo Experiment" : "Halo",
+            // Keep the upgrade-safe experimental applicationId, but label
+            // the app simply Halo in Android, the launcher and app switcher.
+            haloAppLabel: "Halo",
             haloUpdateAuthority: experimentalPackage ?
                 "com.halo.decomp.experiment.update" : "com.halo.decomp.update"
         ]
