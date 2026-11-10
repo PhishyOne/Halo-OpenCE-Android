@@ -11,7 +11,8 @@ class AndroidExperimentPackageTest(unittest.TestCase):
         self.assertIn('System.getenv("HALO_ANDROID_EXPERIMENT_PACKAGE") == "true"',gradle)
         self.assertIn('applicationId experimentalPackage ? "com.halo.decomp.experiment" : "com.halo.decomp"',gradle)
         self.assertIn('if (experimentalPackage && (!signingKey ||',gradle)
-        self.assertIn('haloAppLabel: experimentalPackage ? "Halo Experiment" : "Halo"',gradle)
+        self.assertIn('haloAppLabel: "Halo"',gradle)
+        self.assertNotIn('haloAppLabel: experimentalPackage ? "Halo Experiment"',gradle)
         self.assertIn('"com.halo.decomp.experiment.update" : "com.halo.decomp.update"',gradle)
 
     def test_provider_authority_matches_application_id(self):

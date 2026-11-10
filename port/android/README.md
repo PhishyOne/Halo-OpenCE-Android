@@ -98,13 +98,16 @@ qualified on devices; changing the launcher does not change that status.
 ### Isolated experimental APKs
 
 Manual Android-only CI builds (workflow_dispatch with android_only=true)
-use HALO_ANDROID_EXPERIMENT_PACKAGE=true. This creates Halo Experiment
-(applicationId com.halo.decomp.experiment), with its own update-provider
-authority and data directory. The test build keeps the same permanent
-signing keystore and increments the Android version code. A version 4
-experiment installs in place over versions 2 or 3 signed with the same
-certificate, while the original com.halo.decomp app remains untouched.
-Normal builds without this flag continue to use com.halo.decomp.
+use HALO_ANDROID_EXPERIMENT_PACKAGE=true. This creates a separately
+installed app with applicationId com.halo.decomp.experiment, its own
+update-provider authority and data directory. Both Android package
+variants are labeled Halo (the suffix is not shown in the phone's app
+drawer). Keep the experimental applicationId and permanent signing key so
+versionCode 9 updates previous experiment versions in place, preserving
+installed maps, saved games and preferences. The original
+com.halo.decomp app remains untouched if present. Normal builds without
+the flag continue to use com.halo.decomp. Do not change the applicationId
+to achieve a display-name change: Android would treat it as a new app.
 
 ### Warthog recovery for computer players
 
