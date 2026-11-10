@@ -80,6 +80,8 @@ and each bot's kills and deaths; debug.bot_trace logs each bot's state.
 #include "game/players.h"
 #include "objects/objects.h"
 #include "units/units.h"
+#include "units/vehicles.h"
+#include "units/vehicle_datum.h"
 #include "units/bipeds.h"
 #include "units/unit_definitions.h"
 #include "items/items.h"
@@ -138,6 +140,10 @@ void platform_log(char const *format, ...);
 #define BOTS_VEHICLE_SEEK_RADIUS 16.0f
 #define BOTS_VEHICLE_RESERVATION_TICKS (TICKS_PER_SECOND * 14)
 #define BOTS_VEHICLE_RETRY_TICKS (TICKS_PER_SECOND * 12)
+/* A flip only needs one helper; give up instead of clustering around a
+   wreck that never offers the real player's Flip Vehicle prompt. */
+#define BOTS_VEHICLE_FLIP_RESERVATION_TICKS (TICKS_PER_SECOND * 8)
+#define BOTS_VEHICLE_FLIP_APPROACH_RADIUS 1.4f
 
 /* where a bot is going */
 enum
@@ -149,6 +155,7 @@ enum
 	_bots_goal_item,
 	_bots_goal_vehicle,
 	_bots_goal_objective,
+	_bots_goal_vehicle_flip,
 };
 
 /* the fight's counts in halo.log's minute line */
@@ -1899,7 +1906,9 @@ static boolean bots_vehicle_seat_usable(long bot_unit_index, long vehicle_index,
     struct unit_seat *seat;
 
     if (!vehicle || TEST_FLAG(vehicle->object.damage_flags, _object_dead_bit) ||
-        TEST_FLAG(vehicle->unit.flags, _unit_not_enterable_by_player_bit))
+        TEST_FLAG(vehicle->unit.flags, _unit_not_enterable_by_player_bit) ||
+        /* A Warthog on its roof is not an enterable gunner position. */
+        vehicle->object.up.k < 0.2f)
         return FALSE;
     definition = unit_definition_get(vehicle->definition_index);
     if (seat_index < 0 || seat_index >= definition->unit.seats.count)
@@ -1924,6 +1933,113 @@ static boolean bots_vehicle_seat_usable(long bot_unit_index, long vehicle_index,
     /* Match the vanilla player prompt's seat-entrance geometry. */
     return unit_get_seat_entrance_point(bot_unit_index, vehicle_index, seat_index,
         entrance, NULL, NULL);
+}
+
+/* Only an unoccupied, stationary, overturned vehicle can be recovered.
+   The game itself determines whether a nearby human would see a Flip
+   Vehicle prompt; this filter only avoids hopeless recovery trips. */
+static boolean bots_vehicle_can_flip(long vehicle_index)
+{
+    struct vehicle_datum *vehicle = vehicle_datum_try_and_get(vehicle_index);
+    real angular;
+
+    if (!vehicle || TEST_FLAG(vehicle->object.damage_flags, _object_dead_bit) ||
+        TEST_FLAG(vehicle->unit.flags, _unit_not_enterable_by_player_bit) ||
+        vehicle->object.up.k >= 0.2f ||
+        vehicle->unit.driver_object_index != NONE ||
+        TEST_FLAG(vehicle->vehicle.flags, _vehicle_upending_bit))
+        return FALSE;
+    angular = vehicle->object.angular_velocity.i * vehicle->object.angular_velocity.i +
+        vehicle->object.angular_velocity.j * vehicle->object.angular_velocity.j +
+        vehicle->object.angular_velocity.k * vehicle->object.angular_velocity.k;
+    return angular < 0.01f;
+}
+
+/* A recovery is a single player's job. Other bots ignore this overturned
+   vehicle and keep their normal fighting/roaming goals. The host updates
+   bot state sequentially, so the first claimant reserves it immediately. */
+static boolean bots_vehicle_flip_reserved(struct bots_bot const *claimant, long vehicle_index)
+{
+    long index;
+
+    for (index = 0; index < BOTS_MAXIMUM; index++)
+    {
+        struct bots_bot const *other = &bots_globals.bots[index];
+
+        if (other != claimant && other->player_index != NONE &&
+            other->goal_kind == _bots_goal_vehicle_flip &&
+            other->vehicle_index == vehicle_index)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+/* Approach from the bot's side instead of trying to pathfind through the
+   Warthog's hull. The actual flip still needs Halo's native Action prompt. */
+static boolean bots_vehicle_pick_flip(struct bots_bot *bot, real_point3d const *position)
+{
+    struct object_iterator iterator;
+    long best_vehicle = NONE, best_surface = NONE;
+    real nearest = REAL_MAX;
+    real_point3d best_ground;
+
+    object_iterator_new(&iterator, _object_mask_vehicle, 0);
+    while (object_iterator_next(&iterator))
+    {
+        struct vehicle_datum *vehicle;
+        real distance, dx, dy, length, speed_squared;
+        real_point3d approach, ground;
+        long surface;
+
+        if ((bot->vehicle_ignore_index == iterator.index &&
+            game_time_get() < bot->vehicle_ignore_until_tick) ||
+            bots_vehicle_flip_reserved(bot, iterator.index) ||
+            !bots_vehicle_can_flip(iterator.index))
+            continue;
+        vehicle = vehicle_datum_get(iterator.index);
+        distance = bots_distance3d(position, &vehicle->object.position);
+        if (distance >= BOTS_VEHICLE_SEEK_RADIUS || distance >= nearest)
+            continue;
+        speed_squared =
+            vehicle->object.translational_velocity.i * vehicle->object.translational_velocity.i +
+            vehicle->object.translational_velocity.j * vehicle->object.translational_velocity.j +
+            vehicle->object.translational_velocity.k * vehicle->object.translational_velocity.k;
+        if (speed_squared >= 0.02f * 0.02f)
+            continue;
+        dx = position->x - vehicle->object.position.x;
+        dy = position->y - vehicle->object.position.y;
+        length = (real)sqrt(dx * dx + dy * dy);
+        approach = vehicle->object.position;
+        if (length > 0.05f)
+        {
+            approach.x += dx / length * BOTS_VEHICLE_FLIP_APPROACH_RADIUS;
+            approach.y += dy / length * BOTS_VEHICLE_FLIP_APPROACH_RADIUS;
+        }
+        else
+            approach.x += BOTS_VEHICLE_FLIP_APPROACH_RADIUS;
+        surface = bots_surface_below(&approach, &ground);
+        if (surface == NONE)
+            continue;
+        nearest = distance;
+        best_vehicle = iterator.index;
+        best_surface = surface;
+        best_ground = ground;
+    }
+    if (best_vehicle == NONE)
+        return FALSE;
+    bot->vehicle_index = best_vehicle;
+    bot->vehicle_seat_index = NONE;
+    bots_set_goal(bot, _bots_goal_vehicle_flip, &best_ground, best_surface);
+    platform_log("bots: bot player %ld recovering overturned vehicle %ld",
+        (long)DATUM_INDEX_TO_ABSOLUTE_INDEX(bot->player_index), best_vehicle);
+    return TRUE;
+}
+
+static boolean bots_vehicle_keep_flip_goal(struct bots_bot *bot)
+{
+    return bot->vehicle_index != NONE &&
+        game_time_get() - bot->goal_tick < BOTS_VEHICLE_FLIP_RESERVATION_TICKS &&
+        bots_vehicle_can_flip(bot->vehicle_index);
 }
 
 static void bots_vehicle_stop_seeking(struct bots_bot *bot, long now)
@@ -2150,19 +2266,28 @@ static void bots_choose_goal(struct bots_bot *bot, long player_index, real_point
 	   A failed reservation backs off rather than making the bot circle a seat. */
 	if (config_boolean("bots.vehicle_seats"))
 	{
+		if (bot->goal_kind == _bots_goal_vehicle_flip)
+		{
+			if (bots_vehicle_keep_flip_goal(bot))
+				return;
+			bots_vehicle_stop_seeking(bot, now);
+		}
 		if (bot->goal_kind == _bots_goal_vehicle)
 		{
 			if (bots_vehicle_keep_goal(bot, player_get(player_index)->unit_index))
 				return;
 		}
-		if (now >= bot->next_vehicle_scan_tick)
+		if (!fighting && now >= bot->next_vehicle_scan_tick)
 		{
 			bot->next_vehicle_scan_tick = now + TICKS_PER_SECOND * 3;
+			if (bots_vehicle_pick_flip(bot, position))
+				return;
 			if (bots_vehicle_pick(bot, player_get(player_index)->unit_index, position))
 				return;
 		}
 	}
-	else if (bot->goal_kind == _bots_goal_vehicle)
+	else if (bot->goal_kind == _bots_goal_vehicle ||
+		bot->goal_kind == _bots_goal_vehicle_flip)
 	{
 		bots_vehicle_stop_seeking(bot, now);
 	}
@@ -3119,10 +3244,31 @@ static void bots_bot_objective_action(struct bots_bot *bot, struct bots_tick *ti
    network input and unit replication path. */
 static void bots_bot_vehicle_action(struct bots_bot *bot, struct bots_tick *tick)
 {
-    if (bot->goal_kind != _bots_goal_vehicle || bot->vehicle_index == NONE ||
+    if ((bot->goal_kind != _bots_goal_vehicle &&
+        bot->goal_kind != _bots_goal_vehicle_flip) ||
+        bot->vehicle_index == NONE ||
         tick->object->object.parent_object_index != NONE ||
         tick->now < bot->vehicle_press_tick)
         return;
+
+    /* Only the designated helper presses the Flip Vehicle prompt. Halo's
+       normal player_action routine applies the upending animation and
+       replicates it across LAN, exactly as for a human player. */
+    if (bot->goal_kind == _bots_goal_vehicle_flip)
+    {
+        if (tick->player->action_object_index == bot->vehicle_index &&
+            tick->player->action_result == _player_action_result_flip_vehicle)
+        {
+            long recovered = bot->vehicle_index;
+            tick->flags |= FLAG(_unit_control_action_bit) |
+                FLAG(UNIT_CONTROL_PORT_ACTION_ONLY_BIT);
+            bot->vehicle_press_tick = tick->now + TICKS_PER_SECOND;
+            bots_vehicle_stop_seeking(bot, tick->now);
+            platform_log("bots: player %ld flipped overturned vehicle %ld",
+                (long)DATUM_INDEX_TO_ABSOLUTE_INDEX(bot->player_index), recovered);
+        }
+        return;
+    }
 
     if (tick->player->action_object_index == bot->vehicle_index &&
         tick->player->action_seat_index == bot->vehicle_seat_index &&
@@ -3339,6 +3485,7 @@ static void bots_bot_update(struct bots_bot *bot, long bot_index, struct player_
 	/* Objectives may change while we are fighting; update the destination
 	   without waiting for the enemy to disappear. */
 	if (!tick.fighting || bot->goal_kind == _bots_goal_item ||
+		bot->goal_kind == _bots_goal_vehicle_flip ||
 		bots_objectives_active())
 		bots_choose_goal(bot, bot->player_index, &tick.position, tick.fighting);
 	if (!tick.fighting)

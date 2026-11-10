@@ -193,6 +193,7 @@ jobs:
         if: ${{ inputs.android_only }}
         run: |
           python3 tools/test_bot_objective_policy.py -v
+          python3 tools/test_bot_vehicle_flip.py
           python3 tools/test_android_launcher_layout.py -v
           python3 tools/test_android_experiment_package.py -v
           mkdir -p "$RUNNER_TEMP/halo-test-classes"
