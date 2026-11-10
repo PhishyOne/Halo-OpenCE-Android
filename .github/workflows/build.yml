@@ -198,6 +198,8 @@ jobs:
             port/android/app/src/main/java/com/halo/decomp/LanConfig.java \
             tools/lan/LanConfigSmokeTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LanConfigSmokeTest
+          javac -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/SidewinderRepair.java tools/lan/SidewinderRepairTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.SidewinderRepairTest
 
       - name: Release
         env:

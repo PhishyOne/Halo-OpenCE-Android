@@ -39,7 +39,7 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         self.assertIn('"--offline-bots", Integer.toString(count)', s)
         self.assertIn('Boolean.toString(crews)', s)
         self.assertNotIn('showOfflineBotOptions(', s)
-        self.assertNotIn('new AlertDialog.Builder(this)', s)
+        self.assertNotIn('.setTitle("Offline Bot Match")', s)
 
     def test_lan_uses_same_validation(self):
         s = self.source
@@ -57,6 +57,17 @@ class HaloLauncherLayoutTests(unittest.TestCase):
                 self.assertNotIn(phrase, s)
         self.assertIn('hudSurface(', s)
         self.assertIn('hudCheck(', s)
+
+    def test_sidewinder_repair_is_isolated(self):
+        s = self.source
+        self.assertIn('mapsToggle.setText("MAP REPAIR");', s)
+        self.assertIn('repairChooseButton.setText("SELECT SIDEWINDER.MAP");', s)
+        self.assertIn('startActivityForResult(picker, PICK_SIDEWINDER);', s)
+        self.assertIn('SidewinderRepair.install(input, dataRoot)', s)
+        self.assertIn('SidewinderRepair.restorePrevious(dataRoot)', s)
+        self.assertIn('if (gameProcessStatus() != 0)', s)
+        self.assertIn('playButton.setEnabled(false)', s)
+        self.assertIn('if (repairBusy)', s)
 
     def test_disc_import_is_preserved(self):
         s = self.source
