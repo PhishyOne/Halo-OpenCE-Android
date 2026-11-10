@@ -18,6 +18,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
 import android.provider.OpenableColumns;
+import android.provider.DocumentsContract;
 import android.provider.Settings;
 import android.util.TypedValue;
 import android.text.InputType;
@@ -45,6 +46,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.util.HashSet;
+import java.util.Locale;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.io.OutputStream;
@@ -65,6 +68,8 @@ public class LauncherActivity extends Activity {
     private static final int PICK_SIDEWINDER = 2;
     private static final int PICK_CARTOGRAPHER = 3;
     private static final int PICK_CUSTOM_MAPS = 4;
+    private static final int PICK_CUSTOM_FOLDER = 5;
+    private static final int PICK_CUSTOM_ZIP = 6;
     // Halo-style HUD colours. Native Android widgets remain accessible,
     // including the system file picker and LAN diagnostics.
     private static final int HUD_TEXT = Color.rgb(226, 237, 231);
@@ -84,6 +89,8 @@ public class LauncherActivity extends Activity {
     private Button repairCartographerChooseButton;
     private Button repairCartographerRestoreButton;
     private Button customMapImportButton;
+    private Button customMapFolderButton;
+    private Button customMapZipButton;
     private TextView customMapStatus;
     private Button playButton;
     private volatile boolean repairBusy;
@@ -655,6 +662,16 @@ public class LauncherActivity extends Activity {
         hudCheck(vehicleSeatsOffline);
         offlinePanel.addView(vehicleSeatsOffline);
 
+        CheckBox objectiveBotsOffline = new CheckBox(this);
+        objectiveBotsOffline.setText("CTF / KING BOT OBJECTIVES");
+        objectiveBotsOffline.setChecked(
+            offlinePreferences.getBoolean("objective_modes", false));
+        hudCheck(objectiveBotsOffline);
+        offlinePanel.addView(objectiveBotsOffline);
+        offlinePanel.addView(lanText("Enable bot flag and hill goals here, "
+            + "then choose Capture the Flag or King of the Hill "
+            + "in Halo's multiplayer game-type setup.", 12));
+
         // Collapsed utility, out of the way of normal Play. Android's picker
         // grants this app read access to a selected .map; this app alone
         // writes its own protected Android/data/<package>/files/maps folder.
@@ -770,6 +787,44 @@ public class LauncherActivity extends Activity {
             startActivityForResult(picker, PICK_CUSTOM_MAPS);
         });
         customMapsPanel.addView(customMapImportButton);
+
+        // Android file pickers sometimes hide unknown .map extensions.
+        // Request access to only the chosen folder; no all-files privilege.
+        customMapFolderButton = new Button(this);
+        customMapFolderButton.setText("IMPORT A MAP FOLDER");
+        hudButton(customMapFolderButton, false);
+        customMapFolderButton.setOnClickListener(view -> {
+            if (repairBusy)
+                return;
+            if (gameProcessStatus() != 0) {
+                customMapStatus.setText("Close Halo before importing maps.");
+                return;
+            }
+            startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE),
+                PICK_CUSTOM_FOLDER);
+        });
+        customMapsPanel.addView(customMapFolderButton);
+        customMapsPanel.addView(lanText("Select the Halo-Custom-Maps subfolder, "
+            + "not the Downloads root. ZIP import is available if Android "
+            + "won't grant access to the folder.", 12));
+
+        customMapZipButton = new Button(this);
+        customMapZipButton.setText("IMPORT A MAP PACK ZIP");
+        hudButton(customMapZipButton, false);
+        customMapZipButton.setOnClickListener(view -> {
+            if (repairBusy)
+                return;
+            if (gameProcessStatus() != 0) {
+                customMapStatus.setText("Close Halo before importing maps.");
+                return;
+            }
+            Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            picker.addCategory(Intent.CATEGORY_OPENABLE);
+            picker.setType("*/*");
+            startActivityForResult(picker, PICK_CUSTOM_ZIP);
+        });
+        customMapsPanel.addView(customMapZipButton);
+
         customMapStatus = lanText("Maps stay separate from the original Xbox maps.", 12);
         customMapStatus.setTextColor(HUD_WARNING);
         customMapsPanel.addView(customMapStatus);
@@ -858,8 +913,21 @@ public class LauncherActivity extends Activity {
                 int skill = offlineSkill.getSelectedItemPosition();
                 int team = offlineTeam.getSelectedItemPosition();
                 boolean crews = vehicleSeatsOffline.isChecked();
+                boolean objectives = objectiveBotsOffline.isChecked();
+                try {
+                    // Android's native game reads config.toml, not arbitrary
+                    // --offline-bots CLI flags. Apply before its :game process
+                    // starts, leaving [network] and LAN count untouched.
+                    OfflineBotConfig.enable(new File(dataRoot, "config.toml"), count,
+                        offlineSkills[skill].toLowerCase(java.util.Locale.ROOT),
+                        team == 0 ? "even" : "against", crews, objectives);
+                } catch (java.io.IOException error) {
+                    feedback.setText("Couldn't configure offline bots: " + error.getMessage());
+                    return;
+                }
                 offlinePreferences.edit().putInt("count", count).putInt("skill", skill)
-                    .putInt("team", team).putBoolean("vehicle_seats", crews).apply();
+                    .putInt("team", team).putBoolean("vehicle_seats", crews)
+                    .putBoolean("objective_modes", objectives).apply();
                 launcherPreferences.edit().putString("play_mode", "offline").apply();
                 Intent game = new Intent(this, HaloActivity.class);
                 game.putExtra(HaloActivity.OFFLINE_BOT_ARGUMENTS, new String[] {
@@ -873,6 +941,9 @@ public class LauncherActivity extends Activity {
             }
             if (lanMode.isChecked()) {
                 try {
+                    // Keep offline-only count/team/objective preferences
+                    // from leaking into a LAN session.
+                    OfflineBotConfig.disable(new File(dataRoot, "config.toml"));
                     String peer = LanConfig.peerForRole(hostRole.isChecked(),
                         hostIp.getText().toString(), lanOnly.isChecked());
                     boolean hosting = hostRole.isChecked() && lanOnly.isChecked()
@@ -892,7 +963,14 @@ public class LauncherActivity extends Activity {
                 }
                 launcherPreferences.edit().putString("play_mode", "lan").apply();
             } else {
-                // No box checked: launch ordinary Halo with existing settings.
+                // No box checked: launch ordinary Halo with no synthetic
+                // offline bots, while preserving network setup and saves.
+                try {
+                    OfflineBotConfig.disable(new File(dataRoot, "config.toml"));
+                } catch (java.io.IOException error) {
+                    feedback.setText("Couldn't disable offline bots: " + error.getMessage());
+                    return;
+                }
                 launcherPreferences.edit().putString("play_mode", "standard").apply();
             }
             startGame();
@@ -936,6 +1014,10 @@ public class LauncherActivity extends Activity {
             repairCartographerRestoreButton.setEnabled(false);
         if (customMapImportButton != null)
             customMapImportButton.setEnabled(false);
+        if (customMapFolderButton != null)
+            customMapFolderButton.setEnabled(false);
+        if (customMapZipButton != null)
+            customMapZipButton.setEnabled(false);
 
         new Thread(() -> {
             String result;
@@ -956,6 +1038,10 @@ public class LauncherActivity extends Activity {
                     customMapStatus.setText(message);
                 if (customMapImportButton != null)
                     customMapImportButton.setEnabled(true);
+                if (customMapFolderButton != null)
+                    customMapFolderButton.setEnabled(true);
+                if (customMapZipButton != null)
+                    customMapZipButton.setEnabled(true);
                 if (playButton != null)
                     playButton.setEnabled(true);
                 if (repairChooseButton != null)
@@ -1087,6 +1173,112 @@ public class LauncherActivity extends Activity {
         });
     }
 
+    private static final class MapDocument {
+        final Uri uri;
+        final String filename;
+
+        MapDocument(Uri uri, String filename) {
+            this.uri = uri;
+            this.filename = filename;
+        }
+    }
+
+    private void importCustomFolder(Uri tree) {
+        runMapRepair("Checking selected Custom Edition folder...", () -> {
+            String root = DocumentsContract.getTreeDocumentId(tree);
+            Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, root);
+            ArrayList<MapDocument> selected = new ArrayList<>();
+            HashSet<String> names = new HashSet<>();
+            String[] columns = {
+                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                DocumentsContract.Document.COLUMN_MIME_TYPE
+            };
+            try (Cursor cursor = getContentResolver().query(
+                    children, columns, null, null, null)) {
+                if (cursor == null)
+                    throw new java.io.IOException("Android could not list the chosen folder.");
+                while (cursor.moveToNext()) {
+                    String documentId = cursor.getString(0);
+                    String name = cursor.getString(1);
+                    String mime = cursor.getString(2);
+                    if (name == null || documentId == null ||
+                        DocumentsContract.Document.MIME_TYPE_DIR.equals(mime) ||
+                        !name.toLowerCase(Locale.ROOT).endsWith(".map"))
+                        continue;
+                    if (!CustomMapImporter.isValidName(name))
+                        throw new java.io.IOException("Unsafe map name in the folder: " + name);
+                    if (selected.size() >= 32)
+                        throw new java.io.IOException("Select a folder with at most 32 maps.");
+                    if (!names.add(name.toLowerCase(Locale.ROOT)))
+                        throw new java.io.IOException("The folder contains duplicate map names.");
+                    selected.add(new MapDocument(
+                        DocumentsContract.buildDocumentUriUsingTree(tree, documentId), name));
+                }
+            } catch (RuntimeException error) {
+                throw new java.io.IOException(
+                    "Android could not read this folder. Try a ZIP map pack instead.", error);
+            }
+            if (selected.isEmpty())
+                throw new java.io.IOException("No .map files were exposed by Android. "
+                    + "Try importing a ZIP map pack instead.");
+
+            // Sorting ensures the three shared resource maps install first,
+            // followed by individual maps. Sorting doesn't change filenames.
+            selected.sort((a, b) -> {
+                boolean resourceA = a.filename.equals("bitmaps.map") ||
+                    a.filename.equals("sounds.map") || a.filename.equals("loc.map");
+                boolean resourceB = b.filename.equals("bitmaps.map") ||
+                    b.filename.equals("sounds.map") || b.filename.equals("loc.map");
+                if (resourceA != resourceB)
+                    return resourceA ? -1 : 1;
+                return a.filename.compareToIgnoreCase(b.filename);
+            });
+
+            int count = 0;
+            long bytes = 0;
+            for (MapDocument document : selected) {
+                final int number = count + 1;
+                handler.post(() -> {
+                    if (customMapStatus != null)
+                        customMapStatus.setText("Importing " + document.filename + " ("
+                            + number + "/" + selected.size() + ")...");
+                });
+                try (InputStream input = getContentResolver().openInputStream(document.uri)) {
+                    if (input == null)
+                        throw new java.io.IOException(
+                            "Android could not open " + document.filename);
+                    CustomMapImporter.Result result = CustomMapImporter.install(
+                        input, dataRoot, document.filename);
+                    bytes += result.size;
+                    count++;
+                } catch (java.io.IOException error) {
+                    throw new java.io.IOException(count + " map(s) installed, then "
+                        + document.filename + " failed: " + error.getMessage(), error);
+                }
+            }
+            return count + " Custom Edition maps/resources imported ("
+                + (bytes / 1048576) + " MiB). Open CUSTOM MULTIPLAYER.";
+        });
+    }
+
+    private void importCustomZip(Uri document) {
+        runMapRepair("Checking selected ZIP map pack...", () -> {
+            try (InputStream input = getContentResolver().openInputStream(document)) {
+                if (input == null)
+                    throw new java.io.IOException("Android could not open the ZIP.");
+                CustomMapPack.Result result = CustomMapPack.install(
+                    input, dataRoot, (name, index) -> handler.post(() -> {
+                        if (customMapStatus != null)
+                            customMapStatus.setText("Installing ZIP map " + index
+                                + ": " + name);
+                    }));
+                return result.files + " ZIP map(s)/resources imported ("
+                    + (result.bytes / 1048576) + " MiB). Open CUSTOM MULTIPLAYER.";
+            }
+        });
+    }
+
     private void buildInterface() {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
@@ -1174,6 +1366,16 @@ public class LauncherActivity extends Activity {
         if (requestCode == PICK_CUSTOM_MAPS) {
             if (resultCode == RESULT_OK && data != null)
                 importCustomMaps(data);
+            return;
+        }
+        if (requestCode == PICK_CUSTOM_FOLDER) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null)
+                importCustomFolder(data.getData());
+            return;
+        }
+        if (requestCode == PICK_CUSTOM_ZIP) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null)
+                importCustomZip(data.getData());
             return;
         }
         if (requestCode != PICK_IMAGE || resultCode != RESULT_OK || data == null || data.getData() == null)

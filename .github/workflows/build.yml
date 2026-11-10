@@ -205,6 +205,10 @@ jobs:
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.SidewinderRepairTest
           javac -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/CustomMapImporter.java tools/lan/CustomMapImporterTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.CustomMapImporterTest
+          javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/CustomMapPack.java tools/lan/CustomMapPackTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.CustomMapPackTest
+          javac -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/OfflineBotConfig.java tools/lan/OfflineBotConfigTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.OfflineBotConfigTest
 
       - name: Release
         env:

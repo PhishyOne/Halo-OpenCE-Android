@@ -100,6 +100,34 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         self.assertIn('customMapImportButton.setEnabled(true);', s)
         self.assertIn('runMapRepair("Importing "', s)
 
+    def test_custom_map_folder_and_zip_fallback(self):
+        s = self.source
+        self.assertIn('customMapFolderButton.setText("IMPORT A MAP FOLDER");', s)
+        self.assertIn('new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)', s)
+        self.assertIn('PICK_CUSTOM_FOLDER', s)
+        self.assertIn('DocumentsContract.buildChildDocumentsUriUsingTree(tree, root)', s)
+        self.assertIn('DocumentsContract.buildDocumentUriUsingTree(tree, documentId)', s)
+        self.assertIn('input, dataRoot, document.filename)', s)
+        self.assertIn('customMapZipButton.setText("IMPORT A MAP PACK ZIP");', s)
+        self.assertIn('CustomMapPack.install(', s)
+        self.assertIn('PICK_CUSTOM_ZIP', s)
+        self.assertIn('if (gameProcessStatus() != 0)', s)
+        self.assertIn('customMapFolderButton.setEnabled(false)', s)
+        self.assertIn('customMapZipButton.setEnabled(false)', s)
+        self.assertIn('customMapFolderButton.setEnabled(true)', s)
+        self.assertIn('customMapZipButton.setEnabled(true)', s)
+
+    def test_offline_ctf_king_uses_native_configuration(self):
+        s = self.source
+        self.assertIn('objectiveBotsOffline.setText("CTF / KING BOT OBJECTIVES");', s)
+        self.assertIn('offlinePreferences.getBoolean("objective_modes", false)', s)
+        self.assertIn('OfflineBotConfig.enable(new File(dataRoot, "config.toml"), count,', s)
+        self.assertIn('team == 0 ? "even" : "against", crews, objectives)', s)
+        self.assertIn('.putBoolean("objective_modes", objectives).apply()', s)
+        self.assertIn('OfflineBotConfig.disable(new File(dataRoot, "config.toml"))', s)
+        self.assertIn('LanConfig.save(new File(dataRoot, "config.toml")', s)
+        self.assertIn('startGame(game);', s)
+
     def test_disc_import_is_preserved(self):
         s = self.source
         self.assertIn('Intent.ACTION_OPEN_DOCUMENT', s)
