@@ -3,6 +3,8 @@ package com.halo.decomp;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.AlertDialog;
+import android.content.ClipData;
+import android.database.Cursor;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -15,6 +17,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
+import android.provider.OpenableColumns;
 import android.provider.Settings;
 import android.util.TypedValue;
 import android.text.InputType;
@@ -42,6 +45,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.io.OutputStream;
 import java.nio.channels.FileChannel;
 
@@ -59,6 +64,7 @@ public class LauncherActivity extends Activity {
     private static final int PICK_IMAGE = 1;
     private static final int PICK_SIDEWINDER = 2;
     private static final int PICK_CARTOGRAPHER = 3;
+    private static final int PICK_CUSTOM_MAPS = 4;
     // Halo-style HUD colours. Native Android widgets remain accessible,
     // including the system file picker and LAN diagnostics.
     private static final int HUD_TEXT = Color.rgb(226, 237, 231);
@@ -77,6 +83,8 @@ public class LauncherActivity extends Activity {
     private Button repairChooseButton;
     private Button repairCartographerChooseButton;
     private Button repairCartographerRestoreButton;
+    private Button customMapImportButton;
+    private TextView customMapStatus;
     private Button playButton;
     private volatile boolean repairBusy;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -732,6 +740,40 @@ public class LauncherActivity extends Activity {
         repairStatus.setTextColor(HUD_WARNING);
         repairPanel.addView(repairStatus);
 
+        Button customMapsToggle = new Button(this);
+        customMapsToggle.setText("CUSTOM MAPS");
+        hudButton(customMapsToggle, false);
+        content.addView(customMapsToggle);
+        LinearLayout customMapsPanel = hudPanel();
+        customMapsPanel.setVisibility(View.GONE);
+        content.addView(customMapsPanel);
+        customMapsToggle.setOnClickListener(view -> customMapsPanel.setVisibility(
+            customMapsPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+        customMapsPanel.addView(hudSection("HALO CUSTOM EDITION"));
+        customMapsPanel.addView(lanText("Import .map files and shared resources. "
+            + "Choose multiple files from Downloads/Halo-Custom-Maps. "
+            + "Imported arenas appear in CUSTOM MULTIPLAYER.", 12));
+        customMapImportButton = new Button(this);
+        customMapImportButton.setText("IMPORT CUSTOM MAP FILES");
+        hudButton(customMapImportButton, false);
+        customMapImportButton.setOnClickListener(view -> {
+            if (repairBusy)
+                return;
+            if (gameProcessStatus() != 0) {
+                customMapStatus.setText("Force-stop Halo before importing custom maps.");
+                return;
+            }
+            Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            picker.addCategory(Intent.CATEGORY_OPENABLE);
+            picker.setType("*/*");
+            picker.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+            startActivityForResult(picker, PICK_CUSTOM_MAPS);
+        });
+        customMapsPanel.addView(customMapImportButton);
+        customMapStatus = lanText("Maps stay separate from the original Xbox maps.", 12);
+        customMapStatus.setTextColor(HUD_WARNING);
+        customMapsPanel.addView(customMapStatus);
+
         // Fixed footer stays on screen even when the host options are long.
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.VERTICAL);
@@ -873,11 +915,15 @@ public class LauncherActivity extends Activity {
         if (gameProcessStatus() != 0) {
             if (repairStatus != null)
                 repairStatus.setText("Close or force-stop Halo before repairing maps.");
+            if (customMapStatus != null)
+                customMapStatus.setText("Close or force-stop Halo before importing maps.");
             return;
         }
         repairBusy = true;
         if (repairStatus != null)
             repairStatus.setText(initialStatus);
+        if (customMapStatus != null)
+            customMapStatus.setText(initialStatus);
         if (playButton != null)
             playButton.setEnabled(false);
         if (repairChooseButton != null)
@@ -888,6 +934,8 @@ public class LauncherActivity extends Activity {
             repairCartographerChooseButton.setEnabled(false);
         if (repairCartographerRestoreButton != null)
             repairCartographerRestoreButton.setEnabled(false);
+        if (customMapImportButton != null)
+            customMapImportButton.setEnabled(false);
 
         new Thread(() -> {
             String result;
@@ -904,6 +952,10 @@ public class LauncherActivity extends Activity {
                 repairBusy = false;
                 if (repairStatus != null)
                     repairStatus.setText(message);
+                if (customMapStatus != null)
+                    customMapStatus.setText(message);
+                if (customMapImportButton != null)
+                    customMapImportButton.setEnabled(true);
                 if (playButton != null)
                     playButton.setEnabled(true);
                 if (repairChooseButton != null)
@@ -968,6 +1020,70 @@ public class LauncherActivity extends Activity {
             SidewinderRepair.restorePrevious(dataRoot, SidewinderRepair.CARTOGRAPHER_MAP);
             return "Previous Silent Cartographer map restored. "
                 + "The newer b30.map is preserved separately.";
+        });
+    }
+
+    /** The display name is only used after it passes CustomMapImporter's
+     * strict filename grammar. Do not use a document URI's path as a name. */
+    private String customMapDisplayName(Uri document) throws java.io.IOException {
+        try (Cursor cursor = getContentResolver().query(document,
+                new String[] { OpenableColumns.DISPLAY_NAME }, null, null, null)) {
+            if (cursor == null || !cursor.moveToFirst() || cursor.isNull(0))
+                throw new java.io.IOException("Android did not provide a map filename.");
+            return cursor.getString(0);
+        } catch (RuntimeException exception) {
+            throw new java.io.IOException("Could not read the selected map name.", exception);
+        }
+    }
+
+    private void importCustomMaps(Intent result) {
+        ArrayList<Uri> documents = new ArrayList<>();
+        LinkedHashSet<String> seen = new LinkedHashSet<>();
+        ClipData clips = result.getClipData();
+        if (clips != null) {
+            for (int i = 0; i < clips.getItemCount(); i++) {
+                Uri document = clips.getItemAt(i).getUri();
+                if (document != null && seen.add(document.toString()))
+                    documents.add(document);
+            }
+        }
+        Uri single = result.getData();
+        if (single != null && seen.add(single.toString()))
+            documents.add(single);
+        if (documents.isEmpty() || documents.size() > 32) {
+            if (customMapStatus != null)
+                customMapStatus.setText("Choose between 1 and 32 custom .map files.");
+            return;
+        }
+
+        runMapRepair("Importing " + documents.size() + " Custom Edition files...", () -> {
+            int installed = 0;
+            long bytes = 0;
+            for (Uri document : documents) {
+                String name = customMapDisplayName(document);
+                if (!CustomMapImporter.isValidName(name))
+                    throw new java.io.IOException("Unsupported map filename: " + name);
+                final int fileIndex = installed + 1;
+                handler.post(() -> {
+                    if (customMapStatus != null)
+                        customMapStatus.setText("Verifying " + name + " (" + fileIndex
+                            + " of " + documents.size() + ")...");
+                });
+                try (InputStream input = getContentResolver().openInputStream(document)) {
+                    if (input == null)
+                        throw new java.io.IOException("Android could not open " + name);
+                    CustomMapImporter.Result outcome =
+                        CustomMapImporter.install(input, dataRoot, name);
+                    installed++;
+                    bytes += outcome.size;
+                } catch (java.io.IOException problem) {
+                    throw new java.io.IOException(installed + " file(s) installed; "
+                        + "could not import " + name + ": " + problem.getMessage(), problem);
+                }
+            }
+            return "Imported " + installed + " Custom Edition files ("
+                + (bytes / (1024 * 1024)) + " MiB). "
+                + "Choose CUSTOM MULTIPLAYER in Halo's map list.";
         });
     }
 
@@ -1053,6 +1169,11 @@ public class LauncherActivity extends Activity {
         if (requestCode == PICK_CARTOGRAPHER) {
             if (resultCode == RESULT_OK && data != null && data.getData() != null)
                 importCartographer(data.getData());
+            return;
+        }
+        if (requestCode == PICK_CUSTOM_MAPS) {
+            if (resultCode == RESULT_OK && data != null)
+                importCustomMaps(data);
             return;
         }
         if (requestCode != PICK_IMAGE || resultCode != RESULT_OK || data == null || data.getData() == null)
