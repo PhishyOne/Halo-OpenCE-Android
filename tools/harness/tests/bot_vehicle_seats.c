@@ -7,7 +7,7 @@ struct tag_block { int count; };
 struct unit_seat { unsigned long flags; char label[32]; };
 struct unit_definition { struct { struct tag_block seats; } unit; };
 struct unit_datum {
-    struct { unsigned long damage_flags; } object;
+    struct { unsigned long damage_flags; struct { float i,j,k; } up; } object;
     struct { unsigned long flags; long driver_object_index; } unit;
     int definition_index;
 };
@@ -21,6 +21,9 @@ struct bots_bot {
     long vehicle_index;
     short vehicle_seat_index;
     long vehicle_press_tick;
+    long player_index;
+    long vehicle_ignore_index, vehicle_ignore_until_tick, next_vehicle_scan_tick;
+    struct { boolean valid; } path;
 };
 struct bots_tick {
     struct player_datum *player;
@@ -34,12 +37,22 @@ enum {
     _unit_seat_gunner_bit = 3,
     _object_dead_bit = 5,
     _object_mask_vehicle = 4,
+    _bots_goal_none = 0,
     _bots_goal_vehicle = 6,
+    _bots_goal_vehicle_flip = 8,
     _unit_control_action_bit = 9,
     _player_action_result_enter_vehicle = 12,
+    _player_action_result_flip_vehicle = 13,
     UNIT_CONTROL_PORT_ACTION_ONLY_BIT = 15
 };
 #define TAG_BLOCK_GET_ELEMENT(block, index, type) (&test_seats[index])
+#define BOTS_VEHICLE_RETRY_TICKS (TICKS_PER_SECOND * 12)
+static int flip_logs = 0;
+static void platform_log(char const *format, ...)
+{
+    (void) format;
+    flip_logs++;
+}
 #define real_point3d point3
 static struct unit_seat test_seats[3];
 static struct unit_definition test_definition;
@@ -74,6 +87,7 @@ static boolean unit_get_seat_entrance_point(long u, long v, short s, point3 *ent
     return TRUE;
 }
 #include "under_test_seat.inc"
+#include "under_test_stop.inc"
 #include "under_test_action.inc"
 
 int main(int argc, char **argv)
@@ -94,6 +108,7 @@ int main(int argc, char **argv)
     test_seats[1].flags = FLAG(_unit_seat_gunner_bit);
     test_definition.unit.seats.count = 3;
     test_vehicle.unit.driver_object_index = NONE;
+    test_vehicle.object.up.k = 1.0f;
     object.object.parent_object_index = NONE;
     tick.object = &object;
     tick.player = &player;
@@ -205,6 +220,72 @@ int main(int argc, char **argv)
         bot.vehicle_press_tick = 150;
         bots_bot_vehicle_action(&bot, &tick);
         CHECK(tick.flags == 0, "spammed Action inside cooldown");
+        return 0;
+    }
+    CASE("flipped-seat-rejected")
+    {
+        test_vehicle.object.up.k = -1.0f;
+        accepted = bots_vehicle_seat_usable(7, 33, 1, &entrance, &gunner);
+        CHECK(!accepted && seat_entry_calls == 0,
+              "upside-down Warthog was treated as a usable turret");
+        return 0;
+    }
+    CASE("flip-action")
+    {
+        bot.goal_kind = _bots_goal_vehicle_flip;
+        bot.player_index = 7;
+        bot.path.valid = TRUE;
+        player.action_object_index = 33;
+        player.action_result = _player_action_result_flip_vehicle;
+        bots_bot_vehicle_action(&bot, &tick);
+        CHECK(TEST_FLAG(tick.flags, _unit_control_action_bit) &&
+              TEST_FLAG(tick.flags, UNIT_CONTROL_PORT_ACTION_ONLY_BIT) &&
+              bot.vehicle_press_tick == 100 + TICKS_PER_SECOND &&
+              bot.vehicle_index == NONE && bot.goal_kind == _bots_goal_none &&
+              bot.vehicle_ignore_index == 33 && bot.vehicle_ignore_until_tick > tick.now &&
+              !bot.path.valid && flip_logs == 1,
+              "did not flip with player Action and release recovery reservation");
+        return 0;
+    }
+    CASE("flip-wrong-object")
+    {
+        bot.goal_kind = _bots_goal_vehicle_flip;
+        player.action_object_index = 77;
+        player.action_result = _player_action_result_flip_vehicle;
+        bots_bot_vehicle_action(&bot, &tick);
+        CHECK(tick.flags == 0 && bot.vehicle_index == 33,
+              "bot tried to flip a vehicle different from its reservation");
+        return 0;
+    }
+    CASE("flip-while-seated")
+    {
+        bot.goal_kind = _bots_goal_vehicle_flip;
+        object.object.parent_object_index = 33;
+        player.action_object_index = 33;
+        player.action_result = _player_action_result_flip_vehicle;
+        bots_bot_vehicle_action(&bot, &tick);
+        CHECK(tick.flags == 0 && bot.vehicle_index == 33,
+              "seated bot tried to flip its own vehicle");
+        return 0;
+    }
+    CASE("flip-cooldown")
+    {
+        bot.goal_kind = _bots_goal_vehicle_flip;
+        bot.vehicle_press_tick = 200;
+        player.action_object_index = 33;
+        player.action_result = _player_action_result_flip_vehicle;
+        bots_bot_vehicle_action(&bot, &tick);
+        CHECK(tick.flags == 0 && bot.vehicle_index == 33,
+              "bot hammered vehicle Flip while on cooldown");
+        return 0;
+    }
+    CASE("flip-goal-only")
+    {
+        player.action_object_index = 33;
+        player.action_result = _player_action_result_flip_vehicle;
+        bots_bot_vehicle_action(&bot, &tick);
+        CHECK(tick.flags == 0 && flip_logs == 0,
+              "bot without a recovery reservation flipped a Warthog");
         return 0;
     }
     fprintf(stderr, "Unknown test case: %s\n", case_name);

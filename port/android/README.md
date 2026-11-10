@@ -101,6 +101,23 @@ experiment installs in place over versions 2 or 3 signed with the same
 certificate, while the original com.halo.decomp app remains untouched.
 Normal builds without this flag continue to use com.halo.decomp.
 
+### Warthog recovery for computer players
+
+With the existing **VEHICLE CREWS** setting enabled, bots now recognise
+overturned vehicles instead of trying to enter an inaccessible gunner seat.
+Only one bot may approach an overturned vehicle for recovery; other bots
+continue their normal combat and movement. That bot waits for the same
+**Flip Vehicle** action prompt a human player receives and sends the
+regular networked Action control. No vehicle teleport or AI-only physics
+call is used, and the bot never takes the driver seat.
+
+An occupied, damaged, moving or already-upending vehicle is skipped.
+A failed recovery reservation expires after eight seconds and backs off
+for twelve seconds, instead of gathering bots around the wreck. Flip
+actions are attempted only with the existing vehicle AI opt-in.
+This behavior has source-level tests but still needs an actual Warthog
+rollover test in a live offline/LAN match.
+
 ### Repairing Sidewinder
 
 The launcher has a collapsed **MAP REPAIR** panel. It works inside the app's
