@@ -195,6 +195,7 @@ jobs:
           python3 tools/test_bot_objective_policy.py -v
           python3 tools/test_bot_vehicle_flip.py
           python3 tools/test_bot_garbage_policy.py -v
+          python3 tools/test_lobby_bot_count.py -v
           python3 tools/test_bot_target_performance.py
           python3 tools/test_bot_automatic_modes.py -v
           python3 tools/test_coop_unit_resync.py -v

@@ -132,6 +132,25 @@ obvious IPs and emails redacted. It does not include config.toml,
 credentials or map contents, and never sends anything automatically.
 Review any report before sharing it.
 
+### Changing the bot count without restarting Halo
+
+In the **multiplayer pregame lobby**, the hosting phone now shows **BOTS -**
+and **BOTS +** at the left of the bottom button row, plus its current target
+bot count. These work for local offline Slayer, CTF and King, and for a LAN
+System Link host, but not for a joining client, Internet host or active
+game. The buttons cycle useful presets: offline 0, 4, 8, 12, 16, 24, 32,
+48, 64, 96, 127; LAN 0, 2, 4, 6, 8, 12, 16. The saved count is changed
+through the game's native config_write and existing authoritative
+pregame network_game_server_port_bots reconciler adds or removes synthetic
+players on its next idle tick. No game reload, app restart, player-data
+migration or new network protocol is needed. All normal lobby functions
+(Start Now, Add Player, Switch Team, Leave, map vote) remain unchanged.
+
+For 127-bot stress maps like King of the Hill, return to the lobby and
+reduce the count before starting the next match. It deliberately does not
+try to remove players during active combat, which needs additional
+distributed-player object reconciliation to be safe.
+
 ### Large offline bot-match corpse and object performance
 
 Large local bot matches (48 or more simulated/real players) use a

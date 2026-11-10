@@ -1842,15 +1842,20 @@ def _lobby() -> list:
                      [f'<child widget="{base}/lobby_map_pic"/>', f'<child widget="{base}/lobby_map_name"/>',
                       '<child widget="main_menu/solo_level_select/replay_level_right_pic"/>',
                       '<child widget="main_menu/solo_level_select/replay_level_right_name"/>',
-                      f'<child widget="{base}/lobby_game_data"/>'])
+                      f'<child widget="{base}/lobby_game_data"/>',
+                      f'<child widget="{base}/lobby_bot_count_label"/>'])
     lines += _widget(f"{base}/lobby_map_pic", [("controller", 1), ("left", 419), ("top", 87), ("width", 140),
                                                ("height", 114), ("bitmap", "ui\\shell\\bitmaps\\mp_map_grafix")], [])
     lines += _widget(f"{base}/lobby_map_name", [("type", "text"), ("controller", 1), ("left", 417), ("top", 204),
                                                 ("width", 146), ("height", 43), ("string_list", "main_menu/mp_map_list"),
                                                 ("font", "ui\\large_ui"), ("color", "#FF2896FF")], [])
     lines += _widget(f"{base}/lobby_game_data", [("type", "text"), ("controller", 1), ("left", 417), ("top", 250),
-                                                 ("width", 146), ("height", 144), ("font", "ui\\small_ui"),
+                                                 ("width", 146), ("height", 124), ("font", "ui\\small_ui"),
                                                  ("color", "#FF2896FF")], [])
+    lines += _widget(f"{base}/lobby_bot_count_label",
+                     [("type", "text"), ("controller", 1), ("left", 417), ("top", 376),
+                      ("width", 146), ("height", 20), ("font", "ui\\small_ui"),
+                      ("color", "#FF85DCFF"), ("text_flags", "no_focus_test")], [])
     # (its words: menu_functions.c's lobby_update. "<name> - dedicated": the
     # game's host is a dedicated server)
     lines += _strings(f"{base}/lobby_words", ["dedicated"])
@@ -1859,10 +1864,29 @@ def _lobby() -> list:
                      # (SWITCH TEAM first: hidden in a game without teams, which
                      # moves the focus to the first shown, START NOW; at the end
                      # it traps none)
-                     [f'<child widget="{base}/lobby_button_team" x="120" y="1"/>',
+                     [f'<child widget="{base}/lobby_bot_less" x="0" y="1"/>',
+                      f'<child widget="{base}/lobby_bot_more" x="61" y="1"/>',
+                      f'<child widget="{base}/lobby_button_team" x="120" y="1"/>',
                       f'<child widget="{base}/lobby_button_start" x="250" y="1"/>',
                       f'<child widget="{base}/lobby_button_add" x="380" y="1"/>',
                       f'<child widget="{base}/lobby_button_leave" x="510" y="1"/>'])
+    # Visible only to the local/offline or LAN host before a match begins.
+    # The host's existing pregame reconciler watches bots.count and will
+    # add or remove its synthetic players without a game restart.
+    for key, caption, action in (
+        ("less", "BOTS -", "port lobby bots fewer"),
+        ("more", "BOTS +", "port lobby bots more"),
+    ):
+        lines += _widget(f"{base}/lobby_bot_{key}",
+                         [("type", "text"), ("controller", 1),
+                          ("width", 59), ("height", 24),
+                          ("bitmap", "bitmaps/text_button_background"),
+                          ("text", caption), ("font", "ui\\small_ui"),
+                          ("color", "#FFFFFFFF"), ("align", "center"),
+                          ("text_y", 2)],
+                         [f'<on event="a" run="{action}"/>',
+                          f'<on event="start" run="{action}"/>',
+                          f'<on event="left_mouse" run="{action}"/>'])
     for key, caption, handlers in (
         ("add", "ADD PLAYER", [f'<on event="a" run="port lobby add player" open="{base}/join4_screen"/>',
                                f'<on event="start" run="port lobby add player" open="{base}/join4_screen"/>']),

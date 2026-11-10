@@ -83,6 +83,7 @@ their handlers open opens.
 #include "text/unicode.h"
 
 #include "halo_menus.h"
+#include "lobby_bot_count_policy.h"
 #include "controller_remap.h"
 #include "custom_edition_cache.h"
 #include "custom_edition_maps.h"
@@ -111,6 +112,7 @@ void event_manager_post_button(short controller_index, short button_index);
 int config_text(char const *name, char *text, unsigned int size);
 int config_write(char const *name, char const *value);
 int config_boolean(char const *name);
+long config_integer(char const *name);
 int config_default(char const *name, char *text, unsigned int size);
 char const *config_string(char const *name);
 void platform_display_apply(void);
@@ -6100,6 +6102,52 @@ enum
 
 static void map_vote_lobby_check(void);
 
+/* Only the real hosting phone may change its synthetic player count,
+ * only while waiting in its own pregame lobby. The server's existing
+ * pregame bot reconciler notices changed [bots] counts on its next tick. */
+static boolean lobby_bot_count_available(void)
+{
+    void *server = global_network_game_server_get();
+    void *client = global_network_game_client_get();
+    struct network_game *game = client ? network_game_client_get_game(client) : NULL;
+    short state_data;
+
+    if (!server || !client || !game ||
+        (!network_game_is_splitscreen_local() && config_boolean("network.online")) ||
+        network_game_client_get_state(client, &state_data) != _client_state_pregame ||
+        network_game_server_port_start_sent(server))
+        return FALSE;
+    return game->variant.game_engine_index == game_engine_slayer ||
+        (config_boolean("bots.objective_modes") &&
+            (game->variant.game_engine_index == game_engine_ctf ||
+             game->variant.game_engine_index == game_engine_king));
+}
+
+static boolean lobby_bot_count_change(short controller, short direction)
+{
+    char value[16];
+    char const *setting;
+    long current;
+    int desired;
+
+    /* Controller one is the host. Guests cannot adjust the host's bots. */
+    if (controller != 0 || !lobby_bot_count_available())
+        return FALSE;
+    setting = network_game_is_splitscreen_local() ?
+        "bots.count" : "bots.system_link_count";
+    current = config_integer(setting);
+    desired = halo_lobby_next_bot_count((int)current, direction,
+        !network_game_is_splitscreen_local());
+    if (desired == current)
+        return TRUE;
+    snprintf(value, sizeof(value), "%d", desired);
+    if (!config_write(setting, value))
+        return FALSE;
+    platform_log("lobby: %s changed from %ld to %d (pregame only)",
+        setting, current, desired);
+    return TRUE;
+}
+
 /* "port lobby update" */
 static void lobby_update(struct widget_instance *list)
 {
@@ -6108,6 +6156,7 @@ static void lobby_update(struct widget_instance *list)
 	struct network_game *game = client ? network_game_client_get_game(client) : NULL;
 	short state_data, state = client ? network_game_client_get_state(client, &state_data) : NONE;
 	wchar_t text[LOBBY_TEXT_LENGTH];
+	boolean bot_controls = lobby_bot_count_available();
 	short index;
 
 	lobby_player_count = 0;
@@ -6137,6 +6186,21 @@ static void lobby_update(struct widget_instance *list)
 	}
 	lobby_join_help(list);
 	map_vote_lobby_check();
+	visible_set(named(list, "lobby_bot_less", 0), bot_controls);
+	visible_set(named(list, "lobby_bot_more", 0), bot_controls);
+	visible_set(named(description, "lobby_bot_count_label", 0), bot_controls);
+	if (bot_controls)
+	{
+		wchar_t bot_text[20];
+		char const *setting = network_game_is_splitscreen_local() ?
+			"bots.count" : "bots.system_link_count";
+
+		usnprintf(bot_text, NUMBEROF(bot_text) - 1, L"BOTS: %ld",
+			config_integer(setting));
+		bot_text[NUMBEROF(bot_text) - 1] = 0;
+		text_set_length(named(description, "lobby_bot_count_label", 0),
+			bot_text, (short)NUMBEROF(bot_text));
+	}
 	visible_set(named(list, "lobby_button_team", 0), game && game->variant.universal_variant.teams);
 	/* (the buttons' focus, off Switch Team when it is hidden) */
 	focus_off_hidden(named(list, "lobby_button_bar", 0));
@@ -8049,6 +8113,12 @@ boolean pc_menu_event_function_invoke(
 		else if (!strcmp(name, "port join4 done"))
 		{
 			return join4_done(controller_of(widget));
+		}
+		else if (!strcmp(name, "port lobby bots fewer") ||
+			!strcmp(name, "port lobby bots more"))
+		{
+			return lobby_bot_count_change(controller,
+				(short)(!strcmp(name, "port lobby bots more") ? 1 : -1));
 		}
 		else if (!strcmp(name, "port lobby join"))
 		{

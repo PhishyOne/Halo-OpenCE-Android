@@ -443,6 +443,18 @@ range_culled and LOS work to distinguish cheap culling from real collision
 tests. This is a candidate for physical stress tests, not a guarantee
 that 127 bots will stay at a stable frame rate.
 
+## Pregame bot count buttons
+
+In the host's multiplayer lobby, the bottom button row adds **BOTS -**
+and **BOTS +**, with the selected count displayed beside the map details.
+This writes bots.count (offline) or bots.system_link_count (LAN), which
+the existing server's pregame reconciler observes. Offline cycles
+0/4/8/12/16/24/32/48/64/96/127, and LAN cycles
+0/2/4/6/8/12/16. Host-only, before Start Now, in Slayer/CTF/King;
+not available to LAN guests or Internet games and disabled during a
+running match. Counts persist in config.toml. No player removal or
+new protocol is performed during gameplay.
+
 ## OpenCE gametypes
 
 Create Game's Select Gametype screen has a bank between STANDARD and
