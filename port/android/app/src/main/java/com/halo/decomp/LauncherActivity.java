@@ -70,6 +70,7 @@ public class LauncherActivity extends Activity {
     private static final int PICK_CUSTOM_MAPS = 4;
     private static final int PICK_CUSTOM_FOLDER = 5;
     private static final int PICK_CUSTOM_ZIP = 6;
+    private static final int SAVE_DIAGNOSTICS = 7;
     // Halo-style HUD colours. Native Android widgets remain accessible,
     // including the system file picker and LAN diagnostics.
     private static final int HUD_TEXT = Color.rgb(226, 237, 231);
@@ -92,6 +93,7 @@ public class LauncherActivity extends Activity {
     private Button customMapFolderButton;
     private Button customMapZipButton;
     private TextView customMapStatus;
+    private TextView diagnosticStatus;
     private Button playButton;
     private volatile boolean repairBusy;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -563,16 +565,9 @@ public class LauncherActivity extends Activity {
         }
         Spinner lanSkill = botChoice(hostPanel, "DIFFICULTY",
             lanSkillChoices, lanSkillSelection);
-        CheckBox vehicleSeatsLan = new CheckBox(this);
-        vehicleSeatsLan.setText("VEHICLE CREWS");
-        vehicleSeatsLan.setChecked(settings.vehicleSeats);
-        hudCheck(vehicleSeatsLan);
-        hostPanel.addView(vehicleSeatsLan);
-        CheckBox objectiveBotsLan = new CheckBox(this);
-        objectiveBotsLan.setText("CTF / KING OBJECTIVES");
-        objectiveBotsLan.setChecked(settings.objectiveModes);
-        hudCheck(objectiveBotsLan);
-        hostPanel.addView(objectiveBotsLan);
+        hostPanel.addView(lanText("Vehicle crews are automatic. "
+            + "Bots pursue flags in CTF and hills in King; "
+            + "Slayer bots keep their normal tactics.", 12));
         lanPanel.addView(hostPanel);
 
         LinearLayout joinPanel = new LinearLayout(this);
@@ -656,21 +651,9 @@ public class LauncherActivity extends Activity {
         String[] offlineTeams = { "Balanced teams", "Bots against players" };
         Spinner offlineTeam = botChoice(offlinePanel, "TEAM ASSIGNMENT",
             offlineTeams, offlinePreferences.getInt("team", 0));
-        CheckBox vehicleSeatsOffline = new CheckBox(this);
-        vehicleSeatsOffline.setText("VEHICLE CREWS");
-        vehicleSeatsOffline.setChecked(offlinePreferences.getBoolean("vehicle_seats", false));
-        hudCheck(vehicleSeatsOffline);
-        offlinePanel.addView(vehicleSeatsOffline);
-
-        CheckBox objectiveBotsOffline = new CheckBox(this);
-        objectiveBotsOffline.setText("CTF / KING BOT OBJECTIVES");
-        objectiveBotsOffline.setChecked(
-            offlinePreferences.getBoolean("objective_modes", false));
-        hudCheck(objectiveBotsOffline);
-        offlinePanel.addView(objectiveBotsOffline);
-        offlinePanel.addView(lanText("Enable bot flag and hill goals here, "
-            + "then choose Capture the Flag or King of the Hill "
-            + "in Halo's multiplayer game-type setup.", 12));
+        offlinePanel.addView(lanText("Vehicle crews are automatic. "
+            + "CTF and King bots play their objectives; other modes "
+            + "are unaffected. Choose the game type inside Halo.", 12));
 
         // Collapsed utility, out of the way of normal Play. Android's picker
         // grants this app read access to a selected .map; this app alone
@@ -829,6 +812,25 @@ public class LauncherActivity extends Activity {
         customMapStatus.setTextColor(HUD_WARNING);
         customMapsPanel.addView(customMapStatus);
 
+        // On-demand, file-picker-scoped diagnostics. Never auto-upload logs,
+        // include config.toml, or request broad Android storage permissions.
+        Button diagnostics = new Button(this);
+        diagnostics.setText("SAVE DIAGNOSTIC REPORT");
+        hudButton(diagnostics, false);
+        diagnostics.setOnClickListener(view -> {
+            if (repairBusy)
+                return;
+            Intent picker = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            picker.addCategory(Intent.CATEGORY_OPENABLE);
+            picker.setType("text/plain");
+            picker.putExtra(Intent.EXTRA_TITLE, "Halo-diagnostics.txt");
+            startActivityForResult(picker, SAVE_DIAGNOSTICS);
+        });
+        content.addView(diagnostics);
+        diagnosticStatus = lanText("Saves recent co-op/network errors and "
+            + "map names, not credentials. Review the report before sharing.", 12);
+        content.addView(diagnosticStatus);
+
         // Fixed footer stays on screen even when the host options are long.
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.VERTICAL);
@@ -912,8 +914,10 @@ public class LauncherActivity extends Activity {
                 int count = offlineCount.getSelectedItemPosition() + 1;
                 int skill = offlineSkill.getSelectedItemPosition();
                 int team = offlineTeam.getSelectedItemPosition();
-                boolean crews = vehicleSeatsOffline.isChecked();
-                boolean objectives = objectiveBotsOffline.isChecked();
+                // Both features now default on. Objective AI is constrained
+                // to CTF/King by the native bot planner, so Slayer is unaffected.
+                boolean crews = true;
+                boolean objectives = true;
                 try {
                     // Android's native game reads config.toml, not arbitrary
                     // --offline-bots CLI flags. Apply before its :game process
@@ -953,8 +957,7 @@ public class LauncherActivity extends Activity {
                         ? LanConfig.BOT_SKILLS[lanSkill.getSelectedItemPosition()] : null;
                     LanConfig.save(new File(dataRoot, "config.toml"),
                         local.getText().toString(), peer, lanOnly.isChecked(),
-                        count, skill, hosting && vehicleSeatsLan.isChecked(),
-                        hosting && objectiveBotsLan.isChecked());
+                        count, skill, true, true);
                     if (invitePending)
                         publishPendingInvite();
                 } catch (java.io.IOException e) {
@@ -1279,6 +1282,26 @@ public class LauncherActivity extends Activity {
         });
     }
 
+    private void saveDiagnostics(Uri destination) {
+        new Thread(() -> {
+            String result;
+            try (OutputStream output =
+                    getContentResolver().openOutputStream(destination, "wt")) {
+                if (output == null)
+                    throw new java.io.IOException("Android could not write the report.");
+                HaloDiagnostics.write(dataRoot, output);
+                result = "Diagnostic report saved. Review it before sharing.";
+            } catch (Exception error) {
+                result = "Couldn't save report: " + error.getMessage();
+            }
+            String message = result;
+            handler.post(() -> {
+                if (diagnosticStatus != null)
+                    diagnosticStatus.setText(message);
+            });
+        }, "Halo-Diagnostic-Export").start();
+    }
+
     private void buildInterface() {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
@@ -1376,6 +1399,11 @@ public class LauncherActivity extends Activity {
         if (requestCode == PICK_CUSTOM_ZIP) {
             if (resultCode == RESULT_OK && data != null && data.getData() != null)
                 importCustomZip(data.getData());
+            return;
+        }
+        if (requestCode == SAVE_DIAGNOSTICS) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null)
+                saveDiagnostics(data.getData());
             return;
         }
         if (requestCode != PICK_IMAGE || resultCode != RESULT_OK || data == null || data.getData() == null)

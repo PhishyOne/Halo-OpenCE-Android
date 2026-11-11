@@ -73,7 +73,10 @@ final class OfflineBotConfig {
         LinkedHashMap<String, String> changed = new LinkedHashMap<>();
         changed.put("count", "0");
         changed.put("teams", "\"even\"");
-        changed.put("objective_modes", "false");
+        // Both policies are mode-gated in native bot AI and safe to leave on
+        // even when no offline bots or objective gametype is active.
+        changed.put("objective_modes", "true");
+        changed.put("vehicle_seats", "true");
         update(file, changed);
     }
 

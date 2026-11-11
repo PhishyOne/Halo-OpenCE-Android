@@ -2612,6 +2612,7 @@ static void distributed_handle_unit_state(
 	long player_index;
 	long unit_index;
 	boolean alive = TEST_FLAG(state->flags, _distributed_unit_alive_bit);
+	boolean available;
 	boolean local;
 
 	if (!player)
@@ -2633,6 +2634,8 @@ static void distributed_handle_unit_state(
 	unit_index = distributed_living_unit(player);
 	if (!alive)
 	{
+		if (local && network_coop_active())
+			network_objects_client_watch_coop_unit(NONE, FALSE);
 		/* died on the host, who counts it. Its killing blow (network_damage.c)
 		kills it here with the death the host's had, so it is given a while
 		to come before the unit dies without one, as it falls. */
@@ -2649,14 +2652,18 @@ static void distributed_handle_unit_state(
 	}
 	if (state->player_index < MAXIMUM_TRACKED_PLAYERS)
 		distributed_deaths[state->player_index].dead_since = NONE;
-	/* spawned on the host: the host's unit is the player's here too, once
-	this machine has it (network_objects.c) */
-	if (state->unit_index == NONE || !network_objects_client_has(state->unit_index) ||
-		!object_try_and_get_and_verify_type(state->unit_index, _object_mask_unit) ||
-		TEST_FLAG(object_get(state->unit_index)->object.damage_flags, _object_dead_bit))
-	{
+	/* Spawned on the host: the host's unit is the player's here too,
+	 * once the client has it. If this co-op client's own copy never comes,
+	 * re-request the authoritative object list rather than waiting for the
+	 * host to kill its living player and spawn a new one. */
+	available = state->unit_index != NONE &&
+		network_objects_client_has(state->unit_index) &&
+		object_try_and_get_and_verify_type(state->unit_index, _object_mask_unit) &&
+		!TEST_FLAG(object_get(state->unit_index)->object.damage_flags, _object_dead_bit);
+	if (local && network_coop_active())
+		network_objects_client_watch_coop_unit(state->unit_index, available);
+	if (!available)
 		return;
-	}
 	if (player->unit_index != state->unit_index)
 	{
 		if (player->unit_index != NONE)

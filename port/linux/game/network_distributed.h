@@ -469,6 +469,9 @@ void network_objects_apply_vehicle_predictions(void);
 word network_objects_entry_size(byte type);
 /* whether this client has the host's object at this index */
 boolean network_objects_client_has(long object_index);
+/* A co-op client's own player: watch a host-alive unit that never arrived
+ * locally, and request a bounded reliable object resync without respawning. */
+void network_objects_client_watch_coop_unit(long unit_index, boolean available);
 /* moves the object where the host has it, drawn gliding from where it was */
 void network_objects_correct(long object_index, real_point3d const *position, real_vector3d const *forward,
 	real_vector3d const *up, real_vector3d const *velocity, real_vector3d const *angular_velocity);

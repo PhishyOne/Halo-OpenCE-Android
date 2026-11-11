@@ -1184,3 +1184,20 @@ changes only the ticks in the air, as gravity does, is within what
 identical builds show, and not caught. Positions agree to 0.04 world units
 on average, 0.24 at most, in every game, perturbed or not: the netcode
 corrects them.
+
+
+## Co-op client stuck spectating while host sees its living unit
+
+Some network co-op client states can report a living player's unit that
+does not yet exist or is unusable in that client's authoritative object
+set. A local client then remains in spectator mode even though the host
+already spawned its Spartan. If the local co-op player's host-alive unit
+is still unavailable after two seconds, the client requests the normal
+reliable host-object snapshot again, no more than once every twelve
+seconds, never during its initial synchronization. Once the host's
+creation is applied, existing distributed unit-state handling reattaches
+the player. There are no client-only births, deaths, forced health
+changes or new network message types. The host's ten-second snapshot
+throttle still applies. A filtered diagnostic report can be saved via
+the Android launcher. Physical validation with the affected co-op
+peer remains necessary.
