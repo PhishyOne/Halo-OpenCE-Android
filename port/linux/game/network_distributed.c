@@ -82,6 +82,7 @@ machine (their datum identifiers need not be).
 #include "network_aim_assist.h"
 #include "network_shield_effects.h"
 #include "commander_features.h"
+#include "killstreak_recon.h"
 #include "map_share.h"
 #include "network_afk.h"
 #include "network_map_vote.h"
@@ -3842,6 +3843,7 @@ void network_distributed_new_game(
 	network_aim_assist_reset();
 	network_shield_effects_reset();
 	commander_features_new_game();
+	killstreak_recon_reset();
 	network_votekick_new_game();
 	network_afk_new_game();
 	network_map_vote_reset();
@@ -4743,6 +4745,13 @@ void network_distributed_handle_message(
 	if (commander_features_handles_message(message, size))
 	{
 		commander_features_handle_message(machine_index, message, size);
+		return;
+	}
+	if (killstreak_recon_handles_message(message, size))
+	{
+		/* Private awards never belong inside a batch, even a reliable one. */
+		if (!distributed_handling_batch)
+			killstreak_recon_handle_message(machine_index, message, size);
 		return;
 	}
 	if (network_voice_handles_message(message, size))

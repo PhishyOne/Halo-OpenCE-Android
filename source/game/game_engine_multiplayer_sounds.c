@@ -29,6 +29,8 @@ symbols in this file:
 #include "scenario/scenario.h"
 #include "sound/game_sound.h"
 #include "sound/sound_definitions.h"
+#include "game/players.h" /* port: private reward audio */
+#include "killstreak_recon.h" /* port: port/linux/game/killstreak_recon.c */
 
 /* ---------- constants */
 
@@ -266,3 +268,32 @@ void game_engine_intialize_queued_sounds(
 }
 
 /* ---------- private code */
+
+/* port: stock Triple kill / Killing spree clips from the supplied map.
+ * The normal queue is device-wide and may play after death or policy OFF.
+ * Play immediately from the validated local HUD instead. Split screen has
+ * no private audio mix, so it gets private text and markers only. */
+void game_engine_play_killstreak_sound(short local_player_index, unsigned short award)
+{
+	struct game_globals *globals;
+	struct game_globals_multiplayer_information *information;
+	struct tag_reference *sound;
+	long sound_index;
+
+	if ((award != 3 && award != 5) ||
+		local_player_get_next(NONE) != local_player_index ||
+		local_player_get_next(local_player_index) != NONE)
+		return;
+	globals = scenario_get_game_globals();
+	if (!globals || globals->multiplayer_information.count < 1 ||
+		!globals->multiplayer_information.address)
+		return;
+	information = TAG_BLOCK_GET_ELEMENT(&globals->multiplayer_information, 0,
+		struct game_globals_multiplayer_information);
+	sound_index = award == 3 ? _multiplayer_sound_triple_kill : _multiplayer_sound_killing_spree;
+	if (sound_index >= information->sounds.count || !information->sounds.address)
+		return;
+	sound = TAG_BLOCK_GET_ELEMENT(&information->sounds, sound_index, struct tag_reference);
+	if (sound->index != NONE)
+		unspatialized_impulse_sound_new(sound->index, 1.0f);
+}

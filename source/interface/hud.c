@@ -115,6 +115,8 @@ symbols in this file:
 #include "text/text_group.h"
 #include "units/unit_definitions.h"
 #include "units/units.h"
+#include "game/game_allegiance.h" /* port: personal enemy recon */
+#include "killstreak_recon.h" /* port: port/linux/game/killstreak_recon.c */
 
 /* ---------- constants */
 
@@ -203,6 +205,58 @@ static void hud_draw_players(
 static void temporary_hud_draw_reticle(
 	real angle,
 	union real_argb_color const *color);
+/* port: private five-kill recon. At most 128 cheap player checks and 24
+ * markers per view; no collision queries or target-coordinate packets.
+ * These screen-space quads intentionally show through world occluders. */
+static void hud_draw_personal_recon(void)
+{
+	long viewer_index = local_player_get_player_index(render.local_player_index);
+	struct player_datum *viewer;
+	struct player_datum *player;
+	struct unit_datum *unit;
+	struct data_iterator iterator;
+	real_point3d position, view;
+	real_point2d screen;
+	rectangle2d marker;
+	short x, y;
+	int checked = 0, drawn = 0;
+
+	if (!killstreak_recon_active(render.local_player_index) ||
+		!(viewer = player_try_and_get(viewer_index)))
+		return;
+	data_iterator_new(&iterator, player_data);
+	while (checked < HALO_PORT_MAXIMUM_NETWORK_PLAYERS && drawn < 24 &&
+		(player = data_iterator_next(&iterator)) != NULL)
+	{
+		checked++;
+		if (iterator.datum_index == viewer_index || player->quit_out_of_game ||
+			player->unit_index == NONE ||
+			!game_team_is_enemy((short)viewer->team_index, (short)player->team_index) ||
+			!(unit = unit_try_and_get(player->unit_index)) ||
+			unit->unit.player_index != iterator.datum_index ||
+			TEST_FLAG(unit->object.damage_flags, _object_dead_bit))
+			continue;
+		unit_get_head_position(player->unit_index, &position);
+		position.z += 0.3f;
+		matrix4x3_transform_point(&render.frustum.world_to_view, &position, &view);
+		if (!render_camera_view_to_screen(&render.camera, &render.frustum, &view, &screen))
+			continue;
+		/* Test before converting to short, and keep the whole marker within
+		 * this viewport's HUD window, including split screen. */
+		if (!(screen.x >= render.camera.window_bounds.x0 + 4 &&
+			screen.x < render.camera.window_bounds.x1 - 4 &&
+			screen.y >= render.camera.window_bounds.y0 + 4 &&
+			screen.y < render.camera.window_bounds.y1 - 4))
+			continue;
+		x = (short)fast_ftol(screen.x) - render.camera.viewport_bounds.x0;
+		y = (short)fast_ftol(screen.y) - render.camera.viewport_bounds.y0;
+		marker.x0 = x - 3; marker.x1 = x + 3;
+		marker.y0 = y - 2; marker.y1 = y + 2;
+		draw_quad(&marker, 0xEFFF2020);
+		drawn++;
+	}
+}
+
 static void temporary_hud_draw(
 	void);
 
@@ -1469,6 +1523,16 @@ void hud_draw_screen(
 	if (player_index != NONE)
 	{
 		struct player_datum *player = player_get(player_index);
+
+		/* port: only the earning player's live, ordinary viewport presents
+		 * private rewards. Menus, co-op and postgame are also gated inside. */
+		if (!cinematic_in_progress() && hud_scripted_globals->show_hud &&
+			perspective != _director_perspective_neutral &&
+			perspective != _director_perspective_scripted && player->unit_index != NONE)
+		{
+			killstreak_recon_present(render.local_player_index);
+			hud_draw_personal_recon();
+		}
 
 		if ((!game_engine_running() || game_engine_display_team_indicators()) &&
 			!cinematic_in_progress())
