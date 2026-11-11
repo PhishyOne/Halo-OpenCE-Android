@@ -20,6 +20,7 @@ typedef unsigned int pixel32;
 #include "constants.inc"
 #include "commander_feature_policy.h"
 #include "killstreak_recon.h"
+#define HALO_ANDROID 1 /* compile the actual Android guest reward path */
 struct player_datum { long unit_index, team_index; int quit_out_of_game;
     short local_player_index; struct { int machine_index; } network_player_data; };
 struct unit_datum { struct { unsigned int damage_flags; } object;
@@ -30,6 +31,7 @@ static long ids[HALO_PORT_MAXIMUM_NETWORK_PLAYERS], unit_ids[HALO_PORT_MAXIMUM_N
 static long locals[MAXIMUM_LOCAL_PLAYERS];
 static int connection, in_game, in_play, now, menu, cinematic, unreliable;
 static int coop, teams, count, sent, sent_machine, texts, sounds, last_sound, last_text_local;
+static int speech_available;
 static unsigned int policy;
 static byte packet[128];
 static struct player_datum *player_try_and_get(long id) {
@@ -78,7 +80,13 @@ static struct game_globals_multiplayer_information information;
 static struct tag_reference clips[NUMBER_OF_MULTIPLAYER_INFORMATION_SOUNDS];
 #define TAG_BLOCK_GET_ELEMENT(block,index,type) (&((type *)(block)->address)[index])
 static struct game_globals *scenario_get_game_globals(void) { return &globals; }
-static void unspatialized_impulse_sound_new(long sound,float volume) { assert(volume==1); sounds++; last_sound=(int)sound; }
+static int host_android_announce_killstreak(int award) {
+    if (award != 3 && award != 5)
+        return 0;
+    if (!speech_available)
+        return 0;
+    sounds++; last_sound=award; return 1;
+}
 typedef struct { float x,y,z; } real_point3d;
 typedef struct { float x,y; } real_point2d;
 typedef struct { short x0,y0,x1,y1; } rectangle2d;
@@ -115,6 +123,7 @@ static void setup(void) {
     connection=_game_connection_network_client;
     policy=KILLSTREAK_ENABLED|KILLSTREAK_ANNOUNCEMENTS;
     sent=texts=sounds=checked=projected=quads=offscreen=hidden=0; sent_machine=NONE;
+    speech_available=1;
     for(i=0;i<count;i++) {
         ids[i]=0x10000+i; unit_ids[i]=0x20000+i;
         players[i].unit_index=unit_ids[i]; players[i].team_index=i;
@@ -267,9 +276,9 @@ int main(int argc,char **argv) {
         CHECK(sent==0 && killstreak_recon_active(0));
     } else if(!strcmp(argv[1],"presentation")) {
         award(3,1); award(5,2); CHECK(texts==0 && sounds==0);
-        killstreak_recon_present(0); CHECK(texts==1 && sounds==1 && last_sound==100+_multiplayer_sound_triple_kill);
+        killstreak_recon_present(0); CHECK(texts==1 && sounds==1 && last_sound==3);
         killstreak_recon_present(0); CHECK(texts==1); now+=90;
-        killstreak_recon_present(0); CHECK(texts==2 && sounds==2 && last_sound==100+_multiplayer_sound_killing_spree);
+        killstreak_recon_present(0); CHECK(texts==2 && sounds==2 && last_sound==5);
         setup(); locals[1]=ids[1]; players[1].local_player_index=1;
         award(5,1); killstreak_recon_present(1); CHECK(texts==0 && sounds==0);
         killstreak_recon_present(0); CHECK(texts==1 && last_text_local==0 && sounds==0);
@@ -280,8 +289,12 @@ int main(int argc,char **argv) {
             if(i==2) information.sounds.count=0;
             if(i==3) information.sounds.address=NULL;
             if(i==4) clips[_multiplayer_sound_triple_kill].index=NONE;
-            killstreak_recon_present(0); CHECK(texts==1 && sounds==0);
+            /* Stock sound tags are deliberately not needed for original
+             * device speech callouts; even maps lacking them get audio. */
+            killstreak_recon_present(0); CHECK(texts==1 && sounds==1 && last_sound==3);
         }
+        setup(); speech_available=0; award(3,1);
+        killstreak_recon_present(0); CHECK(texts==1 && sounds==0);
         setup(); award(5,1); cinematic=1; killstreak_recon_present(0); CHECK(texts==0 && sounds==0);
     } else if(!strcmp(argv[1],"hud")) {
         count=4; award(5,1); players[1].team_index=0; units[2].object.damage_flags=1;

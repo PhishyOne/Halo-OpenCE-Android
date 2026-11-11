@@ -14,6 +14,7 @@ so the audio callback is handed to a thread that has one.
 #include "host.h"
 
 #include <SDL3/SDL.h>
+#include <jni.h>
 #include <pthread.h>
 #include <string.h>
 
@@ -532,6 +533,43 @@ int host_sdl_open_url(const char *url)
 int host_sdl_show_toast(const char *message, int duration, int gravity, int x, int y)
 {
 	return SDL_ShowAndroidToast(message, duration, gravity, x, y) ? 1 : 0;
+}
+
+/* Called only by the local game's validated HUD award presentation, not by
+ * remote packets. Use SDL's JNI environment on this thread and a *local*
+ * Activity reference. Java queues actual TTS playback on Android's UI
+ * thread. No downloaded audio or copyrighted Halo announcer tags. */
+int host_android_announce_killstreak(int award)
+{
+	JNIEnv *env;
+	jobject activity;
+	jclass activity_class;
+	jmethodID announce;
+	int delivered = 0;
+
+	if (award != 3 && award != 5)
+		return 0;
+	env = (JNIEnv *)SDL_GetAndroidJNIEnv();
+	if (!env)
+		return 0;
+	activity = (jobject)SDL_GetAndroidActivity();
+	if (!activity)
+		return 0;
+	activity_class = (*env)->GetObjectClass(env, activity);
+	if (activity_class)
+	{
+		announce = (*env)->GetMethodID(env, activity_class, "announceKillstreak", "(I)V");
+		if (announce)
+		{
+			(*env)->CallVoidMethod(env, activity, announce, (jint)award);
+			delivered = !(*env)->ExceptionCheck(env);
+		}
+		(*env)->DeleteLocalRef(env, activity_class);
+	}
+	if ((*env)->ExceptionCheck(env))
+		(*env)->ExceptionClear(env);
+	(*env)->DeleteLocalRef(env, activity);
+	return delivered;
 }
 
 /* ---------- a message for the player (a host of another network version) */

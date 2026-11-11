@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from harness import constant, enum_with, function, mutated, read
 
 ROOT = Path(__file__).resolve().parents[1]
-CASES = ("thresholds", "authority-modes", "excluded", "credit", "resets", "identities", "pickups", "postgame")
+CASES = ("thresholds", "life-streak-not-multikill", "authority-modes", "excluded", "credit", "resets", "identities", "pickups", "postgame")
 
 
 def generated(fault=None):

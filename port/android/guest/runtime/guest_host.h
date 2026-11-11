@@ -79,6 +79,8 @@ int host_sdl_open_url(const char *url);
 void host_sdl_scancode_name(int scancode, char *buffer, unsigned int size);
 int host_sdl_scancode_from_name(const char *name);
 int host_sdl_show_toast(const char *message, int duration, int gravity, int x, int y);
+/* Local, award-only Android speech callout; 3 or 5, never host networking. */
+int host_android_announce_killstreak(int award);
 int host_sdl_show_simple_message_box(unsigned int flags, const char *title, const char *message);
 /* SDL_ShowMessageBox of up to three buttons (SDL_MessageBoxData has not the
 guest's layout): the index of the one chosen, else -1 */

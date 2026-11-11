@@ -294,7 +294,7 @@ void killstreak_recon_present(short local_player_index)
     state->pending &= award == 3 ? ~1u : ~2u;
     state->next_notice = game_time_get() + 90;
     hud_print_message(local_player_index, award == 3 ?
-        L"3 kills: camouflage and overshield" :
-        L"5 kills: powerups refreshed; personal recon 30s");
+        L"3 kills: Enhancements online" :
+        L"5 kills: Recon online (30s)");
     game_engine_play_killstreak_sound(local_player_index, award);
 }

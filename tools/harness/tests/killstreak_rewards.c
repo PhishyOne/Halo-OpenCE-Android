@@ -139,6 +139,16 @@ int main(int argc,char **argv) {
         units[0].object.shield_vitality=2.2f; shield=units[0].object.shield_vitality;
         tick(800); CHECK(camo()==0 && !TEST_FLAG(units[0].unit.flags,_unit_active_camouflaged_bit));
         CHECK(units[0].object.shield_vitality==shield);
+    } else if(!strcmp(argv[1],"life-streak-not-multikill")) {
+        /* Three kills many minutes apart still constitute a life streak.
+         * Only dying resets it; multikill timing never enters the reward. */
+        kill(0,1); now+=9000;
+        kill(0,1); now+=9000;
+        CHECK(streak()==2 && recon_awards==0 && camo()==0);
+        kill(0,1);
+        CHECK(streak()==3 && recon_awards==1 && recon_last_award==3 && camo()==900);
+        now+=9000; kill(0,1); now+=9000; kill(0,1);
+        CHECK(streak()==5 && recon_awards==2 && recon_last_award==5);
     } else if(!strcmp(argv[1],"authority-modes")) {
         for(mode=game_engine_ctf;mode<=game_engine_stub;mode++) for(j=0;j<2;j++) {
             setup(); connection=_game_connection_network_server;

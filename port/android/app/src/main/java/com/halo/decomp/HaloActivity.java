@@ -6,6 +6,10 @@ import android.content.Intent;
 import android.graphics.Insets;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
+import android.media.AudioAttributes;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.Voice;
+import android.util.Log;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.Display;
@@ -20,6 +24,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
+import java.util.Set;
 
 import org.libsdl.app.SDLActivity;
 
@@ -41,6 +47,12 @@ public class HaloActivity extends SDLActivity {
     private TouchControls touchControls;
     private static final int EXPORT_LAYOUT = 401, IMPORT_LAYOUT = 402;
     private String pendingLayoutExport;
+
+    /** Short, original reward speech. No Halo announcer clips, downloads or
+     * runtime network TTS. An unavailable offline voice means text-only HUD. */
+    private TextToSpeech killstreakSpeech;
+    private boolean killstreakSpeechReady;
+    private boolean killstreakSpeechClosed;
 
     @Override
     protected String[] getLibraries() {
@@ -67,8 +79,74 @@ public class HaloActivity extends SDLActivity {
         preferHighestRefreshRate();
         trackGestureInsets();
         acquireMulticastLock();
+        initializeKillstreakSpeech();
         // a new version looked for while the game starts
         Updater.start(this);
+    }
+
+    /** Prepare a local English voice without requiring Wi-Fi or streaming
+     * speech to a remote service. Initialization itself is asynchronous. */
+    private void initializeKillstreakSpeech() {
+        try {
+            killstreakSpeech = new TextToSpeech(this, status ->
+                    getWindow().getDecorView().post(() -> configureKillstreakSpeech(status)));
+        } catch (RuntimeException error) {
+            Log.w("HaloCallouts", "Speech engine unavailable", error);
+            killstreakSpeechReady = false;
+        }
+    }
+
+    private void configureKillstreakSpeech(int status) {
+        if (killstreakSpeechClosed || isFinishing() || isDestroyed() ||
+                status != TextToSpeech.SUCCESS || killstreakSpeech == null)
+            return;
+        Voice best = null;
+        try {
+            Set<Voice> voices = killstreakSpeech.getVoices();
+            if (voices != null) {
+                for (Voice voice : voices) {
+                    if (!Locale.ENGLISH.getLanguage().equals(voice.getLocale().getLanguage()) ||
+                            voice.isNetworkConnectionRequired() ||
+                            (voice.getFeatures() != null &&
+                                    voice.getFeatures().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)))
+                        continue;
+                    if (best == null ||
+                            (!Locale.US.getCountry().equals(best.getLocale().getCountry()) &&
+                                    Locale.US.getCountry().equals(voice.getLocale().getCountry())))
+                        best = voice;
+                }
+            }
+            if (best == null || killstreakSpeech.setVoice(best) != TextToSpeech.SUCCESS) {
+                Log.i("HaloCallouts", "No installed offline English voice, using HUD text");
+                return;
+            }
+            killstreakSpeech.setAudioAttributes(new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build());
+            killstreakSpeech.setPitch(0.86f);
+            killstreakSpeech.setSpeechRate(1.03f);
+            killstreakSpeechReady = true;
+        } catch (RuntimeException error) {
+            Log.w("HaloCallouts", "Offline voice configuration failed", error);
+            killstreakSpeechReady = false;
+        }
+    }
+
+    /** Called via the SDL Android host bridge from the verified earning
+     * player's local HUD only. No attacker name or other user data is sent. */
+    public void announceKillstreak(int award) {
+        if (award != 3 && award != 5)
+            return;
+        runOnUiThread(() -> {
+            if (killstreakSpeechClosed || !killstreakSpeechReady ||
+                    killstreakSpeech == null || isFinishing() || isDestroyed() ||
+                    !getWindow().getDecorView().hasWindowFocus())
+                return;
+            String phrase = award == 3 ? "Enhancements online" : "Recon online";
+            killstreakSpeech.speak(phrase, TextToSpeech.QUEUE_ADD, null,
+                    "halo-reward-" + award + "-" + System.nanoTime());
+        });
     }
 
     /** the system's file picker, for the touch layout; no storage permission */
@@ -188,6 +266,8 @@ public class HaloActivity extends SDLActivity {
     protected void onPause() {
         if (touchControls != null)
             touchControls.stopDeviceInput();
+        if (killstreakSpeech != null)
+            killstreakSpeech.stop();
         super.onPause();
     }
 
@@ -204,6 +284,12 @@ public class HaloActivity extends SDLActivity {
 
     @Override
     protected void onDestroy() {
+        killstreakSpeechClosed = true;
+        killstreakSpeechReady = false;
+        if (killstreakSpeech != null) {
+            killstreakSpeech.shutdown();
+            killstreakSpeech = null;
+        }
         if (touchControls != null)
             touchControls.stopDeviceInput();
         if (multicastLock != null && multicastLock.isHeld())
