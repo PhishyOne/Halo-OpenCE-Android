@@ -44,7 +44,11 @@ static long distributed_player_from_byte(byte slot) {
 }
 static long local_player_get_player_index(short local) { assert(local>=0 && local<4); return locals[local]; }
 static short local_player_get_next(short local) {
-    while(++local<4) if(locals[local]!=NONE) return local; return NONE;
+    while (++local < 4) {
+        if (locals[local] != NONE)
+            return local;
+    }
+    return NONE;
 }
 static int game_connection(void) { return connection; }
 static int game_in_progress(void) { return in_game; }
@@ -242,7 +246,8 @@ int main(int argc,char **argv) {
         killstreak_recon_present(0); CHECK(texts==0 && sounds==0 && killstreak_recon_active(0));
         for(i=0;i<5;i++) {
             setup(); if(i==0) policy=COMMANDER_FEATURE_MASK;
-            if(i==1) coop=1; if(i==2) menu=1;
+            if(i==1) coop=1;
+            if(i==2) menu=1;
             if(i==3) connection=_game_connection_film_playback;
             if(i==4) in_play=0;
             award(5,1); CHECK(!killstreak_recon_active(0));
