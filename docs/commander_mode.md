@@ -133,20 +133,33 @@ when connected to a v16 host. Mixed-version runtime qualification is pending.
 `killstreak.announcements` gates the new text and sound, independently of
 recon. Packet and kill callbacks only record pending notices. The local HUD
 presents them on the render/main thread, at least 90 simulation ticks apart
-when both rewards arrive before rendering. The audio uses the supplied
-map's **stock Halo Triple kill and Killing spree clips**, not original
-2142-style scripts, and ships no audio assets. The normal stock announcer
-remains unchanged and may also announce a normal multikill/spree.
+when both rewards arrive before rendering.
 
-The stock `game_engine_play_multiplayer_sound` queue is device-wide and can
-play queued audio after a life ends. A small local helper instead checks
-the map's sound references and calls the same stock unspatialized playback
-primitive immediately. With multiple local players it suppresses reward
-audio, since the engine cannot send that mix to only one earner. Private
-split-screen text/recon still work. Missing map clips or muted audio yield
-text only. Already-started sounds and already-printed stock HUD messages
-follow their ordinary playback/display lifetime; pending notices are
-discarded when permission or the life ends.
+### v18 correction: earned killstreaks are not rapid multikills
+
+The v17 test build used stock Triple Kill and Killing Spree recordings as
+reward notifications. That was misleading: a three-kill reward requires
+three enemy kills without dying, not three quick kills. v18 removes
+the stock sound-tag calls from this reward path. The two new original
+callouts are **"Enhancements online"** at three kills and
+**"Recon online"** at five. Local HUD text uses those phrases as well.
+
+On Android the native ILP32 game calls a small host import that invokes
+HaloActivity on the UI thread. It uses the phone's TextToSpeech engine and
+selects only a locally installed English voice requiring no network.
+Without such a voice or an installed speech service, the HUD remains
+text-only. The resulting sound depends on the user's offline voice engine;
+it is synthesized speech, not a recorded military voice artist.
+No remote TTS call or third-party voice audio is bundled.
+
+Desktop and Web currently show the accurate HUD messages only. Split-screen
+audio stays disabled because the output device mix is shared, although
+per-player recon and text remain private. The original Halo announcer can
+still announce a genuine rapid multikill as usual; only the separate
+reward path no longer triggers those clips. Pausing the Activity stops
+the speech service and pending notices are cancelled when permission or
+the life ends. An already-playing short phrase cannot be retroactively
+unspoken at the exact moment of death.
 
 Death, changed salted player/unit, disconnect, match end, map reset and
 master OFF cancel recon and pending notices. Normal full-spectrum vision
@@ -188,7 +201,7 @@ Individual human killstreaks:
 The tactical laptop, spotting, 10-kill orbital strike, Commander radio and
 NPC objective orders are NOT implemented. Orbital and Commander radio
 options remain reserved controls. Personal reward announcements now use
-stock clips as described above. The settings UI and its v15 wording are
+Android offline speech as described above. The settings UI and its v15 wording are
 unchanged; visible checkboxes are not evidence that future abilities work.
 
 ## Acceptance checks

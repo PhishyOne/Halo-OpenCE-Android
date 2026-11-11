@@ -106,6 +106,36 @@ class KillstreakReconTest(unittest.TestCase):
         self.assertIn("killstreak_recon_stop();", read("port/linux/game/killstreak_rewards.c"))
         self.assertIn("tools/test_killstreak_recon.py -v", read(".github/workflows/build.yml"))
 
+    def test_original_android_callouts_no_stock_clip_dependency(self):
+        java = read("port/android/app/src/main/java/com/halo/decomp/HaloActivity.java")
+        audio = function(read("source/game/game_engine_multiplayer_sounds.c"),
+                         "game_engine_play_killstreak_sound")
+        recon = function(read("port/linux/game/killstreak_recon.c"),
+                         "killstreak_recon_present")
+        host = read("port/android/host/host_sdl.c")
+        guest = read("port/android/guest/runtime/guest_host.h")
+        imports = read("port/android/host_imports.list")
+        manifest = read("port/android/app/src/main/AndroidManifest.xml")
+        self.assertIn("host_android_announce_killstreak((int)award)", audio)
+        self.assertNotIn("_multiplayer_sound_triple_kill", audio)
+        self.assertNotIn("_multiplayer_sound_killing_spree", audio)
+        self.assertNotIn("unspatialized_impulse_sound_new", audio)
+        self.assertIn('L"3 kills: Enhancements online"', recon)
+        self.assertIn('L"5 kills: Recon online (30s)"', recon)
+        self.assertIn('"Enhancements online"', java)
+        self.assertIn('"Recon online"', java)
+        self.assertIn("announceKillstreak(int award)", java)
+        self.assertIn("voice.isNetworkConnectionRequired()", java)
+        self.assertIn("TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED", java)
+        self.assertIn("killstreakSpeech.shutdown()", java)
+        self.assertIn("SDL_GetAndroidJNIEnv()", host)
+        self.assertIn("SDL_GetAndroidActivity()", host)
+        self.assertIn('GetMethodID(env, activity_class, "announceKillstreak", "(I)V")', host)
+        self.assertIn("host_android_announce_killstreak", guest)
+        self.assertIn("host_android_announce_killstreak", imports)
+        self.assertIn("android.intent.action.TTS_SERVICE", manifest)
+        self.assertIn("local_player_get_next(local_player_index) != NONE", audio)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -461,12 +461,16 @@ Five kills also enable private red enemy HUD markers for 900 simulation
 ticks, through walls, for the earning player's viewport only (24 markers
 maximum). Commander Mode never shares or grants this recon. The host sends
 3/5-kill notices and recon expiry reliably only to the earner's machine.
-With killstreak.announcements enabled, the local HUD displays short reward
-text and plays the supplied map's stock Triple kill / Killing spree clips.
-These are stock Halo clips, not original radio recordings; no audio files
-are shipped. Split screen receives private text and markers but no reward
-audio because the engine has a shared device mix. Maps without those clips
-remain text-only. Tactical laptop and orbital strikes remain unimplemented.
+With killstreak.announcements enabled, the HUD says
+"3 kills: Enhancements online" and "5 kills: Recon online (30s)".
+On Android, the local player also hears those original brief phrases
+through an available **installed offline English TextToSpeech voice**.
+This does not reuse stock multikill sound tags or transmit audio.
+With no offline voice, or on other platforms, the game stays text-only.
+Split-screen players get private text and markers but no reward audio,
+since the physical audio mix is shared. Regular Halo multikill audio
+still follows the base game's own rapid-kill rules.
+Tactical laptop and orbital strikes remain unimplemented.
 Local source tests do not establish Android or physical LAN acceptance;
 late joins translate host player slots to client-local salted player IDs
 before checking identity. Real LAN joins still require qualification.
