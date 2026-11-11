@@ -453,9 +453,13 @@ killstreaks, and vice versa. The host sends the effective feature mask
 reliably; client settings cannot self-authorize. Campaign and co-op
 allow neither mode.
 
-This phase implements switches, settings and host/client permissions.
-Tactical laptop, reward power-ups, recon HUD and orbital strikes are still
-future gameplay tasks. Details: docs/commander_mode.md.
+The first gameplay slice grants human-only 3/5-kill camouflage (900 ticks,
+30 simulation seconds) and attempts the stock overshield pickup on the host.
+Five kills refresh camouflage; an existing overshield is preserved, not
+refilled. Overshield uses stock damage/decay, not a 30-second cutoff.
+Tactical laptop, recon HUD, orbital strikes and announcements remain
+unimplemented. Local source tests do not establish Android or physical LAN
+acceptance. Details and limitations: docs/commander_mode.md.
 
 ## Pregame bot count buttons
 
