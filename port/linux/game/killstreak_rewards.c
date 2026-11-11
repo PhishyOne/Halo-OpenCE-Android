@@ -11,6 +11,7 @@
 #include "bots.h"
 #include "commander_features.h"
 #include "killstreak_rewards.h"
+#include "killstreak_recon.h"
 
 #include <string.h>
 
@@ -46,8 +47,11 @@ void killstreak_rewards_reset_player(long player_index)
     struct player_datum *player;
     struct unit_datum *unit;
 
+    killstreak_recon_reset_player(player_index);
     if (!state || !state->active || state->player_index != player_index)
         return;
+    if (killstreak_authority() && state->kills >= 3)
+        killstreak_recon_revoke(player_index, state->unit_index);
     /* Never touch a replacement player's or replacement unit's effects.
      * Normal powerup helpers relinquish ownership before adding a pickup. */
     if (killstreak_authority() && state->owns_camouflage)
@@ -74,6 +78,7 @@ void killstreak_rewards_stop(void)
         if (killstreak_players[slot].active)
             killstreak_rewards_reset_player(killstreak_players[slot].player_index);
     killstreak_match_active = FALSE;
+    killstreak_recon_stop();
 }
 
 void killstreak_rewards_start(void)
@@ -81,6 +86,7 @@ void killstreak_rewards_start(void)
     /* New map player datums may reuse both identifiers and slots. Old map
      * effects are gone; do not look up old indices in the new world. */
     memset(killstreak_players, 0, sizeof(killstreak_players));
+    killstreak_recon_reset();
     killstreak_match_active = TRUE;
 }
 
@@ -103,6 +109,7 @@ void killstreak_rewards_update(void)
         game_engine_in_play() &&
         killstreak_feature_allowed(KILLSTREAK_ENABLED);
 
+    killstreak_recon_update();
     for (slot = 0; slot < HALO_PORT_MAXIMUM_NETWORK_PLAYERS; slot++)
     {
         state = &killstreak_players[slot];
@@ -178,4 +185,5 @@ void killstreak_rewards_record_kill(long credited_player_index, long dead_player
      * charging. Do not leave their units in the charging damage state. */
     if (unit->object.maximum_shield_vitality > 0.0f)
         object_double_charge_shield(player->unit_index);
+    killstreak_recon_award(credited_player_index, player->unit_index, state->kills);
 }

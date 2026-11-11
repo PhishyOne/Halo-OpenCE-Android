@@ -102,6 +102,72 @@ or persistent schema changed: peers need no new interpretation or agreement,
 only the host runs this optional award logic. Mixed-version behavior and
 physical LAN/Android replication still need runtime acceptance.
 
+## Private recon and reward announcements (v17 candidate)
+
+The v16 powerups above are unchanged. At five kills, the earner also gets
+900 simulation ticks of red enemy-position markers above living enemy
+humans and bots, including enemies behind walls. This state belongs to one
+local player, never the team or a spectator. Turning Commander ON later does
+not share it. Each viewport checks at most 128 players and draws at most 24
+markers, without collision scans. At this cap, the first eligible players
+in datum order are drawn; this is not a nearest-target selection.
+
+New optional message 97 is exactly 28 bytes: the distributed header,
+absolute player slot and host-salted unit ID, a monotonically increasing award serial, recon end
+tick, award (0 revokes, 3 announces, 5 announces and grants recon), and zero
+reserved bits. Only the host sends it, reliably to the earner's machine;
+the host's own player uses a local callback. No targets or coordinates are
+sent. The receiver checks direction, reliable transport, length, header,
+type, count, reserved field, award, end time, player-slot-to-local-salt
+mapping, unit ownership, life state and host policy. Batches are rejected. Repeats cannot
+replay announcements or extend recon. Award age must be below 900 ticks;
+up to 15 ticks of client clock lag is allowed without extending the host's
+end tick. Revocations use the same private route, only for awarded lives.
+
+No network-version bump: the optional message changes presentation only;
+v16's dispatcher ignores unknown type 97, and the authoritative powerups
+and existing simulation packets have unchanged semantics. A v16 guest gets
+v16 powerups but no v17 recon or reward notices. A v17 guest cannot self-award
+when connected to a v16 host. Mixed-version runtime qualification is pending.
+
+`killstreak.announcements` gates the new text and sound, independently of
+recon. Packet and kill callbacks only record pending notices. The local HUD
+presents them on the render/main thread, at least 90 simulation ticks apart
+when both rewards arrive before rendering. The audio uses the supplied
+map's **stock Halo Triple kill and Killing spree clips**, not original
+2142-style scripts, and ships no audio assets. The normal stock announcer
+remains unchanged and may also announce a normal multikill/spree.
+
+The stock `game_engine_play_multiplayer_sound` queue is device-wide and can
+play queued audio after a life ends. A small local helper instead checks
+the map's sound references and calls the same stock unspatialized playback
+primitive immediately. With multiple local players it suppresses reward
+audio, since the engine cannot send that mix to only one earner. Private
+split-screen text/recon still work. Missing map clips or muted audio yield
+text only. Already-started sounds and already-printed stock HUD messages
+follow their ordinary playback/display lifetime; pending notices are
+discarded when permission or the life ends.
+
+Death, changed salted player/unit, disconnect, match end, map reset and
+master OFF cancel recon and pending notices. Normal full-spectrum vision
+pickups and the Commander mask are not repurposed. No persistence changes.
+
+Known acceptance gaps: no native link, Android/Web build, rendered game,
+physical audio or LAN session has been qualified for this candidate.
+Host and guest may assign different salted player IDs for the same absolute
+player slot. The receiver resolves the authenticated host slot to its own
+full local datum via distributed_player_from_byte, then validates the current
+view's ownership and the replicated unit. The harness tests a differently
+salted guest player. Join-in-progress and reconnect still require real LAN
+qualification; missing client unit replicas and tick skew can cause an
+award to be dropped rather than deferred.
+
+Run `python3 tools/test_killstreak_recon.py -v` for the real recon module,
+audio helper and marker function compiled in a fake world, including packet
+rejection, per-viewport isolation, expiration, lifecycle, capped rendering
+and deliberate faulty variants. The Android-only source gate runs this
+before native compilation; editing that gate does not trigger Actions.
+
 ## Desired mechanics, still future gameplay work
 
 Commander: one host-designated commander per team, interactive tactical
@@ -110,7 +176,8 @@ attack/defend orders for human squads and bot groups.
 
 Individual human killstreaks:
 - 3 kills without dying: camouflage and overshield, 30 seconds.
-- 5 kills: refresh both and add 30 seconds of enemy HUD tracking.
+- 5 kills: guaranteed overshield refill remains future work; private enemy
+  HUD tracking is implemented by the v17 candidate above.
 - 10 kills: one manually targeted orbital strike.
 - Only the earner hears "Orbital strike authorized."
 - Everyone hears "Orbital bombardment incoming" after target confirmation.
@@ -118,12 +185,11 @@ Individual human killstreaks:
 - No third-party copyrighted voice samples; any voice recording must be
   original.
 
-The tactical laptop, spotting, 5-kill enemy recon HUD, 10-kill orbital
-strike, reward announcements, sounds and NPC objective orders are NOT
-implemented. Existing orbital/radio options are reserved policy controls,
-not working gameplay. The settings UI and its v15 wording are unchanged.
-Only the bounded powerup slice above has gameplay code; visible checkboxes
-are not evidence that other abilities work.
+The tactical laptop, spotting, 10-kill orbital strike, Commander radio and
+NPC objective orders are NOT implemented. Orbital and Commander radio
+options remain reserved controls. Personal reward announcements now use
+stock clips as described above. The settings UI and its v15 wording are
+unchanged; visible checkboxes are not evidence that future abilities work.
 
 ## Acceptance checks
 

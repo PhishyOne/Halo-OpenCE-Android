@@ -1,4 +1,5 @@
-/* Host-only, transient human killstreak rewards. No saved or wire state. */
+/* Host-only, transient human killstreak rewards. Private presentation is
+ * sent by killstreak_recon.c; powerups use normal engine replication. */
 #ifndef HALO_KILLSTREAK_REWARDS_H
 #define HALO_KILLSTREAK_REWARDS_H
 

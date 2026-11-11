@@ -159,6 +159,9 @@ enum
 	/* The host's optional Commander Mode capability mask, sent reliably
 	   to clients. No client can use this message to enable a capability. */
 	_distributed_message_commander_settings = 96,
+	/* Private 3/5-kill award or revocation, host to the earner's machine
+	   only, reliably. Older clients ignore this optional presentation. */
+	_distributed_message_killstreak_recon = 97,
 
 	NUMBER_OF_DISTRIBUTED_MESSAGES
 };

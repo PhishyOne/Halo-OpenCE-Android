@@ -17,6 +17,15 @@
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"line %d: %s\n",__LINE__,#x); return 1; } } while (0)
 typedef int boolean;
 typedef float real;
+static int recon_awards, recon_last_award, recon_revokes;
+void killstreak_recon_reset_player(long id) { (void)id; }
+void killstreak_recon_revoke(long id, long unit) { (void)id; (void)unit; recon_revokes++; }
+void killstreak_recon_reset(void) { recon_awards = recon_last_award = recon_revokes = 0; }
+void killstreak_recon_stop(void) { }
+void killstreak_recon_update(void) { }
+void killstreak_recon_award(long id, long unit, unsigned short award) {
+    (void)id; (void)unit; recon_awards++; recon_last_award = award;
+}
 enum { _object_dead_bit, _object_shield_over_charging_bit };
 enum { _unit_active_camouflaged_bit, _unit_super_camouflaged_bit };
 #include "constants.inc"
@@ -119,10 +128,13 @@ int main(int argc,char **argv) {
     if(!strcmp(argv[1],"thresholds")) {
         kills(2); CHECK(camo()==0 && streak()==2);
         kill(0,1); CHECK(camo()==900 && TEST_FLAG(units[0].unit.flags,_unit_active_camouflaged_bit));
+        CHECK(recon_awards==1 && recon_last_award==3);
         CHECK(TEST_FLAG(units[0].object.damage_flags,_object_shield_over_charging_bit));
         tick(300); kill(0,1); CHECK(camo()==600);
         kill(0,1); CHECK(camo()==900);
+        CHECK(recon_awards==2 && recon_last_award==5);
         tick(100); kills(260); CHECK(camo()==800 && streak()==5);
+        CHECK(recon_awards==2);
         CHECK(players[0].statistics.kills_in_a_row==265);
         units[0].object.shield_vitality=2.2f; shield=units[0].object.shield_vitality;
         tick(800); CHECK(camo()==0 && !TEST_FLAG(units[0].unit.flags,_unit_active_camouflaged_bit));
