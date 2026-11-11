@@ -141,18 +141,23 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         self.assertIn('HaloDiagnostics.write(dataRoot, output);', s)
         self.assertIn('Review it before sharing.', s)
 
-    def test_host_opt_in_commander_controls(self):
+    def test_two_independent_mode_switches(self):
         s = self.source
-        self.assertIn('commanderToggle.setText("COMMANDER MODE: "', s)
+        self.assertIn('commanderToggle.setText("2142 COMMANDER: "', s)
+        self.assertIn('killstreakToggle.setText("KILLSTREAK REWARDS: "', s)
         self.assertIn('CheckBox[] commanderChecks = new CheckBox[CommanderConfig.KEYS.length];', s)
+        self.assertIn('CheckBox[] killstreakChecks = new CheckBox[KillstreakConfig.KEYS.length];', s)
         self.assertIn('commanderChecks[0].isChecked()', s)
-        self.assertIn('commanderChecks[5].isChecked()', s)
+        self.assertIn('killstreakChecks[0].isChecked()', s)
         self.assertIn('saveCommanderChoices(new File(dataRoot, "config.toml"),', s)
+        self.assertIn('saveKillstreakChoices(new File(dataRoot, "config.toml"),', s)
         self.assertIn('CommanderConfig.save(file, selected);', s)
+        self.assertIn('KillstreakConfig.save(file, selected);', s)
         self.assertIn('CommanderConfig.disable(file);', s)
+        self.assertIn('KillstreakConfig.disable(file);', s)
         self.assertIn('hostRole.isChecked()', s)
         self.assertIn('!invitePending', s)
-        self.assertIn('Only policy controls are available', s)
+        self.assertIn('Switches only for now.', s)
 
     def test_disc_import_is_preserved(self):
         s = self.source

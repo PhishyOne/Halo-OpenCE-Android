@@ -18,43 +18,49 @@ MAIN=ROOT/"source/main/main.c"
 C=r"""
 #include <stdio.h>
 #include "commander_feature_policy.h"
-#define CHECK(x) do { if (!(x)) {fprintf(stderr, "bad line %d: %s\n",__LINE__,#x);return 1;} } while(0)
+#define CHECK(x) do {if(!(x)){fprintf(stderr,"failed line %d: %s\n",__LINE__,#x);return 1;}}while(0)
 int main(void) {
-  unsigned int all=COMMANDER_KNOWN_MASK, flags, selected;
-  int i;
-  CHECK(commander_policy_effective(0,1)==0);
-  CHECK(commander_policy_effective(all & ~COMMANDER_ENABLED,1)==0);
-  CHECK(commander_policy_effective(all,0)==0);
-  CHECK(commander_policy_effective(all,1)==all);
-  CHECK(commander_policy_effective(COMMANDER_ENABLED|COMMANDER_ORBITAL,1)
-        ==COMMANDER_ENABLED);
-  CHECK(commander_policy_effective(COMMANDER_ENABLED|COMMANDER_KILLSTREAKS|
-      COMMANDER_ORBITAL,1)==(COMMANDER_ENABLED|COMMANDER_KILLSTREAKS|COMMANDER_ORBITAL));
-  CHECK(commander_policy_effective(all|0x1000u,1)==all);
-  CHECK(!commander_policy_allows(0,COMMANDER_SATELLITE));
-  CHECK(!commander_policy_allows(COMMANDER_SATELLITE,COMMANDER_SATELLITE));
-  CHECK(commander_policy_allows(all,COMMANDER_ORDERS));
-  CHECK(commander_policy_allows(all,COMMANDER_ANNOUNCEMENTS));
-  CHECK(!commander_policy_allows(all,COMMANDER_ORDERS|COMMANDER_UAV));
-  CHECK(!commander_policy_allows(all,0));
-  CHECK(!commander_policy_allows(all,0x1000u));
-  for (i=0;i<256;i++) {
-    flags=commander_policy_effective((unsigned)i,1);
-    CHECK((flags & ~COMMANDER_KNOWN_MASK)==0);
-    if (!(i & COMMANDER_ENABLED)) CHECK(flags==0);
-    if (!(i & COMMANDER_KILLSTREAKS)) CHECK(!(flags & COMMANDER_ORBITAL));
-    if ((i & COMMANDER_ENABLED)) {
-      CHECK(commander_policy_allows(flags,COMMANDER_ENABLED));
-      CHECK(!!commander_policy_allows(flags,COMMANDER_SPOTTING) ==
-            !!(i & COMMANDER_SPOTTING));
+    unsigned int all=COMMANDER_KNOWN_MASK, flags, ffa;
+    int i;
+    CHECK(commander_policy_effective(0,1,1)==0);
+    CHECK(commander_policy_effective(all,1,0)==0); /* campaign/co-op */
+    CHECK(commander_policy_effective(all,1,1)==all);
+    CHECK(commander_policy_effective(all,0,1)==KILLSTREAK_FEATURE_MASK);
+    CHECK(commander_policy_effective(COMMANDER_ENABLED|COMMANDER_UAV,1,1)
+          == (COMMANDER_ENABLED|COMMANDER_UAV));
+    CHECK(commander_policy_effective(KILLSTREAK_ENABLED|KILLSTREAK_ORBITAL,1,1)
+          == (KILLSTREAK_ENABLED|KILLSTREAK_ORBITAL));
+    CHECK(commander_policy_effective(COMMANDER_ENABLED|KILLSTREAK_ENABLED,1,1)
+          == (COMMANDER_ENABLED|KILLSTREAK_ENABLED));
+    CHECK(commander_policy_effective(KILLSTREAK_ORBITAL|COMMANDER_ENABLED,1,1)
+          == COMMANDER_ENABLED);
+    CHECK(commander_policy_effective(all|0x8000u,1,1)==all);
+    CHECK(!commander_policy_allows(0,COMMANDER_SATELLITE));
+    CHECK(!commander_policy_allows(all,COMMANDER_ORDERS|COMMANDER_UAV));
+    CHECK(!commander_policy_allows(all,0));
+    CHECK(!commander_policy_allows(all,0x8000u));
+    CHECK(!killstreak_policy_allows(all,COMMANDER_ORDERS));
+    CHECK(killstreak_policy_allows(all,KILLSTREAK_ENABLED));
+    CHECK(killstreak_policy_allows(all,KILLSTREAK_ORBITAL));
+    for(i=0;i<512;i++) {
+        flags=commander_policy_effective((unsigned)i,1,1);
+        ffa=commander_policy_effective((unsigned)i,0,1);
+        CHECK((flags & ~COMMANDER_KNOWN_MASK)==0);
+        CHECK((ffa & COMMANDER_FEATURE_MASK)==0);
+        CHECK((ffa & KILLSTREAK_FEATURE_MASK)==(flags & KILLSTREAK_FEATURE_MASK));
+        CHECK(commander_policy_effective((unsigned)i,1,0)==0);
+        if(!(i & COMMANDER_ENABLED)) CHECK(!(flags & COMMANDER_FEATURE_MASK));
+        if(!(i & KILLSTREAK_ENABLED)) CHECK(!(flags & KILLSTREAK_FEATURE_MASK));
+        if(!(i & KILLSTREAK_ENABLED)) CHECK(!(flags & KILLSTREAK_ORBITAL));
+        CHECK(!!commander_policy_allows(flags,COMMANDER_ORDERS) ==
+             !!((i & COMMANDER_ENABLED) && (i & COMMANDER_ORDERS)));
+        CHECK(!!killstreak_policy_allows(flags,KILLSTREAK_ANNOUNCEMENTS) ==
+             !!((i & KILLSTREAK_ENABLED) && (i & KILLSTREAK_ANNOUNCEMENTS)));
+        CHECK(!!killstreak_policy_allows(ffa,KILLSTREAK_ORBITAL) ==
+             !!((i & KILLSTREAK_ENABLED) && (i & KILLSTREAK_ORBITAL)));
     }
-    for (selected=1;selected<=COMMANDER_ANNOUNCEMENTS;selected<<=1) {
-      if (commander_policy_allows(flags,selected))
-        CHECK((flags & selected)==selected);
-    }
-  }
-  puts("Commander feature policy PASS (256 masks, dependencies, team-only, fail-closed)");
-  return 0;
+    puts("PASS independent Commander/Killstreak policy (512 masks, FFA, master deps)");
+    return 0;
 }
 """
 
@@ -75,23 +81,32 @@ class CommanderPolicyTest(unittest.TestCase):
             self.assertEqual(run.returncode,0,run.stderr)
             self.assertIn("PASS",run.stdout)
 
-    def test_config_master_defaults_off(self):
+    def test_config_both_masters_default_off(self):
         s=CONFIG.read_text()
         self.assertIn('{ "commander.enabled", _config_boolean, "false"',s)
-        for name in ("satellite","uav","spotting","orders",
-                     "killstreaks","orbital","announcements"):
+        self.assertIn('{ "killstreak.enabled", _config_boolean, "false"',s)
+        for name in ("satellite","uav","spotting","orders","announcements"):
             self.assertIn('{ "commander.'+name+'", _config_boolean, "true"',s)
+        for name in ("orbital","announcements"):
+            self.assertIn('{ "killstreak.'+name+'", _config_boolean, "true"',s)
+        self.assertNotIn('{ "commander.killstreaks",',s)
+        self.assertNotIn('{ "commander.orbital",',s)
 
-    def test_client_can_never_enable_itself(self):
+    def test_client_cannot_enable_either_group(self):
         s=NATIVE.read_text()
         self.assertIn('if (game_connection() == _game_connection_network_client)',s)
-        self.assertIn('commander_policy_effective(commander_client_mask, 1)',s)
-        self.assertIn('return commander_policy_effective(commander_host_selected_mask(), 1)',s)
+        self.assertIn('commander_policy_effective(commander_client_mask,',s)
+        self.assertIn('commander_policy_effective(commander_host_selected_mask(),',s)
         self.assertIn('static unsigned int commander_client_mask;',s)
         self.assertIn('commander_client_mask = 0;',s)
-        self.assertIn('!game_in_progress() || !game_engine_running()',s)
-        self.assertIn('network_coop_active()',s)
+        self.assertIn('game_in_progress() && game_engine_running()',s)
+        self.assertIn('!network_coop_active()',s)
         self.assertIn('variant->universal_variant.teams',s)
+        self.assertIn('config_boolean("killstreak.enabled")',s)
+        self.assertIn('config_boolean("commander.enabled")',s)
+        self.assertIn('config_boolean("killstreak.orbital")',s)
+        self.assertIn('config_boolean("killstreak.announcements")',s)
+        self.assertIn('int killstreak_feature_allowed(unsigned int feature)',s)
         self.assertIn('network_connection_last_read_was_unreliable()',s)
         self.assertIn('game_connection() != _game_connection_network_client',s)
         self.assertIn('machine_index != NONE',s)
@@ -99,7 +114,7 @@ class CommanderPolicyTest(unittest.TestCase):
         self.assertIn('message.reserved != 0',s)
         self.assertIn('message.header.count != 1',s)
         self.assertIn('(message.mask & ~COMMANDER_KNOWN_MASK) != 0',s)
-        self.assertIn('commander_client_mask = commander_policy_effective(message.mask, 1)',s)
+        self.assertIn('commander_client_mask = commander_policy_effective(message.mask, 1, 1)',s)
 
     def test_reliable_host_policy_wiring(self):
         s=NETWORK.read_text()
@@ -114,20 +129,26 @@ class CommanderPolicyTest(unittest.TestCase):
         self.assertIn('commander_features_update();',main)
         self.assertIn('commander_features_mask() == 0',native) if False else None
 
-    def test_android_host_only_and_master_dependency(self):
+    def test_android_independent_masters_and_guest_disable(self):
         s=LAUNCHER.read_text()
         self.assertIn('getSharedPreferences("commander_controls", MODE_PRIVATE)',s)
-        self.assertIn('commanderToggle.setText("COMMANDER MODE: "',s)
+        self.assertIn('getSharedPreferences("killstreak_controls", MODE_PRIVATE)',s)
+        self.assertIn('commanderToggle.setText("2142 COMMANDER: "',s)
+        self.assertIn('killstreakToggle.setText("KILLSTREAK REWARDS: "',s)
         self.assertIn('commanderChecks[0].isChecked()',s)
-        self.assertIn('commanderChecks[5].isChecked()',s)
-        self.assertIn('i != 6 || killstreaks',s)
+        self.assertIn('killstreakChecks[0].isChecked()',s)
         self.assertIn('hostRole.isChecked()',s)
         self.assertIn('!invitePending',s)
         self.assertIn('saveCommanderChoices(new File(dataRoot, "config.toml")',s)
+        self.assertIn('saveKillstreakChoices(new File(dataRoot, "config.toml")',s)
         self.assertIn('CommanderConfig.disable(file)',s)
+        self.assertIn('KillstreakConfig.disable(file)',s)
         self.assertIn('CommanderConfig.save(file, selected)',s)
+        self.assertIn('KillstreakConfig.save(file, selected)',s)
         self.assertIn('CommanderConfig.disable(new File(dataRoot, "config.toml"))',s)
-        self.assertIn('Only policy controls are available',s)
+        self.assertIn('KillstreakConfig.disable(new File(dataRoot, "config.toml"))',s)
+        self.assertIn('Switches only for now.',s)
+
 
 if __name__=="__main__":
     unittest.main()

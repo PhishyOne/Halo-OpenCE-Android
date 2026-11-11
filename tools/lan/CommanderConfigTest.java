@@ -52,7 +52,7 @@ public final class CommanderConfigTest {
                 "[display]\nshow_fps = true\n";
             Files.writeString(path,original);
             CommanderConfig.Options opts=new CommanderConfig.Options();
-            opts.enabled=true; opts.uav=false; opts.orbital=false;
+            opts.enabled=true; opts.uav=false; opts.orders=false;
             CommanderConfig.save(path.toFile(),opts);
             String saved=text(path);
             check(saved.contains("address = \"10.0.0.5\""),"Network settings changed");
@@ -64,16 +64,16 @@ public final class CommanderConfigTest {
             check(saved.contains("[commander]\n"),"Commander section not added");
             check(saved.contains("enabled = true\n"),"Master enabled missing");
             check(saved.contains("uav = false\n"),"UAV switch not saved");
-            check(saved.contains("orbital = false\n"),"Orbital switch not saved");
+            check(saved.contains("orders = false\n"),"Commander orders switch not saved");
             check(saved.contains("announcements = true\n"),"Radio switch missing");
             CommanderConfig.Options loaded=CommanderConfig.read(path.toFile());
-            check(loaded.enabled && !loaded.uav && !loaded.orbital,
+            check(loaded.enabled && !loaded.uav && !loaded.orders,
                 "Reload lost feature preferences");
 
             // Disable the master without erasing selected subfeature flags.
             CommanderConfig.disable(path.toFile());
             loaded=CommanderConfig.read(path.toFile());
-            check(!loaded.enabled && !loaded.uav && !loaded.orbital,
+            check(!loaded.enabled && !loaded.uav && !loaded.orders,
                 "Master disable changed saved subfeature choices");
             check(text(path).contains("count = 64\n"),"Master disable damaged bot count");
             // Existing commander section: replace keys in place, preserve
@@ -83,7 +83,7 @@ public final class CommanderConfigTest {
                 "enabled = false # old choice\n" +
                 "orbital = true\ncustom_theme = \"2142\"\n" +
                 "[display]\nshow_fps = true\n");
-            opts.enabled=true;opts.uav=true;opts.orbital=true;
+            opts.enabled=true;opts.uav=true;opts.orders=true;
             CommanderConfig.save(path.toFile(),opts);
             saved=text(path);
             check(saved.contains("enabled = true\n"),"Existing master setting unchanged");
