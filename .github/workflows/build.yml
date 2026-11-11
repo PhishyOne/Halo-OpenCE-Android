@@ -219,6 +219,9 @@ jobs:
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.HaloDiagnosticsTest
           javac -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/CommanderConfig.java tools/lan/CommanderConfigTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.CommanderConfigTest
+          javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/KillstreakConfig.java tools/lan/KillstreakConfigTest.java tools/lan/IndependentModesTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.KillstreakConfigTest
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.IndependentModesTest
 
       - name: Release
         env:

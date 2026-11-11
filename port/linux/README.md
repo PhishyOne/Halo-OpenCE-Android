@@ -443,16 +443,19 @@ range_culled and LOS work to distinguish cheap culling from real collision
 tests. This is a candidate for physical stress tests, not a guarantee
 that 127 bots will stay at a stable frame rate.
 
-## Commander Mode feature permissions (opt-in)
+## Independent Commander Mode and Killstreak Rewards
 
-The 2142-inspired command system is gated by commander.enabled (default
-false) and independent Satellite Track, UAV, spotting, orders, killstreak,
-orbital and audio-announcement options. Permissions are meaningful only
-in team multiplayer; orbital also depends on killstreaks. The host sends
-a reliable, validated feature mask to each client. Clients cannot grant
-themselves abilities using their own config.toml. This phase implements
-settings and authoritative synchronization only, not a working tactical
-laptop or support powers. Details: docs/commander_mode.md.
+Two master settings, both OFF by default: Commander Mode for tactical
+satellite/UAV, spotting and orders in team multiplayer; Killstreak Rewards
+for human-earned 3/5/10-kill abilities in team OR free-for-all multiplayer.
+They are independent: turning Commander Mode OFF does not disable personal
+killstreaks, and vice versa. The host sends the effective feature mask
+reliably; client settings cannot self-authorize. Campaign and co-op
+allow neither mode.
+
+This phase implements switches, settings and host/client permissions.
+Tactical laptop, reward power-ups, recon HUD and orbital strikes are still
+future gameplay tasks. Details: docs/commander_mode.md.
 
 ## Pregame bot count buttons
 

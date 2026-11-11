@@ -1,4 +1,4 @@
-/* Authoritative Commander Mode feature policy (pre-feature foundation).
+/* Independent Commander Mode and personal Killstreak Rewards policy.
  *
  * The host chooses a master enabled flag and individual support options.
  * The packet contains only the resulting bitmask; no client may request
@@ -35,14 +35,19 @@ typedef char verify_distributed_commander_settings_size[
 static unsigned int commander_client_mask;
 static unsigned int commander_sent_mask = ~0u;
 
-/* A commander is a team-multiplayer role, not an advantage in campaign
- * co-op, FFA or the menus. */
+/* A commander requires teams. Human killstreak rewards only require
+ * multiplayer, so FFA players need not be commanders to earn them. */
+static int commander_multiplayer_game(void)
+{
+    return game_in_progress() && game_engine_running() &&
+        !network_coop_active();
+}
+
 static int commander_team_game(void)
 {
     struct game_variant *variant;
 
-    if (!game_in_progress() || !game_engine_running() ||
-        network_coop_active())
+    if (!commander_multiplayer_game())
         return 0;
     variant = game_engine_get_variant();
     return variant && variant->universal_variant.teams;
@@ -62,10 +67,12 @@ static unsigned int commander_host_selected_mask(void)
         mask |= COMMANDER_SPOTTING;
     if (config_boolean("commander.orders"))
         mask |= COMMANDER_ORDERS;
-    if (config_boolean("commander.killstreaks"))
-        mask |= COMMANDER_KILLSTREAKS;
-    if (config_boolean("commander.orbital"))
-        mask |= COMMANDER_ORBITAL;
+    if (config_boolean("killstreak.enabled"))
+        mask |= KILLSTREAK_ENABLED;
+    if (config_boolean("killstreak.orbital"))
+        mask |= KILLSTREAK_ORBITAL;
+    if (config_boolean("killstreak.announcements"))
+        mask |= KILLSTREAK_ANNOUNCEMENTS;
     if (config_boolean("commander.announcements"))
         mask |= COMMANDER_ANNOUNCEMENTS;
     return mask;
@@ -73,18 +80,28 @@ static unsigned int commander_host_selected_mask(void)
 
 unsigned int commander_features_mask(void)
 {
-    if (!commander_team_game())
+    int multiplayer = commander_multiplayer_game();
+    int team_multiplayer = commander_team_game();
+
+    if (!multiplayer)
         return 0;
     if (game_connection() == _game_connection_network_client)
-        return commander_policy_effective(commander_client_mask, 1);
-    /* Only the local host can enable functionality. The client never
-     * consults its own TOML settings for commander capabilities. */
-    return commander_policy_effective(commander_host_selected_mask(), 1);
+        return commander_policy_effective(commander_client_mask,
+            team_multiplayer, multiplayer);
+    /* Local host's two independent feature groups; LAN clients never
+     * use their own TOML to grant themselves individual rewards. */
+    return commander_policy_effective(commander_host_selected_mask(),
+        team_multiplayer, multiplayer);
 }
 
 int commander_feature_allowed(unsigned int feature)
 {
     return commander_policy_allows(commander_features_mask(), feature);
+}
+
+int killstreak_feature_allowed(unsigned int feature)
+{
+    return killstreak_policy_allows(commander_features_mask(), feature);
 }
 
 void commander_features_new_game(void)
@@ -97,7 +114,7 @@ static void commander_settings_make(
     struct distributed_commander_settings *message, unsigned int mask)
 {
     memset(message, 0, sizeof(*message));
-    message->mask = (word)commander_policy_effective(mask, 1);
+    message->mask = (word)commander_policy_effective(mask, 1, 1);
 }
 
 void commander_features_send_to_machine(long machine_index)
@@ -154,5 +171,5 @@ void commander_features_handle_message(long machine_index, word const *data,
         message.header.count != 1 || message.reserved != 0 ||
         (message.mask & ~COMMANDER_KNOWN_MASK) != 0)
         return;
-    commander_client_mask = commander_policy_effective(message.mask, 1);
+    commander_client_mask = commander_policy_effective(message.mask, 1, 1);
 }

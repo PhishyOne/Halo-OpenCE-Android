@@ -1,97 +1,85 @@
-# Commander Mode (2142-inspired, opt-in)
+# Independent Commander Mode and Killstreak Rewards
 
-This work deliberately separates **permission controls** from gameplay
-abilities. The first phase implements the full host-authoritative settings
-model, not a pretend working laptop or unfinished killstreak effects.
+These are TWO separate multiplayer feature modes, not nested settings.
 
-## Controls
+- **2142 COMMANDER: OFF / OPTIONS** supports Satellite Track, UAV recon,
+  spotting, attack/defend orders and command radio. Team multiplayer only.
+- **KILLSTREAK REWARDS: OFF / OPTIONS** supports human-earned rewards in
+  team games and free-for-all, without requiring a designated commander.
 
-In Halo Android's launcher, the hosting player can expand
-**COMMANDER MODE: OFF / OPTIONS**. The entire commander feature family is
-**off by default**. Activating the master switch permits these optional
-subfeatures, each of which the host may independently uncheck:
+Both master switches are OFF by default. Their preferences are independent.
 
-| Switch | Config key | Default |
+## Options
+
+| Option | Native key | Default |
 | --- | --- | --- |
-| Master Commander Mode | commander.enabled | false |
-| Satellite Track (commander-only) | commander.satellite | true |
-| UAV reconnaissance (team-shared) | commander.uav | true |
-| Enemy spotting (team-shared temporary markers) | commander.spotting | true |
+| 2142 Commander master | commander.enabled | false |
+| Satellite Track | commander.satellite | true |
+| UAV | commander.uav | true |
+| Enemy spotting | commander.spotting | true |
 | Attack/defend orders | commander.orders | true |
-| Killstreak rewards | commander.killstreaks | true |
-| Orbital bombardment | commander.orbital | true |
-| Radio announcements | commander.announcements | true |
+| Commander radio | commander.announcements | true |
+| Individual Killstreak Rewards master | killstreak.enabled | false |
+| Orbital strike reward | killstreak.orbital | true |
+| Personal/strike radio | killstreak.announcements | true |
 
-The subfeature defaults become effective **only if** the master is enabled.
-Orbital is additionally disabled if killstreaks are off; its checkbox
-preference is preserved so it can be restored without re-entering settings.
-Features apply only to **team multiplayer**, never free-for-all, ordinary
-campaign, or network co-op. Turning off Commander Mode restores ordinary
-Halo play. The host can configure these settings for its offline and
-LAN-hosted matches. A LAN guest cannot enable or override them.
+A disabled master suppresses its children WITHOUT erasing their selections.
+Both ON enables both groups. Turning either OFF leaves the other alone.
+Orbital requires Killstreak Rewards ON, not Commander Mode ON.
 
-The Android launcher writes only the commander config section through the
-existing game-data directory. No maps, saves, LAN addresses or bot counts
-are altered. The options survive restarts; a guest/standard launch clears
-only the local master bit and the native client never uses its own settings
-as a source of authority.
+The Android host launcher displays both collapsible sections in offline
+or LAN-host modes. Each section is written atomically to its own part of
+config.toml. Neither changes network addresses, bot counts, game assets or
+saved games. For guests and standard launches, local masters are cleared.
+Old v14 commander.killstreaks and commander.orbital keys, if retained in an
+existing config, are inert legacy entries and grant no rewards.
 
-## Network authority
+## Network trust boundary
 
-The native game sends a 12-byte commander policy message, message type 96.
-Only the authoritative host sends the **effective bitmask**, over reliable
-game messages, once on load/rejoin and when it changes. An observing client
-starts with zero permissions, resets on a new game, rejects malformed
-packets, unreliable datagrams, unknown bits, wrong sender/direction, and
-never evaluates its own TOML to grant powers. Every future tactical map,
-UAV, spotting, order, killstreak, orbital and radio gameplay action must
-check the effective policy before executing; the host additionally
-validates the sender, player role, cooldown and position.
+The native host sends one reliable 12-byte packet (type 96) with a combined
+16-bit permission mask. Client permissions default zero, are reset per game,
+and only a correctly sized authenticated host packet over the reliable
+connection can update them. Unknown bits, client-origin messages, wrong
+directions and malformed frames are rejected. Local client settings do not
+grant advantages.
 
-Current phase does **not** yet create commander roles, render a laptop,
-report enemy positions, award power-ups, broadcast spoken lines, issue
-squad orders or fire orbital weapons. Do not mistake visible settings
-for working game abilities.
+- Commander bits: effective only in team multiplayer when its own master
+  is enabled.
+- Killstreak bits: effective in team or FFA multiplayer when its own master
+  is enabled, independently of Commander.
+- Campaign and co-op: neither group permitted.
+- Future action handlers must ALSO validate host-side player role,
+  kill counts, target coordinates and cooldowns before awarding anything.
 
-## Intended Battlefield-2142-style gameplay
+## Desired mechanics, still future gameplay work
 
-- One commander **per team**, host-designated and able to resign.
-- A tactical laptop/map with team positions, flags/hills, and squad orders.
-- Satellite Track is a commander-only whole-battlefield scan.
-- UAV is a localized scan revealed to the commander's team.
-- A hostile shot or explicitly spotted is temporarily tracked for its
-  relevant team, rather than permanently exposing every player.
-- The commander may order squads and bot groups to attack or defend
-  objectives. Bots need formation/spread/flank logic before large tests.
-- Optional human killstreaks:
-  - 3 kills without dying: 30 seconds of active camouflage **and** overshield.
-  - 5 kills: refresh those two and add 30 seconds of enemy HUD tracking.
-  - 10 kills: one manually designated orbital bombardment.
-- Personal earning call: **"Orbital strike authorized."** (only the
-  player who earned the strike hears it).
-- Confirmed strike call: **"Orbital bombardment incoming."** (all players
-  hear it via non-positional announcement audio).
-- Designated strike locations must be validated by the host, with an
-  advance warning, safe map bounds, cooldowns and friendly-fire rules.
+Commander: one host-designated commander per team, interactive tactical
+laptop, commander-only full scan, team-shared area UAV and spotted markers,
+attack/defend orders for human squads and bot groups.
 
-These mechanics are future implementation targets, not bundled content in
-the current settings-only build. Original custom voice recordings must be
-supplied or produced for each phone; no 2142 copyrighted game audio is used.
+Individual human killstreaks:
+- 3 kills without dying: camouflage and overshield, 30 seconds.
+- 5 kills: refresh both and add 30 seconds of enemy HUD tracking.
+- 10 kills: one manually targeted orbital strike.
+- Only the earner hears "Orbital strike authorized."
+- Everyone hears "Orbital bombardment incoming" after target confirmation.
+- Death resets the streak; only the host validates rewards and damage.
+- No third-party copyrighted voice samples; any voice recording must be
+  original.
 
-## Acceptance before enabling by default
+IMPORTANT: This PR implements switches, persistence and network policy
+only. The tactical laptop, spotting, kill rewards, 3D strike, HUD tracking,
+sounds and NPC objective orders are NOT yet playable. Never claim they are
+working because a configuration checkbox is visible.
 
-1. Off by default after a clean install and with all subfeatures selected.
-2. Disable master on host: no team capabilities remain effective for host
-   or clients.
-3. Disable just UAV/spotting/orders: no corresponding action is accepted,
-   while the others remain allowed.
-4. Disable killstreaks: orbital power is also disabled.
-5. A guest locally toggles commander settings: host policy is unchanged.
-6. Mid-match host changes are transmitted reliably; reconnecting guests
-   receive the current mask before any commander capability can be used.
-7. Ordinary team Slayer/CTF/King without Commander Mode, free-for-all,
-   campaign and co-op retain their current behavior.
+## Acceptance checks
 
-Settings-only automated gates cover the policy, persistence and reliable
-host/client transport. Real gameplay acceptance begins after the command
-role, tactical map and support systems are implemented.
+- All 512 combinations of feature bits independently gated in C tests.
+- Separate Java config tests verify atomic persistence and no corruption
+  of the other section or network/bot fields.
+- Cross-section test verifies each master can be enabled and disabled
+  independently, with both selected or both disabled.
+- Source tests validate reliable host-only mask delivery and rejection of
+  client attempts to self-authorize.
+- Real LAN host/guest and Android UI tests are pending; the actual
+  battlefield systems each need their own gameplay qualification.

@@ -17,7 +17,8 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Host's saved Commander Mode policy.
+/** Host's saved 2142 tactical Commander Mode policy, separate from
+ * individual killstreaks.
  *
  * This edits ONLY [commander] in config.toml and never touches network
  * addresses, bot counts, game data or player saves. A guest launch forces
@@ -32,7 +33,7 @@ final class CommanderConfig {
         "^\\s*([A-Za-z0-9_.-]+)\\s*=\\s*([^#\\r\\n]*?)(?:\\s*#.*)?$");
     static final String[] KEYS = {
         "enabled", "satellite", "uav", "spotting", "orders",
-        "killstreaks", "orbital", "announcements"
+        "announcements"
     };
 
     static final class Options {
@@ -41,8 +42,6 @@ final class CommanderConfig {
         boolean uav = true;            // localized shared scan
         boolean spotting = true;       // a shot/spot marks a target
         boolean orders = true;         // attack and defend objectives
-        boolean killstreaks = true;    // human-only earned rewards
-        boolean orbital = true;        // requires killstreaks
         boolean announcements = true;  // radio audio, with a cooldown
 
         boolean get(String key) {
@@ -52,8 +51,6 @@ final class CommanderConfig {
                 case "uav": return uav;
                 case "spotting": return spotting;
                 case "orders": return orders;
-                case "killstreaks": return killstreaks;
-                case "orbital": return orbital;
                 case "announcements": return announcements;
                 default: throw new IllegalArgumentException("Unknown Commander option");
             }
@@ -65,8 +62,6 @@ final class CommanderConfig {
                 case "uav": uav = value; break;
                 case "spotting": spotting = value; break;
                 case "orders": orders = value; break;
-                case "killstreaks": killstreaks = value; break;
-                case "orbital": orbital = value; break;
                 case "announcements": announcements = value; break;
                 default: throw new IllegalArgumentException("Unknown Commander option");
             }

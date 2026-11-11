@@ -520,10 +520,15 @@ static const struct config_setting config_settings[] =
 		"Temporary hostile sightings shared through tactical markers." },
 	{ "commander.orders", _config_boolean, "true", "HALO_COMMANDER_ORDERS", _environment_value, _platform_all,
 		"Commander attack/defend orders for teams and bots." },
-	{ "commander.killstreaks", _config_boolean, "true", "HALO_COMMANDER_KILLSTREAKS", _environment_value, _platform_all,
-		"Opt-in host-validated killstreak support rewards." },
-	{ "commander.orbital", _config_boolean, "true", "HALO_COMMANDER_ORBITAL", _environment_value, _platform_all,
-		"Orbital support is available only if killstreaks and Commander Mode are on." },
+	/* Personal killstreak rewards are an independent multiplayer option.
+	   They do NOT require the 2142-style commander role or a team game. */
+	{ "killstreak.enabled", _config_boolean, "false", "HALO_KILLSTREAK_ENABLED", _environment_value, _platform_all,
+		"Master switch: player-earned 3/5/10-kill rewards, without Commander Mode.\n"
+		"Off by default; host grants access to the game's human players." },
+	{ "killstreak.orbital", _config_boolean, "true", "HALO_KILLSTREAK_ORBITAL", _environment_value, _platform_all,
+		"10-kill orbital support when individual killstreak rewards are enabled." },
+	{ "killstreak.announcements", _config_boolean, "true", "HALO_KILLSTREAK_ANNOUNCEMENTS", _environment_value, _platform_all,
+		"Private reward authorization and public strike radio announcements." },
 	{ "commander.announcements", _config_boolean, "true", "HALO_COMMANDER_ANNOUNCEMENTS", _environment_value, _platform_all,
 		"Non-positional command radio and killstreak warning announcements." },
 	{ "bots.count", _config_integer, "0", "HALO_BOTS", _environment_value, _platform_all,

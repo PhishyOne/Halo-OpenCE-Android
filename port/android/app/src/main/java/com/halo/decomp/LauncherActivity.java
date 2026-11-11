@@ -680,9 +680,7 @@ public class LauncherActivity extends Activity {
             "UAV RECON (SHARE WITH TEAM)",
             "ENEMY SPOTTING",
             "ATTACK / DEFEND ORDERS",
-            "KILLSTREAK REWARDS",
-            "ORBITAL BOMBARDMENT",
-            "RADIO ANNOUNCEMENTS"
+            "COMMAND RADIO ANNOUNCEMENTS"
         };
         CheckBox[] commanderChecks = new CheckBox[CommanderConfig.KEYS.length];
         for (int i = 0; i < CommanderConfig.KEYS.length; i++) {
@@ -695,12 +693,10 @@ public class LauncherActivity extends Activity {
         }
         Runnable updateCommanderChecks = () -> {
             boolean enabled = commanderChecks[0].isChecked();
-            boolean killstreaks = commanderChecks[5].isChecked();
-            commanderToggle.setText("COMMANDER MODE: "
+            commanderToggle.setText("2142 COMMANDER: "
                 + (enabled ? "ON" : "OFF") + " / OPTIONS");
             for (int i = 1; i < commanderChecks.length; i++)
-                commanderChecks[i].setEnabled(enabled
-                    && (i != 6 || killstreaks));
+                commanderChecks[i].setEnabled(enabled);
         };
         for (CheckBox check : commanderChecks)
             check.setOnCheckedChangeListener((button, checked) ->
@@ -710,9 +706,61 @@ public class LauncherActivity extends Activity {
             commanderPanel.setVisibility(commanderPanel.getVisibility()
                 == View.VISIBLE ? View.GONE : View.VISIBLE));
         commanderPanel.addView(lanText(
-            "3 kills: camo + overshield; 5: refresh + recon; "
-            + "10: orbital strike. Only policy controls are available "
-            + "in this build; tactical map and rewards are still in development.", 11));
+            "Tactical laptop, satellite, UAV, spotting, and team orders. "
+            + "Independent of individual killstreak rewards. "
+            + "Only policy controls exist in this build.", 11));
+
+        // Killstreak Rewards is a separate multiplayer feature, not a
+        // permission that requires a commander or a team. The host grants
+        // access to EVERY human player, each earning their own streak.
+        SharedPreferences killstreakPrefs =
+            getSharedPreferences("killstreak_controls", MODE_PRIVATE);
+        KillstreakConfig.Options killstreakChoices = new KillstreakConfig.Options();
+        for (String key : KillstreakConfig.KEYS)
+            killstreakChoices.set(key, killstreakPrefs.getBoolean(key,
+                killstreakChoices.get(key)));
+        Button killstreakToggle = new Button(this);
+        hudButton(killstreakToggle, false);
+        content.addView(killstreakToggle);
+        LinearLayout killstreakPanel = hudPanel();
+        killstreakPanel.setVisibility(View.GONE);
+        content.addView(killstreakPanel);
+        killstreakPanel.addView(hudSection("INDIVIDUAL KILLSTREAK REWARDS"));
+        killstreakPanel.addView(lanText("OFF by default. Separate from 2142 "
+            + "Commander Mode; a host enables rewards for all human players, "
+            + "including free-for-all matches.", 12));
+        String[] killstreakLabels = {
+            "ENABLE KILLSTREAK REWARDS",
+            "10-KILL ORBITAL BOMBARDMENT",
+            "KILLSTREAK RADIO ANNOUNCEMENTS"
+        };
+        CheckBox[] killstreakChecks = new CheckBox[KillstreakConfig.KEYS.length];
+        for (int i = 0; i < KillstreakConfig.KEYS.length; i++) {
+            CheckBox check = new CheckBox(this);
+            check.setText(killstreakLabels[i]);
+            check.setChecked(killstreakChoices.get(KillstreakConfig.KEYS[i]));
+            hudCheck(check);
+            killstreakPanel.addView(check);
+            killstreakChecks[i] = check;
+        }
+        Runnable updateKillstreakChecks = () -> {
+            boolean enabled = killstreakChecks[0].isChecked();
+            killstreakToggle.setText("KILLSTREAK REWARDS: "
+                + (enabled ? "ON" : "OFF") + " / OPTIONS");
+            for (int i = 1; i < killstreakChecks.length; i++)
+                killstreakChecks[i].setEnabled(enabled);
+        };
+        for (CheckBox check : killstreakChecks)
+            check.setOnCheckedChangeListener((button, checked) ->
+                updateKillstreakChecks.run());
+        updateKillstreakChecks.run();
+        killstreakToggle.setOnClickListener(view ->
+            killstreakPanel.setVisibility(killstreakPanel.getVisibility()
+                == View.VISIBLE ? View.GONE : View.VISIBLE));
+        killstreakPanel.addView(lanText(
+            "3 kills: camo + overshield, 5: refresh + enemy tracking, "
+            + "10: targeted orbital strike. Reward gameplay and the tactical "
+            + "HUD are still in development. Switches only for now.", 11));
 
         // Collapsed utility, out of the way of normal Play. Android's picker
         // grants this app read access to a selected .map; this app alone
@@ -928,7 +976,9 @@ public class LauncherActivity extends Activity {
                 (lanMode.isChecked() && hostRole.isChecked() &&
                     lanOnly.isChecked() && !invitePending);
             commanderToggle.setVisibility(available ? View.VISIBLE : View.GONE);
+            killstreakToggle.setVisibility(available ? View.VISIBLE : View.GONE);
             commanderPanel.setVisibility(View.GONE);
+            killstreakPanel.setVisibility(View.GONE);
         };
         roles.setOnCheckedChangeListener((group, id) -> {
             updateRole.run();
@@ -1000,6 +1050,8 @@ public class LauncherActivity extends Activity {
                         team == 0 ? "even" : "against", crews, objectives);
                     saveCommanderChoices(new File(dataRoot, "config.toml"),
                         commanderChecks, commanderPrefs, true);
+                    saveKillstreakChoices(new File(dataRoot, "config.toml"),
+                        killstreakChecks, killstreakPrefs, true);
                 } catch (java.io.IOException error) {
                     feedback.setText("Couldn't configure offline bots: " + error.getMessage());
                     return;
@@ -1035,6 +1087,8 @@ public class LauncherActivity extends Activity {
                         count, skill, true, true);
                     saveCommanderChoices(new File(dataRoot, "config.toml"),
                         commanderChecks, commanderPrefs, hosting);
+                    saveKillstreakChoices(new File(dataRoot, "config.toml"),
+                        killstreakChecks, killstreakPrefs, hosting);
                     if (invitePending)
                         publishPendingInvite();
                 } catch (java.io.IOException e) {
@@ -1048,6 +1102,7 @@ public class LauncherActivity extends Activity {
                 try {
                     OfflineBotConfig.disable(new File(dataRoot, "config.toml"));
                     CommanderConfig.disable(new File(dataRoot, "config.toml"));
+                    KillstreakConfig.disable(new File(dataRoot, "config.toml"));
                 } catch (java.io.IOException error) {
                     feedback.setText("Couldn't configure normal Halo: " + error.getMessage());
                     return;
@@ -1080,6 +1135,27 @@ public class LauncherActivity extends Activity {
             saved.putBoolean(key, checked);
         }
         CommanderConfig.save(file, selected);
+        saved.apply();
+    }
+
+    /** Separate user-facing killstreak mode: permission for individual
+     * human rewards, not attached to the designated 2142 commander. */
+    private void saveKillstreakChoices(File file, CheckBox[] checks,
+            SharedPreferences preferences, boolean hosting)
+            throws java.io.IOException {
+        if (!hosting) {
+            KillstreakConfig.disable(file);
+            return;
+        }
+        KillstreakConfig.Options selected = new KillstreakConfig.Options();
+        SharedPreferences.Editor saved = preferences.edit();
+        for (int i = 0; i < KillstreakConfig.KEYS.length; i++) {
+            String key = KillstreakConfig.KEYS[i];
+            boolean checked = checks[i].isChecked();
+            selected.set(key, checked);
+            saved.putBoolean(key, checked);
+        }
+        KillstreakConfig.save(file, selected);
         saved.apply();
     }
 
