@@ -24,6 +24,7 @@ symbols in this file:
 #include "game/players.h"
 #include "memory/data.h"
 #include "units/units.h"
+#include "killstreak_rewards.h" /* port: port/linux/game/killstreak_rewards.c */
 
 /* ---------- constants */
 
@@ -42,6 +43,8 @@ static boolean game_statistics_active = FALSE;
 void game_statistics_start(
 	void)
 {
+	/* port: rewards are transient, independent of scoreboard statistics. */
+	killstreak_rewards_start();
 	game_statistics_active = TRUE;
 
 	return;
@@ -68,6 +71,8 @@ game_statistics_stop(
 		player = (struct player_datum *)data_iterator_next(&iterator);
 	}
 
+	/* port: end owned reward effects before leaving the match. */
+	killstreak_rewards_stop();
 	game_statistics_active = FALSE;
 
 	return;
@@ -128,6 +133,8 @@ void game_statistics_record_kill(
 			if (killing_player_index == dead_player_index)
 				dead_player->statistics.suicides++;
 
+			/* port: deaths reset human reward eligibility, including suicides. */
+			killstreak_rewards_reset_player(dead_player_index);
 			dead_player->statistics.deaths++;
 			dead_player->statistics.kills_in_a_row = 0;
 			dead_player->statistics.last_kill_time = NONE;
@@ -189,6 +196,10 @@ void game_statistics_record_kill(
 				{
 					credited_player->statistics.kills[statistic_index]++;
 					credited_player->statistics.kills_in_a_row++;
+					/* port: use the resolved enemy credit, never assists, suicides
+					   or a team kill redirected to a previous attacker. */
+					if (!friendly_fire && killing_player_index != dead_player_index)
+						killstreak_rewards_record_kill(credited_player_index, dead_player_index);
 					if (credited_player->statistics.last_kill_time >= assist_time)
 						credited_player->statistics.multiple_kills++;
 					else

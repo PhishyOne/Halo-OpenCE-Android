@@ -4,9 +4,9 @@
  * The packet contains only the resulting bitmask; no client may request
  * capabilities here. A network client starts with no permissions and only
  * accepts a reliable, correctly sized host policy packet. Future commander,
- * UAV, spotting, orders and killstreak call sites MUST check this mask
- * before performing their action. None of those gameplay actions are
- * implemented by this settings-only module.
+ * UAV, spotting and orders call sites MUST check this mask before acting.
+ * Personal 3/5-kill powerups check it in killstreak_rewards.c. This module
+ * remains responsible only for policy.
  */
 #include "cseries.h"
 #include "game/game.h"

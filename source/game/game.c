@@ -119,6 +119,7 @@ struct game_options;
 /* ---------- headers */
 
 #include "cseries/cseries.h"
+#include "killstreak_rewards.h" /* port: port/linux/game/killstreak_rewards.c */
 #include "game/game.h"
 #include "game_modes.h" /* port: port/linux/game/game_modes.c */
 #include "ai/ai.h"
@@ -911,6 +912,8 @@ void game_precache_new_map(
 void game_dispose_from_old_map(
 	void)
 {
+	/* port: release owned rewards before object and player disposal. */
+	killstreak_rewards_stop();
 	rasterizer_dispose_from_old_map();
 	game_state_dispose_from_old_map();
 	cheats_dispose_from_old_map();

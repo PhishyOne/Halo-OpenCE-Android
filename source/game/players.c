@@ -228,6 +228,7 @@ symbols in this file:
 /* ---------- headers */
 
 #include "cseries.h"
+#include "killstreak_rewards.h" /* port: port/linux/game/killstreak_rewards.c */
 #include "infection.h" /* port: port/linux/game/infection.c */
 #include "cseries/errors.h"
 #include "cseries/profile.h"
@@ -702,6 +703,8 @@ long find_unused_local_player_index(
 void player_delete(
 	long player_index)
 {
+	/* port: no reward state survives a disconnect or reused datum slot. */
+	killstreak_rewards_reset_player(player_index);
 	datum_delete(
 		player_data,
 		player_index);
@@ -818,6 +821,8 @@ void player_died(
 	struct data_iterator iterator;
 
 	player = player_get(player_index);
+	/* port: also covers deaths that do not record statistics. */
+	killstreak_rewards_reset_player(player_index);
 	player->dead_unit_index = player->unit_index;
 	player->unit_index = NONE;
 	if (player->local_player_index != NONE)
@@ -849,6 +854,8 @@ void players_set_local_player_unit(
 	struct player_datum *player;
 	struct unit_datum *unit;
 
+	/* port: detach only the old life's owned reward effects. */
+	killstreak_rewards_reset_player(local_player_get_player_index(local_player_index));
 	old_unit_index = player_control_get_unit_index(local_player_index);
 	match_assert(
 		"c:\\halo\\SOURCE\\game\\players.c",
@@ -1209,6 +1216,8 @@ void machine_remove_player(
 
 	if (player_index == NONE)
 		return;
+	/* port: a disconnected player may retain its datum until match end. */
+	killstreak_rewards_reset_player(player_index);
 	for (machine_index = 0; machine_index < MAXIMUM_NETWORK_MACHINE_COUNT; machine_index++)
 	{
 		for (machine_player_index = 0;
@@ -1382,6 +1391,8 @@ static void player_spawn(
 	long starting_equipment_count;
 	short starting_location_index;
 
+	/* port: a replacement unit starts a new reward life. */
+	killstreak_rewards_reset_player(player_index);
 	player = player_get(player_index);
 	saved_unit_index = NONE;
 	if (!game_engine_running() && player->local_player_index != NONE)
@@ -3937,6 +3948,8 @@ boolean player_handle_powerup(
 			return FALSE;
 	}
 
+	/* port: a normal pickup must not be removed with a reward. */
+	killstreak_rewards_powerup(player_index, powerup_type);
 	if (player->powerup_durations[powerup_type] == 0)
 		player_powerup_on(player_index, powerup_type);
 	else if (!game_engine_running())
@@ -3958,6 +3971,8 @@ void player_handle_powerup_minor(
 	match_assert("c:\\halo\\SOURCE\\game\\players.c", 0xB19,
 		powerup_type>=0 && powerup_type<NUMBER_OF_PLAYER_POWERUPS);
 
+	/* port: a normal pickup must not be removed with a reward. */
+	killstreak_rewards_powerup(player_index, powerup_type);
 	if (player->powerup_durations[powerup_type] == 0)
 		player_powerup_on(player_index, powerup_type);
 
