@@ -463,13 +463,15 @@ maximum). Commander Mode never shares or grants this recon. The host sends
 3/5-kill notices and recon expiry reliably only to the earner's machine.
 With killstreak.announcements enabled, the HUD says
 "3 kills: Enhancements online" and "5 kills: Recon online (30s)".
-On Android, the local player also hears those original brief phrases
-through an available **installed offline English TextToSpeech voice**.
-This does not reuse stock multikill sound tags or transmit audio.
-With no offline voice, or on other platforms, the game stays text-only.
-Split-screen players get private text and markers but no reward audio,
-since the physical audio mix is shared. Regular Halo multikill audio
-still follows the base game's own rapid-kill rules.
+On Android v19, the earner hears two locally bundled, original
+synthesized radio-style PCM clips played through SoundPool. This replaces
+v18's dependence on installed offline TextToSpeech voice data. The APK
+includes only two short, mono 22,050-Hz PCM16 WAV files (under 160 KB
+combined), no Halo stock multikill clips or remote voice services.
+If the audio device cannot load a clip, HUD text still appears; other
+platforms remain text-only. Split-screen players receive private text
+and markers but no reward audio, because the output device mix is shared.
+Regular Halo multikills still use the base game's announcer rules.
 Tactical laptop and orbital strikes remain unimplemented.
 Local source tests do not establish Android or physical LAN acceptance;
 late joins translate host player slots to client-local salted player IDs

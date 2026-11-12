@@ -20,14 +20,6 @@
     <!-- installing a new version of the game (Updater) -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
-    <!-- Android 11+ package visibility for the user's installed speech
-         service. No network TTS voice is selected by this app. -->
-    <queries>
-        <intent>
-            <action android:name="android.intent.action.TTS_SERVICE" />
-        </intent>
-    </queries>
-
     <!-- enableOnBackInvokedCallback: the back button and the back gesture
          stay KEYCODE_BACK, which SDL passes to the game as B; with
          predictive back (the default once an app targets Android 16) the

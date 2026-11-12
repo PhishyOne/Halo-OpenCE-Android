@@ -7,8 +7,7 @@ import android.graphics.Insets;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.media.AudioAttributes;
-import android.speech.tts.TextToSpeech;
-import android.speech.tts.Voice;
+import android.media.SoundPool;
 import android.util.Log;
 import android.os.Build;
 import android.os.Bundle;
@@ -24,8 +23,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Locale;
-import java.util.Set;
 
 import org.libsdl.app.SDLActivity;
 
@@ -48,11 +45,16 @@ public class HaloActivity extends SDLActivity {
     private static final int EXPORT_LAYOUT = 401, IMPORT_LAYOUT = 402;
     private String pendingLayoutExport;
 
-    /** Short, original reward speech. No Halo announcer clips, downloads or
-     * runtime network TTS. An unavailable offline voice means text-only HUD. */
-    private TextToSpeech killstreakSpeech;
-    private boolean killstreakSpeechReady;
-    private boolean killstreakSpeechClosed;
+    /** Local, bundled original voice samples. Android SoundPool needs no
+     * TTS engine, voice download, microphone or network to play them. */
+    private SoundPool rewardCallouts;
+    private int rewardEnhancementsSample;
+    private int rewardReconSample;
+    private int rewardActiveStream;
+    private boolean rewardEnhancementsLoaded;
+    private boolean rewardReconLoaded;
+    private boolean rewardAudioClosed;
+    private boolean rewardActivityResumed;
 
     @Override
     protected String[] getLibraries() {
@@ -79,73 +81,69 @@ public class HaloActivity extends SDLActivity {
         preferHighestRefreshRate();
         trackGestureInsets();
         acquireMulticastLock();
-        initializeKillstreakSpeech();
+        initializeRewardCallouts();
         // a new version looked for while the game starts
         Updater.start(this);
     }
 
-    /** Prepare a local English voice without requiring Wi-Fi or streaming
-     * speech to a remote service. Initialization itself is asynchronous. */
-    private void initializeKillstreakSpeech() {
+    /** Load two *original* WAV callouts from the APK. Unlike Android TTS,
+     * this works even if the phone has no installed offline speech voices.
+     * Each sample is under 100 KB; asynchronous load completes long before
+     * the player can normally earn a three-kill streak. */
+    private void initializeRewardCallouts() {
         try {
-            killstreakSpeech = new TextToSpeech(this, status ->
-                    getWindow().getDecorView().post(() -> configureKillstreakSpeech(status)));
-        } catch (RuntimeException error) {
-            Log.w("HaloCallouts", "Speech engine unavailable", error);
-            killstreakSpeechReady = false;
-        }
-    }
-
-    private void configureKillstreakSpeech(int status) {
-        if (killstreakSpeechClosed || isFinishing() || isDestroyed() ||
-                status != TextToSpeech.SUCCESS || killstreakSpeech == null)
-            return;
-        Voice best = null;
-        try {
-            Set<Voice> voices = killstreakSpeech.getVoices();
-            if (voices != null) {
-                for (Voice voice : voices) {
-                    if (!Locale.ENGLISH.getLanguage().equals(voice.getLocale().getLanguage()) ||
-                            voice.isNetworkConnectionRequired() ||
-                            (voice.getFeatures() != null &&
-                                    voice.getFeatures().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)))
-                        continue;
-                    if (best == null ||
-                            (!Locale.US.getCountry().equals(best.getLocale().getCountry()) &&
-                                    Locale.US.getCountry().equals(voice.getLocale().getCountry())))
-                        best = voice;
-                }
-            }
-            if (best == null || killstreakSpeech.setVoice(best) != TextToSpeech.SUCCESS) {
-                Log.i("HaloCallouts", "No installed offline English voice, using HUD text");
-                return;
-            }
-            killstreakSpeech.setAudioAttributes(new AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+            AudioAttributes attrs = new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_GAME)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build());
-            killstreakSpeech.setPitch(0.86f);
-            killstreakSpeech.setSpeechRate(1.03f);
-            killstreakSpeechReady = true;
-        } catch (RuntimeException error) {
-            Log.w("HaloCallouts", "Offline voice configuration failed", error);
-            killstreakSpeechReady = false;
+                    .build();
+            rewardCallouts = new SoundPool.Builder()
+                    .setAudioAttributes(attrs).setMaxStreams(1).build();
+            rewardCallouts.setOnLoadCompleteListener((pool, sample, status) ->
+                    runOnUiThread(() -> {
+                        if (rewardAudioClosed || pool != rewardCallouts)
+                            return;
+                        if (sample == rewardEnhancementsSample)
+                            rewardEnhancementsLoaded = status == 0;
+                        if (sample == rewardReconSample)
+                            rewardReconLoaded = status == 0;
+                        if (status != 0)
+                            Log.w("HaloCallouts", "Bundled reward sample failed to load: " + status);
+                    }));
+            rewardEnhancementsSample =
+                    rewardCallouts.load(this, R.raw.halo_reward_enhancements, 1);
+            rewardReconSample =
+                    rewardCallouts.load(this, R.raw.halo_reward_recon, 1);
+            if (rewardEnhancementsSample == 0 || rewardReconSample == 0)
+                Log.w("HaloCallouts", "Could not queue bundled reward samples");
+        } catch (RuntimeException failure) {
+            Log.w("HaloCallouts", "Could not initialize bundled reward audio", failure);
+            if (rewardCallouts != null) {
+                rewardCallouts.release();
+                rewardCallouts = null;
+            }
         }
     }
 
-    /** Called via the SDL Android host bridge from the verified earning
-     * player's local HUD only. No attacker name or other user data is sent. */
+    /** Invoked only from the already validated local recipient's HUD.
+     * The gameplay engine gates privacy, life, streak and announcement mode.
+     * Do not use Activity window focus as a gate: some Android devices
+     * don't mark the SDL surface focused while touch input is active. */
     public void announceKillstreak(int award) {
         if (award != 3 && award != 5)
             return;
         runOnUiThread(() -> {
-            if (killstreakSpeechClosed || !killstreakSpeechReady ||
-                    killstreakSpeech == null || isFinishing() || isDestroyed() ||
-                    !getWindow().getDecorView().hasWindowFocus())
+            if (rewardAudioClosed || !rewardActivityResumed ||
+                    rewardCallouts == null || isFinishing() || isDestroyed())
                 return;
-            String phrase = award == 3 ? "Enhancements online" : "Recon online";
-            killstreakSpeech.speak(phrase, TextToSpeech.QUEUE_ADD, null,
-                    "halo-reward-" + award + "-" + System.nanoTime());
+            int sample = award == 3 ? rewardEnhancementsSample : rewardReconSample;
+            boolean loaded = award == 3 ? rewardEnhancementsLoaded : rewardReconLoaded;
+            if (sample == 0 || !loaded)
+                return;  // Accurate private HUD text is still displayed.
+            if (rewardActiveStream != 0)
+                rewardCallouts.stop(rewardActiveStream);
+            rewardActiveStream = rewardCallouts.play(sample, 0.9f, 0.9f, 1, 0, 1.0f);
+            if (rewardActiveStream == 0)
+                Log.w("HaloCallouts", "Bundled reward sample playback unavailable");
         });
     }
 
@@ -258,16 +256,20 @@ public class HaloActivity extends SDLActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        rewardActivityResumed = true;
         if (touchControls != null && getWindow().getDecorView().hasWindowFocus())
             touchControls.startDeviceInput();
     }
 
     @Override
     protected void onPause() {
+        rewardActivityResumed = false;
         if (touchControls != null)
             touchControls.stopDeviceInput();
-        if (killstreakSpeech != null)
-            killstreakSpeech.stop();
+        if (rewardCallouts != null && rewardActiveStream != 0) {
+            rewardCallouts.stop(rewardActiveStream);
+            rewardActiveStream = 0;
+        }
         super.onPause();
     }
 
@@ -284,12 +286,14 @@ public class HaloActivity extends SDLActivity {
 
     @Override
     protected void onDestroy() {
-        killstreakSpeechClosed = true;
-        killstreakSpeechReady = false;
-        if (killstreakSpeech != null) {
-            killstreakSpeech.shutdown();
-            killstreakSpeech = null;
+        rewardActivityResumed = false;
+        rewardAudioClosed = true;
+        rewardEnhancementsLoaded = rewardReconLoaded = false;
+        if (rewardCallouts != null) {
+            rewardCallouts.release();
+            rewardCallouts = null;
         }
+        rewardActiveStream = 0;
         if (touchControls != null)
             touchControls.stopDeviceInput();
         if (multicastLock != null && multicastLock.isHeld())

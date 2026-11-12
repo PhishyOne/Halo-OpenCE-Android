@@ -161,6 +161,26 @@ the speech service and pending notices are cancelled when permission or
 the life ends. An already-playing short phrase cannot be retroactively
 unspoken at the exact moment of death.
 
+### v19 audio reliability correction
+
+Physical v18 testing confirmed the personal five-kill red markers but no
+audible reward callouts. The Android TTS engine's installed offline voice
+availability could not be validated from the game's sandboxed logs, so
+we eliminated the TTS dependency rather than silently using network speech.
+
+Android v19 bundles **two original, locally synthesized mono PCM WAV clips**
+in its app resources: "Enhancements online" and "Recon online". They play
+using Android SoundPool through the same recipient-private, host-validated
+JNI callout path. Audio was synthesized locally from those original words
+using eSpeak NG 1.51 (en-us male), 22,050-Hz PCM16, with a deterministic
+300-3,000-Hz radio bandpass, quiet hiss and short fade. No stock Halo
+audio was sampled or shipped. The clips are roughly 86 and 67 KiB.
+Playback is asynchronous, fails silently to HUD text if a sample cannot
+load, stops on Activity pause, and releases all audio resources on destroy.
+No new permissions, downloads or cloud services are required. Actual
+Android speaker output is subject to physical testing; voice quality is
+synthesized and brief rather than professional radio voice acting.
+
 Death, changed salted player/unit, disconnect, match end, map reset and
 master OFF cancel recon and pending notices. Normal full-spectrum vision
 pickups and the Commander mask are not repurposed. No persistence changes.
