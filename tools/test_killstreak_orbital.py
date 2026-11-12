@@ -78,8 +78,8 @@ class OrbitalTest(unittest.TestCase):
             (("if (!orbital_geometry(m->unit_index, &m->target))", "if (0)"), "geometry"),
             (("game_time_get() >= s->impact_tick", "1"), "impact"),
             (("!game_team_is_enemy(p->team_index, (short)strike.team)", "0"), "impact"),
-            (("!orbital_near(&unit->object.position, &strike.target, ORBITAL_RADIUS)", "0"), "impact"),
-            (("down && !flashlight_down[controller_index] &&", "down &&"), "input"),
+            (("!orbital_near(&unit->object.position, &strike.target, ORBITAL_RADIUS)", "(orbital_near(&unit->object.position, &strike.target, ORBITAL_RADIUS) && 0)"), "impact"),
+            (("down && !flashlight_down[controller_index] &&", "down && (flashlight_down[controller_index] ? down : down) &&"), "input"),
             (("game_time_get() >= orbital_local[local].request_timeout", "0"), "retry"),
             (("m->serial <= w->serial", "0"), "presentation"),
         ):
