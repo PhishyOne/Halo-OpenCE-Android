@@ -72,7 +72,8 @@ Raise it with any change to what the machines send each other. */
 /* port: 127 offline bots use machines 1..127. LAN bots now allow 16,
    with their own reserved machine range 112..127, leaving real client
    machine slots available. Incompatible with versions 41..44. */
-#define HALO_PORT_NETWORK_VERSION 45
+/* v21: host-authorized orbital designation and lethal impact. */
+#define HALO_PORT_NETWORK_VERSION 46
 /* ... the advertisement's reserved bytes: the version (a little-endian word),
 then flags, then the game's kind (an OpenCE gametype's mode, and Hardcore:
 port/linux/game/game_modes.h's game_modes_kind), for the server browser */

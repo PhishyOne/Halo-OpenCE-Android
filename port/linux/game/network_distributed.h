@@ -162,6 +162,10 @@ enum
 	/* Private 3/5-kill award or revocation, host to the earner's machine
 	   only, reliably. Older clients ignore this optional presentation. */
 	_distributed_message_killstreak_recon = 97,
+	/* v21: private entitlement, client designation, public warning. */
+	_distributed_message_orbital_award = 98,
+	_distributed_message_orbital_request = 99,
+	_distributed_message_orbital_incoming = 100,
 
 	NUMBER_OF_DISTRIBUTED_MESSAGES
 };

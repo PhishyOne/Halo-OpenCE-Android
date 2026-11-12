@@ -199,6 +199,7 @@ jobs:
           python3 tools/test_commander_feature_policy.py -v
           python3 tools/test_killstreak_rewards.py -v
           python3 tools/test_killstreak_recon.py -v
+          python3 tools/test_killstreak_orbital.py -v
           python3 tools/test_bot_target_performance.py
           python3 tools/test_bot_automatic_modes.py -v
           python3 tools/test_coop_unit_resync.py -v

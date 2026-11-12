@@ -117,6 +117,7 @@ symbols in this file:
 #include "units/units.h"
 #include "game/game_allegiance.h" /* port: personal enemy recon */
 #include "killstreak_recon.h" /* port: port/linux/game/killstreak_recon.c */
+#include "killstreak_orbital.h" /* port: port/linux/game/killstreak_orbital.c */
 
 /* ---------- constants */
 
@@ -1523,6 +1524,12 @@ void hud_draw_screen(
 	if (player_index != NONE)
 	{
 		struct player_datum *player = player_get(player_index);
+
+		/* port: public orbital warnings are important even while the
+		 * player's ordinary HUD is hidden after death. The private
+		 * five-kill recon remains gated below by the living player. */
+		if (!cinematic_in_progress())
+			killstreak_orbital_present(render.local_player_index);
 
 		/* port: only the earning player's live, ordinary viewport presents
 		 * private rewards. Menus, co-op and postgame are also gated inside. */

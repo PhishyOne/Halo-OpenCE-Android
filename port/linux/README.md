@@ -463,16 +463,24 @@ maximum). Commander Mode never shares or grants this recon. The host sends
 3/5-kill notices and recon expiry reliably only to the earner's machine.
 With killstreak.announcements enabled, the HUD says
 "3 kills: Enhancements online" and "5 kills: Recon active (30s)".
-On Android v19, the earner hears two locally bundled, original
-synthesized radio-style PCM clips played through SoundPool. This replaces
-v18's dependence on installed offline TextToSpeech voice data. The APK
-includes only two short, mono 22,050-Hz PCM16 WAV files (under 160 KB
-combined), no Halo stock multikill clips or remote voice services.
-If the audio device cannot load a clip, HUD text still appears; other
-platforms remain text-only. Split-screen players receive private text
-and markers but no reward audio, because the output device mix is shared.
-Regular Halo multikills still use the base game's announcer rules.
-Tactical laptop and orbital strikes remain unimplemented.
+On Android v20, the earner hears the two bundled original British woman
+callouts (24 kHz mono PCM16) through SoundPool. v21 preserves those bytes
+and adds original "Orbital strike authorized." and "Orbital bombardment
+incoming" clips. No downloaded or proprietary Halo voice is used. If a
+clip cannot load, HUD text still appears; other platforms are text-only.
+Private reward audio is suppressed in split screen; public incoming audio
+plays once per device. Regular Halo multikills retain their announcer rules.
+
+v21's source candidate awards one targeted strike at ten human-earned enemy
+kills in one life, when both `killstreak.enabled` and `killstreak.orbital`
+are enabled. Enemy bots count; bots cannot earn. Aim at ground in first
+person, hold Zoom, and tap Flashlight. The host validates the designation,
+warns everyone, then applies a 14-metre lethal enemy-only impact after 100
+simulation ticks. Range is 128 metres; terrain cover blocks damage. Death,
+life replacement, disconnect, match end or disabling the feature cancels it.
+The existing independent master remains OFF by default; saved child settings
+are unchanged. Tactical Commander features remain separate and unimplemented.
+See [v21 protocol and limitations](../../docs/orbital_strike_v21.md).
 Local source tests do not establish Android or physical LAN acceptance;
 late joins translate host player slots to client-local salted player IDs
 before checking identity. Real LAN joins still require qualification.

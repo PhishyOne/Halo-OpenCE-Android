@@ -272,17 +272,18 @@ void game_engine_intialize_queued_sounds(
 /* port: short original killstreak callouts, not Halo's multikill clips.
  * 3 kills without dying is not a rapid Triple Kill; similarly, recon is a
  * reward, not the base game's generic Killing Spree. The Android host uses
- * offline device speech, and platforms without that service stay text-only.
- * Split-screen audio is suppressed: its physical output is shared. */
+ * bundled original WAVs; other platforms stay text-only. Private callouts
+ * suppress split-screen audio; public incoming uses the first viewport. */
 #ifdef HALO_ANDROID
 extern int host_android_announce_killstreak(int award);
 #endif
 
 void game_engine_play_killstreak_sound(short local_player_index, unsigned short award)
 {
-    if ((award != 3 && award != 5) ||
+    /* port: orbital callouts use the same original Android resources. */
+    if ((award != 3 && award != 5 && award != 10 && award != 11) ||
         local_player_get_next(NONE) != local_player_index ||
-        local_player_get_next(local_player_index) != NONE)
+        (award != 11 && local_player_get_next(local_player_index) != NONE))
         return;
 #ifdef HALO_ANDROID
     (void)host_android_announce_killstreak((int)award);

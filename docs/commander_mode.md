@@ -222,7 +222,7 @@ rejection, per-viewport isolation, expiration, lifecycle, capped rendering
 and deliberate faulty variants. The Android-only source gate runs this
 before native compilation; editing that gate does not trigger Actions.
 
-## Desired mechanics, still future gameplay work
+## Commander backlog and personal rewards
 
 Commander: one host-designated commander per team, interactive tactical
 laptop, commander-only full scan, team-shared area UAV and spotted markers,
@@ -239,11 +239,12 @@ Individual human killstreaks:
 - No third-party copyrighted voice samples; any voice recording must be
   original.
 
-The tactical laptop, spotting, 10-kill orbital strike, Commander radio and
-NPC objective orders are NOT implemented. Orbital and Commander radio
-options remain reserved controls. Personal reward announcements now use
-Android offline speech as described above. The settings UI and its v15 wording are
-unchanged; visible checkboxes are not evidence that future abilities work.
+The tactical laptop, spotting, Commander radio and NPC objective orders
+remain unimplemented. The ten-kill orbital strike now has a v21 source
+implementation with host validation and damage, pending native and physical
+acceptance. See [the v21 protocol, controls and limitations](orbital_strike_v21.md).
+Personal announcements use bundled original WAVs, preserving the v20 3/5
+clips. Commander remains independent and OFF by default.
 
 ## Acceptance checks
 

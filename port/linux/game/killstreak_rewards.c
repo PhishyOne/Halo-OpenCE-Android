@@ -12,6 +12,7 @@
 #include "commander_features.h"
 #include "killstreak_rewards.h"
 #include "killstreak_recon.h"
+#include "killstreak_orbital.h"
 
 #include <string.h>
 
@@ -41,12 +42,22 @@ static struct killstreak_reward_state *killstreak_state(long player_index)
     return &killstreak_players[slot];
 }
 
+int killstreak_rewards_has_ten(long player_index, long unit_index)
+{
+    struct killstreak_reward_state *state = killstreak_state(player_index);
+
+    return killstreak_authority() && killstreak_match_active && state &&
+        state->active && state->player_index == player_index &&
+        state->unit_index == unit_index && state->kills == 10;
+}
+
 void killstreak_rewards_reset_player(long player_index)
 {
     struct killstreak_reward_state *state = killstreak_state(player_index);
     struct player_datum *player;
     struct unit_datum *unit;
 
+    killstreak_orbital_reset_player(player_index);
     killstreak_recon_reset_player(player_index);
     if (!state || !state->active || state->player_index != player_index)
         return;
@@ -79,6 +90,7 @@ void killstreak_rewards_stop(void)
             killstreak_rewards_reset_player(killstreak_players[slot].player_index);
     killstreak_match_active = FALSE;
     killstreak_recon_stop();
+    killstreak_orbital_stop();
 }
 
 void killstreak_rewards_start(void)
@@ -87,6 +99,7 @@ void killstreak_rewards_start(void)
      * effects are gone; do not look up old indices in the new world. */
     memset(killstreak_players, 0, sizeof(killstreak_players));
     killstreak_recon_reset();
+    killstreak_orbital_start();
     killstreak_match_active = TRUE;
 }
 
@@ -110,6 +123,7 @@ void killstreak_rewards_update(void)
         killstreak_feature_allowed(KILLSTREAK_ENABLED);
 
     killstreak_recon_update();
+    killstreak_orbital_update();
     for (slot = 0; slot < HALO_PORT_MAXIMUM_NETWORK_PLAYERS; slot++)
     {
         state = &killstreak_players[slot];
@@ -165,9 +179,11 @@ void killstreak_rewards_record_kill(long credited_player_index, long dead_player
         state->player_index = credited_player_index;
         state->unit_index = player->unit_index;
     }
-    if (state->kills >= 5)
+    if (state->kills >= 10)
         return;
     state->kills++;
+    if (state->kills == 10)
+        killstreak_orbital_award(credited_player_index, player->unit_index);
     if (state->kills != 3 && state->kills != 5)
         return;
 

@@ -29,6 +29,8 @@ struct game_input_preferences
 };
 
 struct game_input_state;
+/* port: edge of flashlight while zoom is held; no profile/layout changes. */
+boolean input_abstraction_orbital_chord(short controller_index);
 
 typedef char verify_game_input_preferences_size[
 	sizeof(struct game_input_preferences) == 0x18 ? 1 : -1];

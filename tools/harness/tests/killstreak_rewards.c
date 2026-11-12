@@ -17,7 +17,12 @@
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"line %d: %s\n",__LINE__,#x); return 1; } } while (0)
 typedef int boolean;
 typedef float real;
-static int recon_awards, recon_last_award, recon_revokes;
+static int recon_awards, recon_last_award, recon_revokes, orbital_awards;
+void killstreak_orbital_start(void) { orbital_awards = 0; }
+void killstreak_orbital_stop(void) { }
+void killstreak_orbital_update(void) { }
+void killstreak_orbital_reset_player(long id) { (void)id; }
+void killstreak_orbital_award(long id, long unit) { (void)id; (void)unit; orbital_awards++; }
 void killstreak_recon_reset_player(long id) { (void)id; }
 void killstreak_recon_revoke(long id, long unit) { (void)id; (void)unit; recon_revokes++; }
 void killstreak_recon_reset(void) { recon_awards = recon_last_award = recon_revokes = 0; }
@@ -133,8 +138,8 @@ int main(int argc,char **argv) {
         tick(300); kill(0,1); CHECK(camo()==600);
         kill(0,1); CHECK(camo()==900);
         CHECK(recon_awards==2 && recon_last_award==5);
-        tick(100); kills(260); CHECK(camo()==800 && streak()==5);
-        CHECK(recon_awards==2);
+        tick(100); kills(260); CHECK(camo()==800 && streak()==10 && orbital_awards==1);
+        CHECK(recon_awards==2 && orbital_awards==1);
         CHECK(players[0].statistics.kills_in_a_row==265);
         units[0].object.shield_vitality=2.2f; shield=units[0].object.shield_vitality;
         tick(800); CHECK(camo()==0 && !TEST_FLAG(units[0].unit.flags,_unit_active_camouflaged_bit));
