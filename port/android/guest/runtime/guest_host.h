@@ -150,6 +150,9 @@ void host_touch_bindings(const int *controls);
 /* the overlay's devices: 1, a touchscreen; 2, a game controller; 0 until it
 has looked */
 int host_touch_devices(void);
+/* The native Commander panel alone authorizes and consumes UI taps. */
+int host_touch_commander_take_toggle(void);
+void host_touch_commander_state(int status);
 
 /* ---------- the server browser's master servers (host_https.c) */
 

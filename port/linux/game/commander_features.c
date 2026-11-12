@@ -16,6 +16,7 @@
 #include "network_coop.h"
 #include "network_distributed.h"
 #include "commander_features.h"
+#include "commander_tactical.h" /* host-only read-only Android map */
 
 #include <string.h>
 
@@ -108,6 +109,7 @@ void commander_features_new_game(void)
 {
     commander_client_mask = 0;
     commander_sent_mask = ~0u;
+    commander_tactical_reset(); /* clear any old match's open panel */
 }
 
 static void commander_settings_make(

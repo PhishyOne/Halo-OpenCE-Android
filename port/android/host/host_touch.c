@@ -44,6 +44,10 @@ static int64_t gyro_ns;
 static int rumble_amplitude;
 static int64_t rumble_ns;
 static volatile int touch_scene;
+/* Commander panel access: the guest publishes the host-only state, and
+ * Java queues one bounded tap under the existing input mutex. */
+static int commander_status;
+static int commander_toggle_pending;
 /* the overlay's devices (host_touch_devices): a touchscreen, a game
 controller (a stick or a hat, not a phone's few gamepad keys) */
 #define HOST_TOUCH_DEVICE_TOUCHSCREEN 1
@@ -251,4 +255,48 @@ JNIEXPORT jint JNICALL Java_com_halo_decomp_TouchControls_nativeScene(JNIEnv *en
 	(void)env;
 	(void)cls;
 	return touch_scene;
+}
+
+/* Guest-authorized host-only Commander panel. UI can request one toggle,
+ * never send player positions, select roles, or alter gameplay authority. */
+void host_touch_commander_state(int status)
+{
+    pthread_mutex_lock(&touch_lock);
+    commander_status = status & 3;
+    if (!(commander_status & 1))
+        commander_toggle_pending = 0;
+    pthread_mutex_unlock(&touch_lock);
+}
+
+int host_touch_commander_take_toggle(void)
+{
+    int toggled;
+    pthread_mutex_lock(&touch_lock);
+    toggled = (commander_status & 1) && commander_toggle_pending;
+    commander_toggle_pending = 0;
+    pthread_mutex_unlock(&touch_lock);
+    return toggled != 0;
+}
+
+JNIEXPORT jint JNICALL Java_com_halo_decomp_TouchControls_nativeCommanderStatus(
+    JNIEnv *env, jclass cls)
+{
+    int status;
+    (void)env;
+    (void)cls;
+    pthread_mutex_lock(&touch_lock);
+    status = commander_status;
+    pthread_mutex_unlock(&touch_lock);
+    return status;
+}
+
+JNIEXPORT void JNICALL Java_com_halo_decomp_TouchControls_nativeCommanderToggle(
+    JNIEnv *env, jclass cls)
+{
+    (void)env;
+    (void)cls;
+    pthread_mutex_lock(&touch_lock);
+    if (commander_status & 1)
+        commander_toggle_pending = 1; /* bounded queue; never spams guest */
+    pthread_mutex_unlock(&touch_lock);
 }

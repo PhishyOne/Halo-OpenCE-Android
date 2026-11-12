@@ -61,6 +61,7 @@ public final class TouchControls extends View implements SensorEventListener, In
     private static final int TOOLBAR_EXPORT = -6;
     private static final int TOOLBAR_IMPORT = -7;
     private static final int TOOLBAR_SAVE = -8;
+    private static final int TOOLBAR_COMMANDER = -9;
     private static final float TOOLBAR_RADIUS = 28;
     private static final float OPTIONS_RADIUS = TouchLayout.OPTIONS_RADIUS;
     /** the editor's items, this far apart */
@@ -159,6 +160,8 @@ public final class TouchControls extends View implements SensorEventListener, In
     private static native void nativeLookReset();
     private static native int nativeRumble();
     private static native int nativeScene();
+    private static native int nativeCommanderStatus();
+    private static native void nativeCommanderToggle();
     private static native int nativeBindings(int[] controls);
     private static native void nativeDevices(boolean touchscreen, boolean controller);
 
@@ -211,6 +214,7 @@ public final class TouchControls extends View implements SensorEventListener, In
     private int insetTop;
 
     private int scene;
+    private int commanderStatus;
     private boolean controllerConnected;
     private boolean touchscreen;
     private boolean deviceInputActive;
@@ -231,6 +235,11 @@ public final class TouchControls extends View implements SensorEventListener, In
             if (!deviceInputActive)
                 return;
             scene = nativeScene();
+            int nextCommanderStatus = nativeCommanderStatus();
+            if (commanderStatus != nextCommanderStatus) {
+                commanderStatus = nextCommanderStatus;
+                invalidate();
+            }
             updateShowing();
             readBindings();
             updateRumble();
@@ -345,6 +354,11 @@ public final class TouchControls extends View implements SensorEventListener, In
 
     private float toolbarY() {
         return Math.max(38, insetTop / scale + 38);
+    }
+
+    /** Optional tactical panel beside the Hide control, clear of Options. */
+    private float commanderX() {
+        return logicalWidth / 2 + 86;
     }
 
     /** Options: where it was dragged, else at the top right, clear of a cutout */
@@ -537,6 +551,9 @@ public final class TouchControls extends View implements SensorEventListener, In
         if (inside(x, y, optionsX(), optionsY(), toolbarRadius(OPTIONS_RADIUS)))
             return TOOLBAR_OPTIONS;
         if (!editing) {
+            if ((commanderStatus & 1) != 0 && logicalWidth >= 450 &&
+                    inside(x, y, commanderX(), toolbarY(), toolbarRadius(TOOLBAR_RADIUS)))
+                return TOOLBAR_COMMANDER;
             if (inside(x, y, logicalWidth / 2, toolbarY(), toolbarRadius(TOOLBAR_RADIUS)))
                 return TOOLBAR_TOGGLE;
             return hidden ? NOTHING : hitControl(x, y);
@@ -726,6 +743,8 @@ public final class TouchControls extends View implements SensorEventListener, In
             showOptions();
         else if (item == TOOLBAR_TOGGLE)
             setHidden(!hidden);
+        else if (item == TOOLBAR_COMMANDER && (commanderStatus & 1) != 0)
+            nativeCommanderToggle();
         performClick();
     }
 
@@ -1275,6 +1294,9 @@ public final class TouchControls extends View implements SensorEventListener, In
                 editorY() + toolbarRadius(OPTIONS_RADIUS) + 24, paint);
         } else {
             toolbarItem(canvas, logicalWidth / 2, toolbarY(), TOOLBAR_RADIUS, hidden ? "Touch" : "Hide", false);
+            if ((commanderStatus & 1) != 0 && logicalWidth >= 450)
+                toolbarItem(canvas, commanderX(), toolbarY(), TOOLBAR_RADIUS,
+                    (commanderStatus & 2) != 0 ? "Close" : "Map", false);
         }
     }
 

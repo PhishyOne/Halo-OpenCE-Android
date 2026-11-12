@@ -197,6 +197,7 @@ jobs:
           python3 tools/test_bot_garbage_policy.py -v
           python3 tools/test_lobby_bot_count.py -v
           python3 tools/test_commander_feature_policy.py -v
+          python3 tools/test_commander_tactical.py -v
           python3 tools/test_killstreak_rewards.py -v
           python3 tools/test_killstreak_recon.py -v
           python3 tools/test_killstreak_orbital.py -v

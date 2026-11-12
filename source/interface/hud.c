@@ -118,6 +118,7 @@ symbols in this file:
 #include "game/game_allegiance.h" /* port: personal enemy recon */
 #include "killstreak_recon.h" /* port: port/linux/game/killstreak_recon.c */
 #include "killstreak_orbital.h" /* port: port/linux/game/killstreak_orbital.c */
+#include "commander_tactical.h" /* port: port/linux/game/commander_tactical.c */
 
 /* ---------- constants */
 
@@ -1599,6 +1600,9 @@ void hud_draw_screen(
 		network_chat_draw(render.local_player_index);
 		/* port: the players' vote running, its box (F1 yes, F2 no) */
 		network_votekick_draw(render.local_player_index);
+		/* port: draw optional Commander panel above ordinary HUD layers. */
+		if (!cinematic_in_progress())
+			commander_tactical_present(render.local_player_index);
 	}
 
 	rasterizer_hud_end();
