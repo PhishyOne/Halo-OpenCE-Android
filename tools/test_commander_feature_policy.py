@@ -110,11 +110,11 @@ class CommanderPolicyTest(unittest.TestCase):
         self.assertIn('network_connection_last_read_was_unreliable()',s)
         self.assertIn('game_connection() != _game_connection_network_client',s)
         self.assertIn('machine_index != NONE',s)
-        self.assertIn('size != sizeof(message)',s)
-        self.assertIn('message.reserved != 0',s)
-        self.assertIn('message.header.count != 1',s)
-        self.assertIn('(message.mask & ~COMMANDER_KNOWN_MASK) != 0',s)
-        self.assertIn('commander_client_mask = commander_policy_effective(message.mask, 1, 1)',s)
+        self.assertIn('size != sizeof(m)',s)
+        self.assertIn('m.reserved != 0',s)
+        self.assertIn('m.header.count != 1',s)
+        self.assertIn('(m.mask & ~COMMANDER_KNOWN_MASK) != 0',s)
+        self.assertIn('commander_client_mask = commander_policy_effective(m.mask, 1, 1)',s)
 
     def test_reliable_host_policy_wiring(self):
         s=NETWORK.read_text()

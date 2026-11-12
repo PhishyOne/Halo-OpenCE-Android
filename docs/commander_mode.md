@@ -239,8 +239,10 @@ Individual human killstreaks:
 - No third-party copyrighted voice samples; any voice recording must be
   original.
 
-The tactical laptop, spotting, Commander radio and NPC objective orders
-remain unimplemented. The ten-kill orbital strike now has a v21 source
+The v22 tactical overlay and host-driven single-human Commander assignment
+are source candidates only, pending native APK and phone/LAN acceptance.
+Full 2142 laptop, enemy spotting, Commander radio, per-team roles and
+NPC objective orders remain unimplemented. The ten-kill orbital strike now has a v21 source
 implementation with host validation and damage, pending native and physical
 acceptance. See [the v21 protocol, controls and limitations](orbital_strike_v21.md).
 Personal announcements use bundled original WAVs, preserving the v20 3/5

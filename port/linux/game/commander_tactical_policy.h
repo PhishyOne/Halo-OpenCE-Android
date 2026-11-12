@@ -5,13 +5,12 @@
 
 /* v22 Android proof of concept: the host's first viewport only.
  * A role picker and authenticated role replication are NOT present yet. */
-static int commander_tactical_host_can_view(
+static int commander_tactical_host_can_assign(
     unsigned int effective_mask, int team_game, int host, int local_index,
     int player_is_human)
 {
     return team_game && host && local_index == 0 && player_is_human &&
-        (effective_mask & (COMMANDER_ENABLED | COMMANDER_SATELLITE)) ==
-            (COMMANDER_ENABLED | COMMANDER_SATELLITE);
+        (effective_mask & COMMANDER_ENABLED) != 0;
 }
 
 /* Project X/Y of a real structure BSP, not guessed per-map constants.

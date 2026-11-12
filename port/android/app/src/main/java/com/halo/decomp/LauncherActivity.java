@@ -708,8 +708,8 @@ public class LauncherActivity extends Activity {
         commanderPanel.addView(lanText(
             "Tactical laptop, satellite, UAV, spotting, and team orders. "
             + "Independent of individual killstreak rewards. "
-            + "v22 preview: host-only allied tactical map via the in-game Map button. "
-            + "UAV, enemy intel, orders and role selection aren't active yet.", 11));
+            + "v22 preview: host picks the Commander with Assign, then that player's in-game Map button opens an allied overview. "
+            + "UAV, enemy intel, and orders aren't active yet.", 11));
 
         // Killstreak Rewards is a separate multiplayer feature, not a
         // permission that requires a commander or a team. The host grants

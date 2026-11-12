@@ -8,6 +8,10 @@
 unsigned int commander_features_mask(void);
 int commander_feature_allowed(unsigned int feature);
 int killstreak_feature_allowed(unsigned int feature);
+/* Host-designated human Commander, one per match in this slice. */
+int commander_features_host_can_assign(void);
+int commander_features_local_is_role(short local_player_index);
+void commander_features_cycle_role(void);
 void commander_features_new_game(void);
 void commander_features_update(void);
 void commander_features_send_to_machine(long machine_index);

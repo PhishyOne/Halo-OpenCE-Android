@@ -36,12 +36,12 @@ int main(void)
     int t,h,i,p;
     for (t=0;t<2;t++) for(h=0;h<2;h++)
       for(i=0;i<3;i++) for(p=0;p<2;p++)
-        CHECK(commander_tactical_host_can_view(policy,t,h,i,p) ==
+        CHECK(commander_tactical_host_can_assign(policy,t,h,i,p) ==
               (t && h && i==0 && p));
-    CHECK(!commander_tactical_host_can_view(0,1,1,0,1));
-    CHECK(!commander_tactical_host_can_view(COMMANDER_ENABLED,1,1,0,1));
-    CHECK(!commander_tactical_host_can_view(COMMANDER_SATELLITE,1,1,0,1));
-    CHECK(!commander_tactical_host_can_view(COMMANDER_ENABLED|KILLSTREAK_ENABLED,1,1,0,1));
+    CHECK(!commander_tactical_host_can_assign(0,1,1,0,1));
+    CHECK(commander_tactical_host_can_assign(COMMANDER_ENABLED,1,1,0,1));
+    CHECK(!commander_tactical_host_can_assign(COMMANDER_SATELLITE,1,1,0,1));
+    CHECK(commander_tactical_host_can_assign(COMMANDER_ENABLED|KILLSTREAK_ENABLED,1,1,0,1));
     CHECK(commander_tactical_ally(0,0));
     CHECK(commander_tactical_ally(1,1));
     CHECK(!commander_tactical_ally(0,1));
@@ -90,18 +90,18 @@ class TacticalMapTest(unittest.TestCase):
 
     def test_no_enemy_markers_or_client_self_grant(self):
         s = SOURCE.read_text()
-        self.assertIn("game_connection() == _game_connection_network_server", s)
-        self.assertIn("local != 0", s)
+        self.assertIn("game_connection() == _game_connection_network_server", COMMANDER.read_text())
+        self.assertIn("local == 0 && commander_features_host_can_assign()", s)
         self.assertIn("game_engine_has_teams()", s)
-        self.assertIn("commander_features_mask()", s)
-        self.assertIn("commander_tactical_host_can_view(", s)
+        self.assertIn("commander_features_mask()", COMMANDER.read_text())
+        self.assertIn("commander_tactical_host_can_assign(", COMMANDER.read_text())
         self.assertIn("commander_tactical_ally(", s)
         self.assertIn("unit->unit.player_index != it.datum_index", s)
         self.assertIn("TEST_FLAG(unit->object.damage_flags, _object_dead_bit)", s)
         self.assertIn("COMMANDER_TACTICAL_MAX_MARKERS 48", s)
         self.assertIn("global_structure_bsp_get()", s)
         self.assertIn("host_touch_commander_take_toggle()", s)
-        self.assertIn("host_touch_commander_state(tactical_open ? 3 : 1)", s)
+        self.assertIn("host_touch_commander_state(state)", s)
         self.assertIn("commander_tactical_reset();", COMMANDER.read_text())
         self.assertIn("commander_tactical_present(render.local_player_index);", HUD.read_text())
         self.assertIn("No enemy intel", s)
@@ -109,11 +109,11 @@ class TacticalMapTest(unittest.TestCase):
     def test_android_bridge_and_ui_are_opt_in(self):
         raw = HOST.read_text()
         java = TOUCH.read_text()
-        for name in ("host_touch_commander_state", "host_touch_commander_take_toggle"):
+        for name in ("host_touch_commander_state", "host_touch_commander_take_toggle", "host_touch_commander_take_assign"):
             self.assertIn(name, IMPORTS.read_text())
             self.assertIn(name, GUEST.read_text())
             self.assertIn(name, raw)
-        for name in ("nativeCommanderToggle", "nativeCommanderStatus"):
+        for name in ("nativeCommanderToggle", "nativeCommanderStatus", "nativeCommanderAssign"):
             self.assertIn("Java_com_halo_decomp_TouchControls_" + name, raw)
             self.assertIn(name, java)
         self.assertIn("pthread_mutex_lock(&touch_lock)", raw)
@@ -121,6 +121,9 @@ class TacticalMapTest(unittest.TestCase):
         self.assertIn("commander_toggle_pending = 0;", raw)
         self.assertIn("(commanderStatus & 1) != 0", java)
         self.assertIn("TOOLBAR_COMMANDER", java)
+        self.assertIn("TOOLBAR_ASSIGN", java)
+        self.assertIn("commander_features_cycle_role()", SOURCE.read_text())
+        self.assertIn("commander_features_local_is_role(local)", SOURCE.read_text())
         self.assertIn("in-game Map button", LAUNCHER.read_text())
         self.assertIn('"commander.enabled", _config_boolean, "false"',
                       (ROOT / "port/linux/src/port_config.c").read_text())

@@ -62,6 +62,7 @@ public final class TouchControls extends View implements SensorEventListener, In
     private static final int TOOLBAR_IMPORT = -7;
     private static final int TOOLBAR_SAVE = -8;
     private static final int TOOLBAR_COMMANDER = -9;
+    private static final int TOOLBAR_ASSIGN = -10;
     private static final float TOOLBAR_RADIUS = 28;
     private static final float OPTIONS_RADIUS = TouchLayout.OPTIONS_RADIUS;
     /** the editor's items, this far apart */
@@ -162,6 +163,7 @@ public final class TouchControls extends View implements SensorEventListener, In
     private static native int nativeScene();
     private static native int nativeCommanderStatus();
     private static native void nativeCommanderToggle();
+    private static native void nativeCommanderAssign();
     private static native int nativeBindings(int[] controls);
     private static native void nativeDevices(boolean touchscreen, boolean controller);
 
@@ -361,6 +363,10 @@ public final class TouchControls extends View implements SensorEventListener, In
         return logicalWidth / 2 + 86;
     }
 
+    private float commanderAssignX() {
+        return logicalWidth / 2 - 86;
+    }
+
     /** Options: where it was dragged, else at the top right, clear of a cutout */
     private float optionsX() {
         if (layout.optionsMoved())
@@ -551,6 +557,9 @@ public final class TouchControls extends View implements SensorEventListener, In
         if (inside(x, y, optionsX(), optionsY(), toolbarRadius(OPTIONS_RADIUS)))
             return TOOLBAR_OPTIONS;
         if (!editing) {
+            if ((commanderStatus & 4) != 0 && logicalWidth >= 450 &&
+                    inside(x, y, commanderAssignX(), toolbarY(), toolbarRadius(TOOLBAR_RADIUS)))
+                return TOOLBAR_ASSIGN;
             if ((commanderStatus & 1) != 0 && logicalWidth >= 450 &&
                     inside(x, y, commanderX(), toolbarY(), toolbarRadius(TOOLBAR_RADIUS)))
                 return TOOLBAR_COMMANDER;
@@ -745,6 +754,8 @@ public final class TouchControls extends View implements SensorEventListener, In
             setHidden(!hidden);
         else if (item == TOOLBAR_COMMANDER && (commanderStatus & 1) != 0)
             nativeCommanderToggle();
+        else if (item == TOOLBAR_ASSIGN && (commanderStatus & 4) != 0)
+            nativeCommanderAssign();
         performClick();
     }
 
@@ -1297,6 +1308,9 @@ public final class TouchControls extends View implements SensorEventListener, In
             if ((commanderStatus & 1) != 0 && logicalWidth >= 450)
                 toolbarItem(canvas, commanderX(), toolbarY(), TOOLBAR_RADIUS,
                     (commanderStatus & 2) != 0 ? "Close" : "Map", false);
+            if ((commanderStatus & 4) != 0 && logicalWidth >= 450)
+                toolbarItem(canvas, commanderAssignX(), toolbarY(), TOOLBAR_RADIUS,
+                    "Assign", false);
         }
     }
 

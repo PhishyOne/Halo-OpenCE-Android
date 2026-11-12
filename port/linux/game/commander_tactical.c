@@ -1,7 +1,7 @@
-/* v22 Android COMMAND laptop proof of concept.
- * A read-only, host-first-player overview of active BSP and allied units.
- * No enemy intel, actions, UAV, commander role assignment or network packets.
- * Only the Android host's explicit on-screen MAP control toggles this.
+/* v22 Android Commander proof of concept.
+ * Read-only allied overview; host cycles which human owns the role.
+ * One host-authenticated commander identity is relayed reliably.
+ * No enemy intel, UAV, orders or terrain-texture laptop yet.
  */
 #include "cseries.h"
 #include "commander_tactical.h"
@@ -31,6 +31,7 @@
 /* Android guest host imports, declared in port/android/guest/runtime/guest_host.h.
  * Never read Android view state directly across the guest/host boundary. */
 int host_touch_commander_take_toggle(void);
+int host_touch_commander_take_assign(void);
 void host_touch_commander_state(int status);
 #endif
 
@@ -45,15 +46,12 @@ void commander_tactical_reset(void)
 }
 
 #if defined(HALO_ANDROID)
-/* The host alone gets the prototype. Non-host clients NEVER use their
- * replicated enemy/player coordinates to invent an unearned scan. */
+/* Only the host's selected, authenticated human role gets the map.
+ * A joined client's locally replicated enemy positions never grant access. */
 static boolean tactical_available(short local)
 {
     long id;
     struct player_datum *player;
-    int host = game_connection() == _game_connection_local ||
-        game_connection() == _game_connection_network_server;
-
     if (!game_in_progress() || !game_engine_in_play() ||
         main_menu_is_active() || cinematic_in_progress() ||
         !game_engine_has_teams() || local != 0)
@@ -61,17 +59,16 @@ static boolean tactical_available(short local)
     id = local_player_get_player_index(local);
     player = id != NONE ? player_try_and_get(id) : NULL;
     return player && !player->quit_out_of_game &&
-        commander_tactical_host_can_view(commander_features_mask(),
-            game_engine_has_teams(), host, local,
-            !bots_machine_is_bot(player->network_player_data.machine_index));
+        commander_feature_allowed(COMMANDER_SATELLITE) &&
+        commander_features_local_is_role(local);
 }
 
 /* All positions are taken from the active BSP and current valid live units.
  * Prioritize allied humans over bots, and bound scanning and drawing. */
-static void tactical_draw(void)
+static void tactical_draw(short local)
 {
     struct structure_bsp *bsp = global_structure_bsp_get();
-    long viewer_id = local_player_get_player_index(0);
+    long viewer_id = local_player_get_player_index(local);
     struct player_datum *viewer = viewer_id != NONE ? player_try_and_get(viewer_id) : NULL;
     struct data_iterator it;
     struct player_datum *player;
@@ -179,16 +176,28 @@ static void tactical_draw(void)
 void commander_tactical_present(short local)
 {
 #if defined(HALO_ANDROID)
-    if (!tactical_available(local))
+    int can_assign = local == 0 && commander_features_host_can_assign();
+    int can_map = tactical_available(local);
+    int state;
+    if (!can_assign && !can_map)
     {
         commander_tactical_reset();
         return;
     }
-    if (host_touch_commander_take_toggle())
+    if (can_assign && host_touch_commander_take_assign())
+    {
+        commander_features_cycle_role();
+        can_map = tactical_available(local);
+    }
+    if (!can_map)
+        tactical_open = FALSE;
+    else if (host_touch_commander_take_toggle())
         tactical_open = !tactical_open;
-    host_touch_commander_state(tactical_open ? 3 : 1);
-    if (tactical_open)
-        tactical_draw();
+    state = (can_assign ? 4 : 0) | (can_map ? 1 : 0) |
+        (can_map && tactical_open ? 2 : 0);
+    host_touch_commander_state(state);
+    if (can_map && tactical_open)
+        tactical_draw(local);
 #else
     /* Non-Android builds have no command button yet. Avoid an always-on
      * overlay and avoid a new shortcut conflicting with game controls. */

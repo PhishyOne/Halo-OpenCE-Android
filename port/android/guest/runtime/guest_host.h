@@ -152,6 +152,7 @@ has looked */
 int host_touch_devices(void);
 /* The native Commander panel alone authorizes and consumes UI taps. */
 int host_touch_commander_take_toggle(void);
+int host_touch_commander_take_assign(void);
 void host_touch_commander_state(int status);
 
 /* ---------- the server browser's master servers (host_https.c) */

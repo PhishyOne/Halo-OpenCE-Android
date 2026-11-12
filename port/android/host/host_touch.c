@@ -48,6 +48,7 @@ static volatile int touch_scene;
  * Java queues one bounded tap under the existing input mutex. */
 static int commander_status;
 static int commander_toggle_pending;
+static int commander_assign_pending;
 /* the overlay's devices (host_touch_devices): a touchscreen, a game
 controller (a stick or a hat, not a phone's few gamepad keys) */
 #define HOST_TOUCH_DEVICE_TOUCHSCREEN 1
@@ -262,9 +263,11 @@ JNIEXPORT jint JNICALL Java_com_halo_decomp_TouchControls_nativeScene(JNIEnv *en
 void host_touch_commander_state(int status)
 {
     pthread_mutex_lock(&touch_lock);
-    commander_status = status & 3;
+    commander_status = status & 7;
     if (!(commander_status & 1))
         commander_toggle_pending = 0;
+    if (!(commander_status & 4))
+        commander_assign_pending = 0;
     pthread_mutex_unlock(&touch_lock);
 }
 
@@ -278,6 +281,16 @@ int host_touch_commander_take_toggle(void)
     return toggled != 0;
 }
 
+int host_touch_commander_take_assign(void)
+{
+    int assigned;
+    pthread_mutex_lock(&touch_lock);
+    assigned = (commander_status & 4) && commander_assign_pending;
+    commander_assign_pending = 0;
+    pthread_mutex_unlock(&touch_lock);
+    return assigned != 0;
+}
+
 JNIEXPORT jint JNICALL Java_com_halo_decomp_TouchControls_nativeCommanderStatus(
     JNIEnv *env, jclass cls)
 {
@@ -288,6 +301,17 @@ JNIEXPORT jint JNICALL Java_com_halo_decomp_TouchControls_nativeCommanderStatus(
     status = commander_status;
     pthread_mutex_unlock(&touch_lock);
     return status;
+}
+
+JNIEXPORT void JNICALL Java_com_halo_decomp_TouchControls_nativeCommanderAssign(
+    JNIEnv *env, jclass cls)
+{
+    (void)env;
+    (void)cls;
+    pthread_mutex_lock(&touch_lock);
+    if (commander_status & 4)
+        commander_assign_pending = 1;
+    pthread_mutex_unlock(&touch_lock);
 }
 
 JNIEXPORT void JNICALL Java_com_halo_decomp_TouchControls_nativeCommanderToggle(

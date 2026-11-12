@@ -1,77 +1,86 @@
-# v22: Android host's read-only Commander tactical map candidate
+# Halo v22 Commander role and allied tactical map (candidate)
 
-**Status: source candidate only; not built or accepted on Android.** Work is in the
-`halo/commander-tactical-v22` worktree, based on exact v21 source `1689116`.
-Do not replace the user's v21 APK until native build, package integrity,
-physical UI and two-phone LAN regressions have passed.
+**Status:** source candidate only. The running/installed v21 APK is unchanged.
+Branch `halo/commander-role-v22` extends clean v22 map baseline `546b489`.
+Native Android build, device interaction, and two-phone LAN are not yet
+qualified. No cinematic map renderer, UAV, orders, or enemy radar is claimed.
 
-## First usable slice
+## What the v22 candidate does
 
-The host first-local player in an **opted-in team multiplayer match** can use
-the Android touch toolbar's **Map / Close** button. It toggles a read-only
-tactical panel showing an XY projection of the active structure BSP and
-valid, living **friendly human and bot positions**. The panel uses the BSP's
-actual map bounds, not named-map approximations, and is intentionally
-read-only. Friendly humans render before friendly bots (at most 48 markers
-for bounded frame work). The viewer is differentiated from teammates.
+- A LAN or offline host enables **2142 COMMANDER MODE** and **SATELLITE TRACK**
+  from the game's Android launcher before starting a **team multiplayer** match.
+  Both remain off unless selected (Commander master default OFF).
+- While the match is running, the host's first Android player sees an **Assign**
+  touch toolbar button. Tapping cycles through human players (no bots),
+  then **Commander cleared** after the last choice. The host sees the selected
+  player's actual in-game roster name. There is exactly **one** commander
+  assignment across the whole match in this first slice, not one per team.
+- The assigned player's phone sees **Map / Close**. Only that human sees the
+  read-only tactical overview of the active BSP's XY bounds and up to 48
+  living allied humans and bots. No client can grant itself a role or reveal
+  enemies by changing its local config. A guest selected as commander gets
+  the map when the host's reliable role packet arrives.
+- Assignment persists through a normal death and respawn, and is revoked
+  when the player quits, switches team or changes roster name, or the host
+  turns Commander off. Assigning again replaces the previous role.
+- Campaign, co-op, FFA, internet hosts without explicit local opt-in,
+  non-Android ports and unassigned clients gain **no** tactical map.
 
-Only when the host has `commander.enabled=true` and
-`commander.satellite=true`, and its effective policy permits Commander
-in a team multiplayer game, is the button available. The host/local
-connection is checked in native C; a joining client cannot enable the map
-by changing local configuration, spoofing a Java tap, or receiving ordinary
-replicated opponent positions. The code does not grant gameplay privileges
-or send new network packets; v21 packet types 96–100 are unchanged.
+## Network/security policy
 
-The touch View queues at most one toggle under an existing mutex. The native
-game thread explicitly publishes available/open status and revalidates
-eligibility when taking an input. A new game clears panel state. The
-touch toolbar is otherwise unchanged and shows no Map button when the
-master/child permission is off.
+The existing authenticated, reliable, host-to-client Commander settings
+packet (type 96) now carries the selection, with strict new 44-byte length.
+It contains the effective feature bitmask, an absolute player slot, team,
+12 UTF-16 roster code units and a monotonically increasing packet serial.
+The client's differently salted player datum is matched via current roster
+identity and local ownership, not a guessed salt. All unspecified flags,
+reserved fields, invalid teams/slots, empty-name misuse, untrusted machines,
+unreliable frames and stale/replayed serials are rejected.
 
-## Deliberate limitations
+This changes wire compatibility: **network protocol 46 -> 47**. Every
+participating LAN device needs the same new APK. The killstreak, 10-kill
+orbital request/warning packet IDs 97-100 are preserved. Commander radio,
+host-timed UAV, enemy spotting and attack/defend orders still have no active
+gameplay implementations. A one-role model is not a complete Battlefield
+2142 commander hierarchy.
 
-- **Host-first-player prototype**, NOT a player-selectable commander role.
-  No commander election, per-team designation, role transfer or guest commander.
-- **Read-only allied map**, NOT a 2142-style playable laptop, full terrain
-  texture, camera flyover, UAV drone, enemy spotting, radio or objective orders.
-  In particular, enemies are *never* placed on the panel merely because a
-  client already has their replicated unit coordinates.
-- Shows **the active BSP**, not guaranteed full extents of multi-BSP maps.
-  Out-of-bounds and malformed coordinates are skipped. A dead or absent
-  friendly unit is not displayed. Map overlays may cover a portion of
-  gameplay while open; user can close it immediately.
-- Android touch only. Desktop and Web source compile the no-op path but have
-  no Commander toggle. No new menu settings, permissions or wire protocol.
-- Has **no physical Android validation** yet. Source C policy and wiring
-  tests are not evidence of rendered graphics, speaker operation, LAN
-  correctness or performance at 127 bots.
+## Current limits and acceptance
 
-## Verification and next qualification
+The role picker is an in-game cycle, not a roster dropdown or selection from
+the pregame lobby. Only each Android phone's first local viewport can open
+the map; local splitscreen secondary controllers are not qualified.
+The overview uses the **active** BSP, which might not cover all of a
+multi-BSP map. No enemy position appears merely because a client has its
+ordinary replicated unit. The source restricts work to bounded checks
+but needs frame-time measurement with 16/48+ friendly bots.
+
+Source checks:
 
 ```sh
 CC=cc python3 -m unittest -v \
+  tools.test_commander_roles \
   tools.test_commander_tactical \
   tools.test_commander_feature_policy \
-  tools.test_lobby_bot_count
+  tools.test_lobby_bot_count \
+  tools.test_killstreak_rewards \
+  tools.test_killstreak_recon \
+  tools.test_killstreak_orbital
 git diff --check
 ```
 
-The isolated Android-only CI gate includes
-`python3 tools/test_commander_tactical.py -v` before native compilation,
-but this candidate has not been pushed or spent GitHub Actions.
+The Android-only workflow runs these source gates before native compilation.
+This does **not** establish an APK is installable. Final qualification needs
+an isolated exact-source Android guest+host build with a permanent upgrade
+signature, matching package identity/version code, and physical multiplayer
+testing. Verify host and guest disagreeing datums, guest role handoff, death,
+new match, team switch, late join, commander OFF, private recon, all four
+audio clips and game-over reconnect. Never delete Android app storage or
+uninstall v21 for testing.
 
-Before a new APK: isolated native Android guest+host and Java build,
-inspect linked host imports, smoke test the actual Map button on phone,
-verify side effects on touch controls and the HUD, check 0/1/4/16/48+
-allied bots on a map, a map with degenerate or multiple BSP bounds, and
-a human host + human joiner. Confirm guests never see the Map button,
-team switches update friendly markers, campaign/co-op and FFA hide it,
-and disabled Commander remains exactly like v21.
+## Next milestone
 
-After that, build the manual host-selected commander role with salted
-player identity, one role per team, authenticated reliable replication,
-reconnect/death/team-change revocation and role transfer. Only then add
-host-timed, team-scoped UAV enemy intelligence and attack/defend orders.
-Do not reuse personal five-kill recon as a team radar or introduce
-client-supplied enemy coordinates.
+After role assignment and host/guest map controls pass, add a true
+per-team elected commander, a tablet-sized interactive map with touch
+pan/zoom and objective points, host-timed area UAV and spotted enemies
+only when validated by the host, then commands for bots and teammates.
+Every networked action needs sender ownership and bounded validation.
