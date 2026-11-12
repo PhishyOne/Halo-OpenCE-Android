@@ -295,6 +295,6 @@ void killstreak_recon_present(short local_player_index)
     state->next_notice = game_time_get() + 90;
     hud_print_message(local_player_index, award == 3 ?
         L"3 kills: Enhancements online" :
-        L"5 kills: Recon online (30s)");
+        L"5 kills: Recon active (30s)");
     game_engine_play_killstreak_sound(local_player_index, award);
 }

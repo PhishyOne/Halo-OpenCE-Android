@@ -462,7 +462,7 @@ ticks, through walls, for the earning player's viewport only (24 markers
 maximum). Commander Mode never shares or grants this recon. The host sends
 3/5-kill notices and recon expiry reliably only to the earner's machine.
 With killstreak.announcements enabled, the HUD says
-"3 kills: Enhancements online" and "5 kills: Recon online (30s)".
+"3 kills: Enhancements online" and "5 kills: Recon active (30s)".
 On Android v19, the earner hears two locally bundled, original
 synthesized radio-style PCM clips played through SoundPool. This replaces
 v18's dependence on installed offline TextToSpeech voice data. The APK
