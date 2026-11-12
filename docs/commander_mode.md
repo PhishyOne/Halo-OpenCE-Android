@@ -181,6 +181,27 @@ No new permissions, downloads or cloud services are required. Actual
 Android speaker output is subject to physical testing; voice quality is
 synthesized and brief rather than professional radio voice acting.
 
+### v20 user-approved British woman callouts
+
+The user disliked v19's robotic eSpeak audio and selected the British
+English woman voice. A punctuation-only attempt to repair an apparent
+extra "s" in "Recon online" did not improve it. The user approved the
+replacement wording "Recon active".
+
+Both v20 Android PCM WAV assets were split losslessly out of the exact
+approved Halo-Voice-Preview-English-Woman-Recon-Active.wav preview.
+The first says "Enhancements online" (unchanged), and the second says
+"Recon active". Original approved preview SHA-256 is:
+cdbfa05e1484cb91074de47c7f51d9e15b6224ec4bdcdff8ad5e2341bf8e1a01.
+The concatenation of the two WAV PCM payloads has SHA-256:
+69870492579079d2cadf1c52df7bbc242cdc68db4705cbd36e3a0a286aae06b6.
+They are 24 kHz mono PCM16, with over 280 ms lead and 250 ms tail
+silence. Loaded through v19 Android SoundPool, no network or model
+download. Five-kill HUD text says "Recon active (30s)".
+No multiplayer protocol or gameplay change. The full speech model and
+voice weights remain on Forge scratch and are not in the APK.
+Android speaker playback still needs physical qualification.
+
 Death, changed salted player/unit, disconnect, match end, map reset and
 master OFF cancel recon and pending notices. Normal full-spectrum vision
 pickups and the Commander mask are not repurposed. No persistence changes.

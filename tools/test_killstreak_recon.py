@@ -121,7 +121,7 @@ class KillstreakReconTest(unittest.TestCase):
         self.assertNotIn("_multiplayer_sound_killing_spree", audio)
         self.assertNotIn("unspatialized_impulse_sound_new", audio)
         self.assertIn('L"3 kills: Enhancements online"', recon)
-        self.assertIn('L"5 kills: Recon online (30s)"', recon)
+        self.assertIn('L"5 kills: Recon active (30s)"', recon)
         self.assertIn("announceKillstreak(int award)", java)
         self.assertIn("new SoundPool.Builder()", java)
         self.assertIn("SoundPool", java)
@@ -148,22 +148,41 @@ class KillstreakReconTest(unittest.TestCase):
         raw = ROOT / "port/android/app/src/main/res/raw"
         expected = {
             "halo_reward_enhancements.wav":
-                "cbd00dd5e52b15c5640416ff7dfa0b4ca494d7a6de7d6477f23465e4587da6c9",
+                "a361983ed1b0f7cc7f88618db9caf02dfdaae4f46d00e00ff5ca207a3586b786",
             "halo_reward_recon.wav":
-                "19d8643c8f5f57f018f203de1ad157d9dbdbba15768c4e5b820ee0591a2c1a8c",
+                "bc4458f6f97178bdfeb530da8c79fef721f04f6ca5d70bcdcba4c8f5366de668",
         }
         for filename, sha in expected.items():
             with self.subTest(clip=filename):
                 clip = raw / filename
                 self.assertTrue(clip.is_file(), filename)
-                self.assertLess(clip.stat().st_size, 150000)
+                self.assertLess(clip.stat().st_size, 200000)
                 with clip.open("rb") as stream:
                     self.assertEqual(hashlib.file_digest(stream, "sha256").hexdigest(), sha)
                 with wave.open(str(clip), "rb") as audio:
                     self.assertEqual(audio.getnchannels(), 1)
                     self.assertEqual(audio.getsampwidth(), 2)
-                    self.assertEqual(audio.getframerate(), 22050)
+                    self.assertEqual(audio.getframerate(), 24000)
                     self.assertGreater(audio.getnframes(), 20000)
+        # Combined PCM payload must exactly match the user-approved
+        # British woman preview (SHA captured before lossless splitting).
+        combined = bytearray()
+        for filename in expected:
+            with wave.open(str(raw / filename), "rb") as wav:
+                pcm = wav.readframes(wav.getnframes())
+                import array
+                values = array.array("h")
+                values.frombytes(pcm)
+                if __import__("sys").byteorder != "little":
+                    values.byteswap()
+                audible = [i for i, v in enumerate(values) if v != 0]
+                self.assertTrue(audible)
+                self.assertGreaterEqual(audible[0] / 24000, 0.28)
+                self.assertGreaterEqual((len(values) - audible[-1] - 1) / 24000, 0.25)
+                combined.extend(pcm)
+        self.assertEqual(
+            hashlib.sha256(combined).hexdigest(),
+            "69870492579079d2cadf1c52df7bbc242cdc68db4705cbd36e3a0a286aae06b6")
         java = read("port/android/app/src/main/java/com/halo/decomp/HaloActivity.java")
         self.assertNotIn("killstreakSpeech", java)
         self.assertIn("initializeRewardCallouts()", java)
