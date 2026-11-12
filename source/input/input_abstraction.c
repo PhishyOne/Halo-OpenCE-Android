@@ -290,6 +290,26 @@ static void keyboard_controls_update(
 	return;
 }
 
+/* port: consume one flashlight rising edge while zoom is held. Poll even
+ * when no reward is ready, so holding a button cannot spend a new award. */
+boolean input_abstraction_orbital_chord(short controller_index)
+{
+	static boolean flashlight_down[MAXIMUM_GAMEPADS];
+	struct game_input_state const *state;
+	boolean down, pressed;
+
+	if (controller_index < 0 || controller_index >= MAXIMUM_GAMEPADS)
+		return FALSE;
+	state = &input_abstraction_globals.input_states[controller_index];
+	down = input_abstraction_globals.initialized &&
+		input_abstraction_globals.controller_available[controller_index] &&
+		state->buttons[_game_control_flashlight] != 0;
+	pressed = down && !flashlight_down[controller_index] &&
+		state->buttons[_game_control_zoom] != 0;
+	flashlight_down[controller_index] = down;
+	return pressed;
+}
+
 /* port: whether the controller's player holds the keyboard's reload key, and
 for how many ticks its jump key (which skips cutscenes, as the
 controller's A does) */

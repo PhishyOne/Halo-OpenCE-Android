@@ -50,6 +50,10 @@ public class HaloActivity extends SDLActivity {
     private SoundPool rewardCallouts;
     private int rewardEnhancementsSample;
     private int rewardReconSample;
+    private int rewardOrbitalAuthorizedSample;
+    private int rewardOrbitalIncomingSample;
+    private boolean rewardOrbitalAuthorizedLoaded;
+    private boolean rewardOrbitalIncomingLoaded;
     private int rewardActiveStream;
     private boolean rewardEnhancementsLoaded;
     private boolean rewardReconLoaded;
@@ -86,9 +90,9 @@ public class HaloActivity extends SDLActivity {
         Updater.start(this);
     }
 
-    /** Load two *original* WAV callouts from the APK. Unlike Android TTS,
+    /** Load four *original* WAV callouts from the APK. Unlike Android TTS,
      * this works even if the phone has no installed offline speech voices.
-     * Each sample is under 100 KB; asynchronous load completes long before
+     * Each sample is under 200 KB; asynchronous load completes long before
      * the player can normally earn a three-kill streak. */
     private void initializeRewardCallouts() {
         try {
@@ -104,6 +108,10 @@ public class HaloActivity extends SDLActivity {
                             return;
                         if (sample == rewardEnhancementsSample)
                             rewardEnhancementsLoaded = status == 0;
+                        if (sample == rewardOrbitalAuthorizedSample)
+                            rewardOrbitalAuthorizedLoaded = status == 0;
+                        if (sample == rewardOrbitalIncomingSample)
+                            rewardOrbitalIncomingLoaded = status == 0;
                         if (sample == rewardReconSample)
                             rewardReconLoaded = status == 0;
                         if (status != 0)
@@ -113,7 +121,12 @@ public class HaloActivity extends SDLActivity {
                     rewardCallouts.load(this, R.raw.halo_reward_enhancements, 1);
             rewardReconSample =
                     rewardCallouts.load(this, R.raw.halo_reward_recon, 1);
-            if (rewardEnhancementsSample == 0 || rewardReconSample == 0)
+            rewardOrbitalAuthorizedSample =
+                    rewardCallouts.load(this, R.raw.halo_reward_orbital_authorized, 1);
+            rewardOrbitalIncomingSample =
+                    rewardCallouts.load(this, R.raw.halo_reward_orbital_incoming, 1);
+            if (rewardEnhancementsSample == 0 || rewardReconSample == 0 ||
+                    rewardOrbitalAuthorizedSample == 0 || rewardOrbitalIncomingSample == 0)
                 Log.w("HaloCallouts", "Could not queue bundled reward samples");
         } catch (RuntimeException failure) {
             Log.w("HaloCallouts", "Could not initialize bundled reward audio", failure);
@@ -129,16 +142,20 @@ public class HaloActivity extends SDLActivity {
      * Do not use Activity window focus as a gate: some Android devices
      * don't mark the SDL surface focused while touch input is active. */
     public void announceKillstreak(int award) {
-        if (award != 3 && award != 5)
+        if (award != 3 && award != 5 && award != 10 && award != 11)
             return;
         runOnUiThread(() -> {
             if (rewardAudioClosed || !rewardActivityResumed ||
                     rewardCallouts == null || isFinishing() || isDestroyed())
                 return;
-            int sample = award == 3 ? rewardEnhancementsSample : rewardReconSample;
-            boolean loaded = award == 3 ? rewardEnhancementsLoaded : rewardReconLoaded;
+            int sample = award == 3 ? rewardEnhancementsSample :
+                    award == 5 ? rewardReconSample :
+                    award == 10 ? rewardOrbitalAuthorizedSample : rewardOrbitalIncomingSample;
+            boolean loaded = award == 3 ? rewardEnhancementsLoaded :
+                    award == 5 ? rewardReconLoaded :
+                    award == 10 ? rewardOrbitalAuthorizedLoaded : rewardOrbitalIncomingLoaded;
             if (sample == 0 || !loaded)
-                return;  // Accurate private HUD text is still displayed.
+                return;  // Accurate HUD text is still displayed.
             if (rewardActiveStream != 0)
                 rewardCallouts.stop(rewardActiveStream);
             rewardActiveStream = rewardCallouts.play(sample, 0.9f, 0.9f, 1, 0, 1.0f);
@@ -289,6 +306,7 @@ public class HaloActivity extends SDLActivity {
         rewardActivityResumed = false;
         rewardAudioClosed = true;
         rewardEnhancementsLoaded = rewardReconLoaded = false;
+        rewardOrbitalAuthorizedLoaded = rewardOrbitalIncomingLoaded = false;
         if (rewardCallouts != null) {
             rewardCallouts.release();
             rewardCallouts = null;

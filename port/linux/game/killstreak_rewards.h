@@ -3,6 +3,7 @@
 #ifndef HALO_KILLSTREAK_REWARDS_H
 #define HALO_KILLSTREAK_REWARDS_H
 
+int killstreak_rewards_has_ten(long player_index, long unit_index);
 void killstreak_rewards_start(void);
 void killstreak_rewards_stop(void);
 void killstreak_rewards_update(void);

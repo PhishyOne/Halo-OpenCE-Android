@@ -149,9 +149,15 @@ Preferences are stored separately in [commander] and [killstreak], without
 altering bots, network settings, maps or saved games. Campaign/co-op
 remain unaffected.
 
-These are actual permission controls, NOT finished gameplay. The laptop,
-recon HUD, kill rewards, custom announcer and orbital strike have yet to be
-implemented. See docs/commander_mode.md for the trust boundary and design.
+The 3/5-kill powerups and private recon retain v20 behavior. v21 adds a
+source candidate for a ten-kill targeted orbital strike: in first person,
+aim at ground, hold Zoom and tap Flashlight. The host checks the request,
+warns all players, then applies enemy-only damage after 100 simulation ticks.
+Four original 24 kHz WAVs use the existing SoundPool and lifecycle guards;
+3/5 audio bytes and the saved touch layout remain unchanged. Commander
+laptop/UAV/orders are still future work. No device or native Android build
+acceptance is implied by the local source tests. See
+[the v21 limitations and LAN version](../../docs/orbital_strike_v21.md).
 
 ### Changing the bot count without restarting Halo
 

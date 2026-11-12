@@ -83,6 +83,7 @@ machine (their datum identifiers need not be).
 #include "network_shield_effects.h"
 #include "commander_features.h"
 #include "killstreak_recon.h"
+#include "killstreak_orbital.h"
 #include "map_share.h"
 #include "network_afk.h"
 #include "network_map_vote.h"
@@ -4745,6 +4746,12 @@ void network_distributed_handle_message(
 	if (commander_features_handles_message(message, size))
 	{
 		commander_features_handle_message(machine_index, message, size);
+		return;
+	}
+	if (killstreak_orbital_handles_message(message, size))
+	{
+		if (!distributed_handling_batch)
+			killstreak_orbital_handle_message(machine_index, message, size);
 		return;
 	}
 	if (killstreak_recon_handles_message(message, size))

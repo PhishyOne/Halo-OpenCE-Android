@@ -537,7 +537,7 @@ int host_sdl_show_toast(const char *message, int duration, int gravity, int x, i
 
 /* Called only by the local game's validated HUD award presentation, not by
  * remote packets. Use SDL's JNI environment on this thread and a *local*
- * Activity reference. Java queues actual TTS playback on Android's UI
+ * Activity reference. Java queues bundled sample playback on Android's UI
  * thread. No downloaded audio or copyrighted Halo announcer tags. */
 int host_android_announce_killstreak(int award)
 {
@@ -547,7 +547,7 @@ int host_android_announce_killstreak(int award)
 	jmethodID announce;
 	int delivered = 0;
 
-	if (award != 3 && award != 5)
+	if (award != 3 && award != 5 && award != 10 && award != 11)
 		return 0;
 	env = (JNIEnv *)SDL_GetAndroidJNIEnv();
 	if (!env)

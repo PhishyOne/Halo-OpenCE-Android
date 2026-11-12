@@ -2811,12 +2811,20 @@ void damage_kill_object_for_player(
 	long object_index,
 	long player_index)
 {
-	struct game_globals_falling_damage *falling_damage = TAG_BLOCK_GET_ELEMENT(
-		&scenario_get_game_globals()->falling_damage,
-		0,
-		struct game_globals_falling_damage);
-	struct player_datum *player = player_get(player_index);
+	struct game_globals_falling_damage *falling_damage;
+	struct player_datum *player;
 	struct damage_data damage;
+
+	/* port: optional orbital damage must tolerate maps without this block
+	 * and an owner removed before impact. Never dereference absent tags. */
+	if (!scenario_get_game_globals() ||
+		scenario_get_game_globals()->falling_damage.count < 1 ||
+		!scenario_get_game_globals()->falling_damage.address ||
+		!(player = player_try_and_get(player_index)))
+		return;
+	falling_damage = TAG_BLOCK_GET_ELEMENT(
+		&scenario_get_game_globals()->falling_damage, 0,
+		struct game_globals_falling_damage);
 
 	if (falling_damage->falling_damage.index == NONE)
 		return;
