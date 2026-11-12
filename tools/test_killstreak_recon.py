@@ -122,20 +122,52 @@ class KillstreakReconTest(unittest.TestCase):
         self.assertNotIn("unspatialized_impulse_sound_new", audio)
         self.assertIn('L"3 kills: Enhancements online"', recon)
         self.assertIn('L"5 kills: Recon online (30s)"', recon)
-        self.assertIn('"Enhancements online"', java)
-        self.assertIn('"Recon online"', java)
         self.assertIn("announceKillstreak(int award)", java)
-        self.assertIn("voice.isNetworkConnectionRequired()", java)
-        self.assertIn("TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED", java)
-        self.assertIn("killstreakSpeech.shutdown()", java)
+        self.assertIn("new SoundPool.Builder()", java)
+        self.assertIn("SoundPool", java)
+        self.assertIn("R.raw.halo_reward_enhancements", java)
+        self.assertIn("R.raw.halo_reward_recon", java)
+        self.assertIn("rewardCallouts.play(sample", java)
+        self.assertIn("rewardCallouts.stop(rewardActiveStream)", java)
+        self.assertIn("rewardCallouts.release()", java)
+        self.assertIn("!rewardActivityResumed", java)
+        self.assertNotIn("TextToSpeech", java)
+        self.assertNotIn("speech.tts", java)
         self.assertIn("SDL_GetAndroidJNIEnv()", host)
         self.assertIn("SDL_GetAndroidActivity()", host)
         self.assertIn('GetMethodID(env, activity_class, "announceKillstreak", "(I)V")', host)
         self.assertIn("host_android_announce_killstreak", guest)
         self.assertIn("host_android_announce_killstreak", imports)
-        self.assertIn("android.intent.action.TTS_SERVICE", manifest)
+        self.assertNotIn("android.intent.action.TTS_SERVICE", manifest)
+
         self.assertIn("local_player_get_next(local_player_index) != NONE", audio)
 
+    def test_bundled_radio_wavs_are_original_offline_resources(self):
+        import hashlib
+        import wave
+        raw = ROOT / "port/android/app/src/main/res/raw"
+        expected = {
+            "halo_reward_enhancements.wav":
+                "cbd00dd5e52b15c5640416ff7dfa0b4ca494d7a6de7d6477f23465e4587da6c9",
+            "halo_reward_recon.wav":
+                "19d8643c8f5f57f018f203de1ad157d9dbdbba15768c4e5b820ee0591a2c1a8c",
+        }
+        for filename, sha in expected.items():
+            with self.subTest(clip=filename):
+                clip = raw / filename
+                self.assertTrue(clip.is_file(), filename)
+                self.assertLess(clip.stat().st_size, 150000)
+                with clip.open("rb") as stream:
+                    self.assertEqual(hashlib.file_digest(stream, "sha256").hexdigest(), sha)
+                with wave.open(str(clip), "rb") as audio:
+                    self.assertEqual(audio.getnchannels(), 1)
+                    self.assertEqual(audio.getsampwidth(), 2)
+                    self.assertEqual(audio.getframerate(), 22050)
+                    self.assertGreater(audio.getnframes(), 20000)
+        java = read("port/android/app/src/main/java/com/halo/decomp/HaloActivity.java")
+        self.assertNotIn("killstreakSpeech", java)
+        self.assertIn("initializeRewardCallouts()", java)
+        self.assertIn("rewardCallouts.play(sample", java)
 
 if __name__ == "__main__":
     unittest.main()
