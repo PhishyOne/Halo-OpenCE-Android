@@ -96,7 +96,7 @@ class LanApkUpdateTests(unittest.TestCase):
         self.assertNotIn("new URL(", source)
         self.assertNotIn("setInstanceFollowRedirects(true)", source)
         self.assertNotIn("usesCleartextTraffic", MANIFEST.read_text())
-        self.assertIn("HALO_PORT_NETWORK_VERSION 48",
+        self.assertIn("HALO_PORT_NETWORK_VERSION 49",
             (ROOT / "port/linux/include/halo_port_limits.h").read_text())
         for token in (
             "_distributed_message_commander_settings = 96",
