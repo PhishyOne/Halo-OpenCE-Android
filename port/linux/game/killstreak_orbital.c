@@ -21,6 +21,7 @@
 #include "killstreak_recon.h"
 #include "killstreak_rewards.h"
 #include "killstreak_orbital.h"
+#include "killstreak_breach_vfx.h" /* visual only; the host owns all damage */
 #include <string.h>
 
 #define ORBITAL_WARNING_TICKS 100
@@ -41,7 +42,7 @@ struct orbital_message {
     unsigned int serial; /* host-issued, non-reused capability for this life */
     real_point3d target;
     word kind; /* 0 revoke, 1 grant, 2 orbital request, 3 orbital warning,
-                4 breach request, 5 breach warning */
+                4 breach request, 5 breach warning, 6 actual breach detonation */
     word reserved;
 };
 typedef char orbital_message_size[sizeof(struct orbital_message) == 36 ? 1 : -1];
@@ -63,7 +64,8 @@ struct orbital_warning {
     long end;
     unsigned int pending; /* one notice per local viewport */
     boolean sound_pending, breach;
-    real_point3d target;
+    boolean effect_seen, effect_pending;
+    real_point3d target, effect_position;
 };
 static struct orbital_host_state orbital_host[HALO_PORT_MAXIMUM_NETWORK_PLAYERS];
 static struct orbital_local_state orbital_local[MAXIMUM_LOCAL_PLAYERS];
@@ -152,6 +154,24 @@ static void orbital_receive(struct orbital_message const *m)
     long warning_ticks = m->kind == 5 ? BREACH_WARNING_TICKS : ORBITAL_WARNING_TICKS;
     if (m->player_slot < 0 || m->player_slot >= HALO_PORT_MAXIMUM_NETWORK_PLAYERS || !m->serial)
         return;
+    /* Render only after the host confirms a real impact, not just from
+     * a warning timer that could have been canceled by the owner's death. */
+    if (m->kind == 6)
+    {
+        if (!orbital_playing() || !orbital_recent(m) ||
+            !orbital_point_valid(&m->target))
+            return;
+        w = &orbital_warnings[m->player_slot];
+        if (!w->breach || w->serial != m->serial || w->effect_seen ||
+            !orbital_near(&w->target, &m->target, 0.5f) ||
+            m->header.game_time < w->end ||
+            m->header.game_time > w->end + 30)
+            return;
+        w->effect_seen = TRUE;
+        w->effect_pending = TRUE;
+        w->effect_position = m->target;
+        return;
+    }
     if (m->kind == 3 || m->kind == 5)
     {
         if (!orbital_playing() || !orbital_recent(m) ||
@@ -165,6 +185,7 @@ static void orbital_receive(struct orbital_message const *m)
         w->target = m->target;
         w->end = m->header.game_time + warning_ticks;
         w->breach = m->kind == 5;
+        w->effect_seen = w->effect_pending = FALSE;
         w->pending = (1u << MAXIMUM_LOCAL_PLAYERS) - 1;
         w->sound_pending = TRUE;
         for (local = 0; local < MAXIMUM_LOCAL_PLAYERS; local++)
@@ -384,7 +405,7 @@ void killstreak_orbital_handle_message(long machine, word const *data, word size
         ((m.header.type == _distributed_message_orbital_award && m.kind <= 1 &&
           m.target.x == 0 && m.target.y == 0 && m.target.z == 0) ||
          (m.header.type == _distributed_message_orbital_incoming &&
-          (m.kind == 3 || m.kind == 5))))
+          (m.kind == 3 || m.kind == 5 || m.kind == 6))))
         orbital_receive(&m);
 }
 static void orbital_impact(struct orbital_host_state *s)
@@ -397,9 +418,30 @@ static void orbital_impact(struct orbital_host_state *s)
     real_point3d center, head;
     real_vector3d ray;
     struct collision_result hit;
-    /* No effect asset lookup or client-side victim changes. The engine's
-     * instant-kill helper credits the owner and replicates ordinary damage. */
+    /* Damage remains host-only; a separate verified detonation event makes
+     * each machine render a stock visual without changing the kill helper. */
     s->impact_tick = 0;
+    if (strike.breach)
+    {
+        struct orbital_message effect_message;
+        owner = orbital_living(strike.player_index, strike.unit_index);
+        if (!orbital_playing() || !owner || owner->team_index != strike.team ||
+            owner->network_player_data.machine_index != strike.machine)
+            return;
+        memset(&effect_message, 0, sizeof(effect_message));
+        effect_message.header.game_time = game_time_get();
+        effect_message.player_slot =
+            (int)DATUM_INDEX_TO_ABSOLUTE_INDEX(strike.player_index);
+        effect_message.unit_index = (int)strike.unit_index;
+        effect_message.serial = strike.serial;
+        effect_message.target = strike.target;
+        effect_message.kind = 6;
+        orbital_receive(&effect_message);
+        if (game_connection() == _game_connection_network_server)
+            distributed_send(&effect_message,
+                _distributed_message_orbital_incoming, 1,
+                (word)sizeof(effect_message), _distributed_to_clients_reliably);
+    }
     center = strike.target;
     if (!strike.breach)
         center.z += 0.2f;
@@ -520,6 +562,19 @@ void killstreak_orbital_update(void)
         }
         if (!playing)
             orbital_warnings[slot].pending = orbital_warnings[slot].sound_pending = 0;
+    }
+    /* Visuals are local side effects of an authenticated host detonation.
+     * They are independent of HUD visibility and clear on match shutdown. */
+    for (slot = 0; slot < HALO_PORT_MAXIMUM_NETWORK_PLAYERS; slot++)
+    {
+        struct orbital_warning *visual = &orbital_warnings[slot];
+        if (playing && visual->effect_pending)
+        {
+            visual->effect_pending = FALSE;
+            killstreak_breach_vfx_spawn(&visual->effect_position);
+        }
+        else if (!playing)
+            visual->effect_pending = FALSE;
     }
     for (local = 0; local < MAXIMUM_LOCAL_PLAYERS; local++)
     {
