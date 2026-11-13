@@ -59,6 +59,8 @@ static struct observer_result camera;
 static int sent,private_sent,public_sent,requests,last_type,last_machine,texts,sounds,last_sound,camo,shields,recon;
 static int geometry_calls,ground_missing,wall,steep,wrong_floor,ceiling,ownership,damage_calls,damage_owner,last_damage;
 static int damage_kills_owner;
+static int stock_breach_visuals;
+static real_point3d last_stock_breach_position;
 static byte packet[128];
 static struct player_datum *player_try_and_get(long id) {
     int i; for(i=0;i<128;i++) if(ids[i]==id && id!=NONE) return &players[i]; return NULL;
@@ -153,6 +155,14 @@ static void killstreak_recon_revoke(long id,long unit) { (void)id; (void)unit; }
 static void killstreak_recon_reset(void) { }
 static void killstreak_recon_stop(void) { }
 static void killstreak_recon_update(void) { }
+/* Match the game's real visual integration but never need stock map tags
+ * for the fake-world host/client impact tests. */
+static void killstreak_breach_vfx_spawn(real_point3d const *point)
+{
+    CHECK(point != NULL);
+    stock_breach_visuals++;
+    last_stock_breach_position = *point;
+}
 #include "production.inc"
 static void setup(void) {
     int i;
@@ -172,6 +182,8 @@ static void setup(void) {
     menu=cinematic=unreliable=scripted_value=perspective=inhibited=0;
     policy=KILLSTREAK_ENABLED|KILLSTREAK_ORBITAL|KILLSTREAK_ANNOUNCEMENTS;
     sent=private_sent=public_sent=requests=texts=sounds=camo=shields=recon=0;
+    stock_breach_visuals=0;
+    memset(&last_stock_breach_position,0,sizeof(last_stock_breach_position));
     geometry_calls=ground_missing=wall=steep=wrong_floor=ceiling=damage_calls=damage_kills_owner=0;
     globals.falling_damage.count=1; globals.falling_damage.address=&falling; falling.falling_damage.index=123;
     camera.position=units[0].object.position; camera.position.z=1;
@@ -423,6 +435,53 @@ int main(int argc,char **argv) {
         setup(); ceiling=1; kills(10); m=request();
         /* An untrusted guest cannot force an orbital indoors. */
         receive(1,&m); CHECK(!public_sent && !orbital_host[0].consumed);
+    } else if(!strcmp(argv[1],"visual")) {
+        /* Host only emits a detonation message if the pulse actually fires.
+         * The recipient requires the prior reliable warning with same
+         * host serial and no replay on subsequent callbacks. */
+        struct orbital_message warning, confirmed;
+        localize(); ceiling=1; kills(10);
+        input_abstraction_globals.input_states[0].buttons[5]=1;
+        input_abstraction_globals.input_states[0].buttons[11]=1;
+        killstreak_rewards_update();
+        CHECK(public_sent==1 && orbital_host[0].breach);
+        memcpy(&warning, packet, sizeof(warning));
+        CHECK(warning.kind==5);
+        now += BREACH_WARNING_TICKS;
+        killstreak_rewards_update();
+        CHECK(public_sent==2 && stock_breach_visuals==1 &&
+            last_type==_distributed_message_orbital_incoming);
+        memcpy(&confirmed, packet, sizeof(confirmed));
+        CHECK(confirmed.kind==6);
+        CHECK(confirmed.target.x==orbital_host[0].target.x);
+        now++;
+        killstreak_orbital_update(); CHECK(stock_breach_visuals==1);
+
+        /* A client renders once from authenticated host traffic, not from
+         * guesses made after the warning or from the client itself. */
+        setup(); ceiling=1; connection=_game_connection_network_client;
+        now = warning.header.game_time;
+        receive(NONE,&confirmed);
+        killstreak_orbital_update(); CHECK(stock_breach_visuals==0);
+        receive(NONE,&warning);
+        now = confirmed.header.game_time;
+        receive(NONE,&confirmed);
+        CHECK(orbital_warnings[0].effect_pending);
+        killstreak_orbital_update();
+        CHECK(stock_breach_visuals==1 &&
+            last_stock_breach_position.x==confirmed.target.x);
+        receive(NONE,&confirmed);
+        killstreak_orbital_update(); CHECK(stock_breach_visuals==1);
+
+        /* Losing the awarding life before impact cancels the visual too. */
+        setup(); localize(); ceiling=1; kills(10);
+        input_abstraction_globals.input_states[0].buttons[5]=1;
+        input_abstraction_globals.input_states[0].buttons[11]=1;
+        killstreak_rewards_update();
+        units[0].object.damage_flags=FLAG(_object_dead_bit);
+        now += BREACH_WARNING_TICKS;
+        killstreak_rewards_update();
+        CHECK(stock_breach_visuals==0 && public_sent==1);
     } else if(!strcmp(argv[1],"damage")) {
         globals.falling_damage.count=0; damage_kill_object_for_player(unit_ids[1],ids[0]); CHECK(!damage_calls);
         globals.falling_damage.count=1; globals.falling_damage.address=NULL;
