@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from harness import constant, enum_with, function, mutated, read, structure
 ROOT = Path(__file__).resolve().parents[1]
 CASES = ("award", "wire", "authority", "replay", "lifecycle", "geometry", "impact",
-         "input", "retry", "presentation", "damage", "capacity", "breach")
+         "input", "retry", "presentation", "damage", "capacity", "breach", "visual")
 
 
 def generated(fault=None):
@@ -83,6 +83,8 @@ class OrbitalTest(unittest.TestCase):
             (("game_time_get() >= orbital_local[local].request_timeout", "0"), "retry"),
             (("m->serial <= w->serial", "0"), "presentation"),
             (("if (!orbital_under_roof(m->unit_index) ||", "if (0 ||"), "breach"),
+            (("w->serial != m->serial || w->effect_seen ||",
+              "0 || w->effect_seen ||"), "visual"),
         ):
             with self.subTest(fault=fault):
                 self.compile_run((case,), fault, 1)
