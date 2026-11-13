@@ -100,7 +100,7 @@ class OrbitalTest(unittest.TestCase):
         self.assertIn("killstreak_recon_present(render.local_player_index)", hud)
         self.assertIn("hud_scripted_globals->show_hud", hud)
         self.assertIn("tools/test_killstreak_orbital.py -v", read(".github/workflows/build.yml"))
-        self.assertEqual(constant(read("port/linux/include/halo_port_limits.h"), "HALO_PORT_NETWORK_VERSION"), 48)
+        self.assertEqual(constant(read("port/linux/include/halo_port_limits.h"), "HALO_PORT_NETWORK_VERSION"), 49)
         raw = ROOT / "port/android/app/src/main/res/raw"
         for name, sha in (
             ("halo_reward_orbital_authorized.wav", "538b9024ef39a94d6f031b1e6a7f9bbfc7b341689d36ee3a8cbbea1d6772b546"),
