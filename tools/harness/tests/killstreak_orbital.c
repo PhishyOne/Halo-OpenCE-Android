@@ -465,6 +465,10 @@ int main(int argc,char **argv) {
         killstreak_orbital_update(); CHECK(stock_breach_visuals==0);
         receive(NONE,&warning);
         now = confirmed.header.game_time;
+        /* Correct type but wrong host-issued serial is never a visual. */
+        old=confirmed; old.serial++;
+        receive(NONE,&old);
+        killstreak_orbital_update(); CHECK(stock_breach_visuals==0);
         receive(NONE,&confirmed);
         CHECK(orbital_warnings[0].effect_pending);
         killstreak_orbital_update();
