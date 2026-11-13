@@ -159,7 +159,7 @@ static void killstreak_recon_update(void) { }
  * for the fake-world host/client impact tests. */
 static void killstreak_breach_vfx_spawn(real_point3d const *point)
 {
-    CHECK(point != NULL);
+    assert(point != NULL);
     stock_breach_visuals++;
     last_stock_breach_position = *point;
 }
