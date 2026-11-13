@@ -79,8 +79,15 @@ class LobbyBotCountTest(unittest.TestCase):
         check=source.split("static boolean lobby_bot_count_available(void)",1)[1].split(
             '/* "port lobby update" */',1)[0]
         self.assertIn('global_network_game_server_get()',check)
-        self.assertIn('network_game_client_get_state(client, &state_data) != _client_state_pregame',check)
-        self.assertIn('network_game_server_port_start_sent(server)',check)
+        # Regression for v23: the visual client status can lag the real
+        # hosting server pregame state, leaving all buttons hidden.
+        self.assertIn('network_game_server_port_bots_adjustable(server)',check)
+        self.assertNotIn('network_game_client_get_state(client, &state_data)',check)
+        self.assertIn('server->state == _network_game_server_state_pregame',host)
+        self.assertIn('!server->sent_start_game_message',host)
+        self.assertIn('network_game_server_port_bots_adjustable(',host)
+        self.assertIn('network_game_server_port_bots_adjustable(',(
+            ROOT/'source/networking/network_server_manager.h').read_text())
         self.assertIn('(!network_game_is_splitscreen_local() && config_boolean("network.online"))',check)
         self.assertIn('controller != 0',check)
         self.assertIn('network_game_is_splitscreen_local()',check)
@@ -90,10 +97,42 @@ class LobbyBotCountTest(unittest.TestCase):
         self.assertIn('lobby_bot_count_change(controller,',source)
         self.assertIn('visible_set(named(list, "lobby_bot_less", 0), bot_controls)',source)
         self.assertIn('visible_set(named(description, "lobby_bot_count_label", 0), bot_controls)',source)
+        self.assertIn('host_touch_lobby_take_delta()',source)
+        self.assertIn('host_touch_lobby_publish(',source)
+        self.assertIn('lobby_bot_count_change(0, (short)delta)',source)
         self.assertIn('server->state != _network_game_server_state_pregame',host)
         self.assertIn('network_game_server_port_bots(server);',host)
         self.assertIn('network_game_remove_player(&server->game, &leaving)',host)
         self.assertIn('network_game_add_player(&server->game, &joining)',host)
+
+    def test_visible_android_touch_strip_independent_of_xml(self):
+        game=(ROOT/'port/android/app/src/main/java/com/halo/decomp/HaloActivity.java').read_text()
+        ui=(ROOT/'port/android/app/src/main/java/com/halo/decomp/LobbyBotControls.java').read_text()
+        bridge=(ROOT/'port/android/host/host_touch.c').read_text()
+        imports=(ROOT/'port/android/host_imports.list').read_text()
+        guest=(ROOT/'port/android/guest/runtime/guest_host.h').read_text()
+        self.assertIn('mLayout.addView(lobbyBotControls, buttons);',game)
+        self.assertIn('Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL',game)
+        self.assertLess(game.index('mLayout.addView(touchControls,'),game.index('mLayout.addView(lobbyBotControls,'))
+        self.assertIn('setVisibility(status >= 0 ? View.VISIBLE : View.GONE);',ui)
+        self.assertIn('nativeStatus()',ui)
+        self.assertIn('nativeAdjust(direction)',ui)
+        self.assertIn('Fewer lobby bots',ui)
+        self.assertIn('More lobby bots',ui)
+        self.assertIn('BOTS  ',ui)
+        self.assertIn('private static final long POLL_MS = 125',ui)
+        for name in ('host_touch_lobby_publish','host_touch_lobby_take_delta'):
+            self.assertIn(name,imports)
+            self.assertIn(name,guest)
+            self.assertIn(name,bridge)
+        self.assertIn('Java_com_halo_decomp_LobbyBotControls_nativeStatus',bridge)
+        self.assertIn('Java_com_halo_decomp_LobbyBotControls_nativeAdjust',bridge)
+        self.assertIn('HOST_LOBBY_LEASE_NS',bridge)
+        self.assertIn('lobby_delta = 0;',bridge)
+        self.assertIn('delta == -1 || delta == 1',bridge)
+        self.assertIn('pthread_mutex_lock(&touch_lock)',bridge)
+        self.assertIn('now_ns() - lobby_last_ns < HOST_LOBBY_LEASE_NS',bridge)
+
 
 if __name__=="__main__":
     unittest.main()

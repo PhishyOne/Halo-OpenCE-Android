@@ -4748,6 +4748,16 @@ boolean network_game_server_port_start_sent(
 	return server && server->sent_start_game_message;
 }
 
+/* The lobby client's visual state can lag the authoritative server after
+ * joining/returning from a game. Test the server's actual pregame state so
+ * the bot controls cannot disappear despite an editable host lobby. */
+boolean network_game_server_port_bots_adjustable(
+	struct network_game_server *server)
+{
+	return server && server->state == _network_game_server_state_pregame &&
+		!server->sent_start_game_message;
+}
+
 /* port: ... whether the lobby may count down now, as the server checks it
 each tick (server_ok_to_countdown): a countdown begun without it is stopped
 at once */

@@ -58,6 +58,9 @@ void network_game_server_port_countdown_begin(
 	long milliseconds);
 boolean network_game_server_port_start_sent(
 	struct network_game_server *server);
+/* v24: native authoritative pregame check for host bot-count controls. */
+boolean network_game_server_port_bots_adjustable(
+	struct network_game_server *server);
 boolean network_game_server_port_ok_to_countdown(
 	struct network_game_server *server);
 void network_game_server_port_forget_kicked_address(

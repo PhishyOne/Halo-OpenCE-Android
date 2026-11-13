@@ -70,6 +70,8 @@ host_touch_devices
 host_touch_commander_take_toggle
 host_touch_commander_take_assign
 host_touch_commander_state
+host_touch_lobby_publish
+host_touch_lobby_take_delta
 host_https_get
 
 host_errno

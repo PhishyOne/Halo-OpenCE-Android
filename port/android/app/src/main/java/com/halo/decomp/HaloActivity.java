@@ -17,6 +17,8 @@ import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.widget.Toast;
+import android.widget.FrameLayout;
+import android.view.Gravity;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -44,6 +46,8 @@ public class HaloActivity extends SDLActivity {
     private volatile int[] gestureInsets = new int[] { 0, 0, 0, 0 };
     /** the on-screen touch controls, over SDL's surface */
     private TouchControls touchControls;
+    /** Host-only pregame buttons, drawn above both SDL and touch gamepad. */
+    private LobbyBotControls lobbyBotControls;
     private static final int EXPORT_LAYOUT = 401, IMPORT_LAYOUT = 402;
     private String pendingLayoutExport;
 
@@ -82,6 +86,13 @@ public class HaloActivity extends SDLActivity {
             touchControls = new TouchControls(this);
             mLayout.addView(touchControls, new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            lobbyBotControls = new LobbyBotControls(this);
+            FrameLayout.LayoutParams buttons = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            buttons.bottomMargin = (int)(65 * getResources().getDisplayMetrics().density + 0.5f);
+            mLayout.addView(lobbyBotControls, buttons);
         }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         preferHighestRefreshRate();

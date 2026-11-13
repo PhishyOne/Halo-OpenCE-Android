@@ -6110,18 +6110,22 @@ static boolean lobby_bot_count_available(void)
     void *server = global_network_game_server_get();
     void *client = global_network_game_client_get();
     struct network_game *game = client ? network_game_client_get_game(client) : NULL;
-    short state_data;
-
     if (!server || !client || !game ||
         (!network_game_is_splitscreen_local() && config_boolean("network.online")) ||
-        network_game_client_get_state(client, &state_data) != _client_state_pregame ||
-        network_game_server_port_start_sent(server))
+        !network_game_server_port_bots_adjustable(server))
         return FALSE;
     return game->variant.game_engine_index == game_engine_slayer ||
         (config_boolean("bots.objective_modes") &&
             (game->variant.game_engine_index == game_engine_ctf ||
              game->variant.game_engine_index == game_engine_king));
 }
+
+#if defined(HALO_ANDROID)
+/* The dedicated touch strip is independent of XML widget focus/placement.
+ * Guest→host calls originate from the game process's JNI host imports. */
+void host_touch_lobby_publish(int count, int lan);
+int host_touch_lobby_take_delta(void);
+#endif
 
 static boolean lobby_bot_count_change(short controller, short direction)
 {
@@ -6186,6 +6190,23 @@ static void lobby_update(struct widget_instance *list)
 	}
 	lobby_join_help(list);
 	map_vote_lobby_check();
+#if defined(HALO_ANDROID)
+    /* When the host lobby is open, publish a short-lived capability to the
+     * Android overlay, even if XML button layout/focus is incompatible.
+     * Every actual change is revalidated by lobby_bot_count_change. */
+    if (bot_controls)
+    {
+        char const *setting = network_game_is_splitscreen_local() ?
+            "bots.count" : "bots.system_link_count";
+        int delta = host_touch_lobby_take_delta();
+        if (delta)
+            lobby_bot_count_change(0, (short)delta);
+        host_touch_lobby_publish((int)config_integer(setting),
+            !network_game_is_splitscreen_local());
+    }
+    else
+        host_touch_lobby_publish(-1, 0);
+#endif
 	visible_set(named(list, "lobby_bot_less", 0), bot_controls);
 	visible_set(named(list, "lobby_bot_more", 0), bot_controls);
 	visible_set(named(description, "lobby_bot_count_label", 0), bot_controls);

@@ -121,7 +121,7 @@ class KillstreakReconTest(unittest.TestCase):
         self.assertNotIn("_multiplayer_sound_killing_spree", audio)
         self.assertNotIn("unspatialized_impulse_sound_new", audio)
         self.assertIn('L"3 kills: Enhancements online"', recon)
-        self.assertIn('L"5 kills: Recon active (30s)"', recon)
+        self.assertIn('L"5 kills: Recon enabled (30s)"', recon)
         self.assertIn("announceKillstreak(int award)", java)
         self.assertIn("new SoundPool.Builder()", java)
         self.assertIn("SoundPool", java)
@@ -150,7 +150,7 @@ class KillstreakReconTest(unittest.TestCase):
             "halo_reward_enhancements.wav":
                 "a361983ed1b0f7cc7f88618db9caf02dfdaae4f46d00e00ff5ca207a3586b786",
             "halo_reward_recon.wav":
-                "bc4458f6f97178bdfeb530da8c79fef721f04f6ca5d70bcdcba4c8f5366de668",
+                "599153153e501161b9b942923f16c18abf849abf1070e9f767c0c91322ff5b3f",
         }
         for filename, sha in expected.items():
             with self.subTest(clip=filename):
@@ -164,8 +164,9 @@ class KillstreakReconTest(unittest.TestCase):
                     self.assertEqual(audio.getsampwidth(), 2)
                     self.assertEqual(audio.getframerate(), 24000)
                     self.assertGreater(audio.getnframes(), 20000)
-        # Combined PCM payload must exactly match the user-approved
-        # British woman preview (SHA captured before lossless splitting).
+        # v24 only changes the five-kill phrase. The original approved
+        # Enhancements clip remains exact; new Recon enabled uses the same
+        # original British voice model and has its own pinned PCM hash.
         combined = bytearray()
         for filename in expected:
             with wave.open(str(raw / filename), "rb") as wav:
@@ -182,7 +183,7 @@ class KillstreakReconTest(unittest.TestCase):
                 combined.extend(pcm)
         self.assertEqual(
             hashlib.sha256(combined).hexdigest(),
-            "69870492579079d2cadf1c52df7bbc242cdc68db4705cbd36e3a0a286aae06b6")
+            "9bf5adefbb31d55f3c5b58281ef9be139ab9c453ef215f7534a6f97b1cdb92df")
         java = read("port/android/app/src/main/java/com/halo/decomp/HaloActivity.java")
         self.assertNotIn("killstreakSpeech", java)
         self.assertIn("initializeRewardCallouts()", java)

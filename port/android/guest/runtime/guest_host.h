@@ -154,6 +154,9 @@ int host_touch_devices(void);
 int host_touch_commander_take_toggle(void);
 int host_touch_commander_take_assign(void);
 void host_touch_commander_state(int status);
+/* Short-lived Android host-lobby bot controls, not a game network message. */
+void host_touch_lobby_publish(int count, int lan);
+int host_touch_lobby_take_delta(void);
 
 /* ---------- the server browser's master servers (host_https.c) */
 

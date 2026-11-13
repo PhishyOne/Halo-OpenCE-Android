@@ -49,6 +49,14 @@ static volatile int touch_scene;
 static int commander_status;
 static int commander_toggle_pending;
 static int commander_assign_pending;
+/* A 900 ms lease from the native multiplayer lobby, refreshed every UI
+ * frame. Pending deltas are one-shot and the native game revalidates host
+ * authority, game type and server state before touching bot settings. */
+#define HOST_LOBBY_LEASE_NS 900000000LL
+static int lobby_count = -1;
+static int lobby_is_lan;
+static int lobby_delta;
+static int64_t lobby_last_ns;
 /* the overlay's devices (host_touch_devices): a touchscreen, a game
 controller (a stick or a hat, not a phone's few gamepad keys) */
 #define HOST_TOUCH_DEVICE_TOUCHSCREEN 1
@@ -248,6 +256,65 @@ has looked */
 int host_touch_devices(void)
 {
 	return touch_devices;
+}
+
+/* The XML widget buttons are not always visible in Android's native
+ * multiplayer menu. Publish a separate, bounded touch capability. */
+void host_touch_lobby_publish(int count, int lan)
+{
+    pthread_mutex_lock(&touch_lock);
+    if (count >= 0 && count <= 127 && (lan == 0 || lan == 1))
+    {
+        lobby_count = count;
+        lobby_is_lan = lan;
+        lobby_last_ns = now_ns();
+    }
+    else
+    {
+        lobby_count = -1;
+        lobby_delta = 0;
+        lobby_last_ns = 0;
+    }
+    pthread_mutex_unlock(&touch_lock);
+}
+
+int host_touch_lobby_take_delta(void)
+{
+    int delta;
+    pthread_mutex_lock(&touch_lock);
+    delta = (lobby_count >= 0 && lobby_last_ns != 0 &&
+        now_ns() - lobby_last_ns < HOST_LOBBY_LEASE_NS) ?
+        lobby_delta : 0;
+    lobby_delta = 0;
+    pthread_mutex_unlock(&touch_lock);
+    return delta;
+}
+
+JNIEXPORT jint JNICALL Java_com_halo_decomp_LobbyBotControls_nativeStatus(
+    JNIEnv *env, jclass cls)
+{
+    int status;
+    (void)env;
+    (void)cls;
+    pthread_mutex_lock(&touch_lock);
+    status = lobby_count >= 0 && lobby_last_ns != 0 &&
+        now_ns() - lobby_last_ns < HOST_LOBBY_LEASE_NS ?
+        lobby_count | (lobby_is_lan ? 0x100 : 0) : -1;
+    pthread_mutex_unlock(&touch_lock);
+    return status;
+}
+
+JNIEXPORT void JNICALL Java_com_halo_decomp_LobbyBotControls_nativeAdjust(
+    JNIEnv *env, jclass cls, jint delta)
+{
+    (void)env;
+    (void)cls;
+    pthread_mutex_lock(&touch_lock);
+    if ((delta == -1 || delta == 1) && lobby_count >= 0 &&
+        lobby_last_ns != 0 &&
+        now_ns() - lobby_last_ns < HOST_LOBBY_LEASE_NS)
+        lobby_delta = delta; /* only one change per native UI update */
+    pthread_mutex_unlock(&touch_lock);
 }
 
 /* 0 until the game has read its controller once */

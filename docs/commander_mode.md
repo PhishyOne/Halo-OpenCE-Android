@@ -202,6 +202,19 @@ No multiplayer protocol or gameplay change. The full speech model and
 voice weights remain on Forge scratch and are not in the APK.
 Android speaker playback still needs physical qualification.
 
+### v24 five-kill pronunciation correction
+
+Physical v23 audio playback was confirmed, but the British English woman's
+"Recon active" sounded like "Recon activer". The 3-kill **"Enhancements
+online"** clip stays byte-for-byte unchanged. The 5-kill line is now
+**"Recon enabled"**, re-rendered offline from the exact same Kokoro
+\`bf_emma\` model (en-gb, 0.96 speed), 24-kHz mono PCM16, with 450 ms
+leading and 500 ms trailing padding. The HUD agrees: "5 kills: Recon
+enabled (30s)". No other announcements or game mechanics changed.
+The new five-kill WAV SHA-256 is
+\`599153153e501161b9b942923f16c18abf849abf1070e9f767c0c91322ff5b3f\`.
+Actual device pronunciation still needs the user's next test.
+
 Death, changed salted player/unit, disconnect, match end, map reset and
 master OFF cancel recon and pending notices. Normal full-spectrum vision
 pickups and the Commander mask are not repurposed. No persistence changes.
