@@ -124,7 +124,7 @@ class CommanderRolesTest(unittest.TestCase):
             if required == "message.serial =":
                 continue
             self.assertIn(required, s, required)
-        self.assertIn("#define HALO_PORT_NETWORK_VERSION 48", LIMITS.read_text())
+        self.assertIn("#define HALO_PORT_NETWORK_VERSION 49", LIMITS.read_text())
 
     def test_native_touch_role_gate(self):
         raw = HOST.read_text()
