@@ -24,6 +24,11 @@
 #include <string.h>
 
 #define ORBITAL_WARNING_TICKS 100
+/* v25 indoor ten-kill alternative: short-range, delayed, enemy-only. */
+#define BREACH_WARNING_TICKS 45
+#define BREACH_RADIUS (10.0f / 3.048f)
+#define BREACH_CEILING_RANGE 32.0f
+#define BREACH_CEILING_FLAGS (FLAG(_collision_test_structure_bit) | FLAG(_collision_test_front_facing_surfaces_bit) | FLAG(_collision_test_back_facing_surfaces_bit))
 /* The HUD distance display uses 3.048 metres per engine world unit. */
 #define ORBITAL_RANGE (128.0f / 3.048f)
 #define ORBITAL_RADIUS (14.0f / 3.048f)
@@ -35,7 +40,8 @@ struct orbital_message {
     int unit_index;
     unsigned int serial; /* host-issued, non-reused capability for this life */
     real_point3d target;
-    word kind; /* 0 revoke, 1 grant, 2 request, 3 public incoming */
+    word kind; /* 0 revoke, 1 grant, 2 orbital request, 3 orbital warning,
+                4 breach request, 5 breach warning */
     word reserved;
 };
 typedef char orbital_message_size[sizeof(struct orbital_message) == 36 ? 1 : -1];
@@ -45,7 +51,7 @@ struct orbital_host_state {
     unsigned int serial;
     long impact_tick, last_request_tick;
     real_point3d target;
-    boolean active, consumed;
+    boolean active, consumed, breach;
 };
 struct orbital_local_state {
     long player_index, unit_index, next_notice, request_timeout;
@@ -56,7 +62,7 @@ struct orbital_warning {
     unsigned int serial;
     long end;
     unsigned int pending; /* one notice per local viewport */
-    boolean sound_pending;
+    boolean sound_pending, breach;
     real_point3d target;
 };
 static struct orbital_host_state orbital_host[HALO_PORT_MAXIMUM_NETWORK_PLAYERS];
@@ -96,6 +102,26 @@ static int orbital_near(real_point3d const *a, real_point3d const *b, real radiu
     x = a->x - b->x; y = a->y - b->y; z = a->z - b->z;
     return x*x + y*y + z*z <= radius*radius;
 }
+/* Determine cover from the actor's *current* head position, not a map-name
+ * guess or a client-controlled flag. Back-facing BSP surfaces count: indoor
+ * ceilings often face down towards the player's upward ray. */
+static int orbital_under_roof(long unit)
+{
+    struct collision_result hit;
+    real_point3d head;
+    real_vector3d ray;
+    unit_get_head_position(unit, &head);
+    if (!orbital_point_valid(&head))
+        return FALSE;
+    ray.i = ray.j = 0.0f;
+    ray.k = BREACH_CEILING_RANGE;
+    return collision_test_vector(BREACH_CEILING_FLAGS, &head, &ray, unit, &hit) &&
+        hit.type == _collision_result_structure &&
+        orbital_point_valid(&hit.point) &&
+        hit.point.z > head.z + 0.2f &&
+        hit.point.z <= head.z + BREACH_CEILING_RANGE;
+}
+
 static struct player_datum *orbital_living(long player_index, long unit_index)
 {
     struct player_datum *player = player_try_and_get(player_index);
@@ -123,20 +149,22 @@ static void orbital_receive(struct orbital_message const *m)
     struct player_datum *player;
     struct orbital_local_state *s;
     struct orbital_warning *w;
+    long warning_ticks = m->kind == 5 ? BREACH_WARNING_TICKS : ORBITAL_WARNING_TICKS;
     if (m->player_slot < 0 || m->player_slot >= HALO_PORT_MAXIMUM_NETWORK_PLAYERS || !m->serial)
         return;
-    if (m->kind == 3)
+    if (m->kind == 3 || m->kind == 5)
     {
         if (!orbital_playing() || !orbital_recent(m) ||
             !orbital_point_valid(&m->target) ||
-            game_time_get() >= m->header.game_time + ORBITAL_WARNING_TICKS)
+            game_time_get() >= m->header.game_time + warning_ticks)
             return;
         w = &orbital_warnings[m->player_slot];
         if (m->serial <= w->serial)
             return;
         w->serial = m->serial;
         w->target = m->target;
-        w->end = m->header.game_time + ORBITAL_WARNING_TICKS;
+        w->end = m->header.game_time + warning_ticks;
+        w->breach = m->kind == 5;
         w->pending = (1u << MAXIMUM_LOCAL_PLAYERS) - 1;
         w->sound_pending = TRUE;
         for (local = 0; local < MAXIMUM_LOCAL_PLAYERS; local++)
@@ -274,6 +302,8 @@ static void orbital_accept(long machine, struct orbital_message const *m)
     struct player_datum *p;
     struct orbital_message warning;
     long id, now;
+    int breach = m->kind == 4;
+    real_point3d head;
     if (!orbital_authority() || !orbital_playing() || !orbital_recent(m) ||
         m->player_slot < 0 || m->player_slot >= HALO_PORT_MAXIMUM_NETWORK_PLAYERS)
         return;
@@ -301,11 +331,25 @@ static void orbital_accept(long machine, struct orbital_message const *m)
         s->last_request_tick == now || !orbital_point_valid(&m->target))
         return;
     s->last_request_tick = now;
-    if (!orbital_geometry(m->unit_index, &m->target))
+    unit_get_head_position(m->unit_index, &head);
+    if (breach)
+    {
+        /* No floor target, sky check, or damage requests from clients.
+         * The server independently proves the actor is under cover and
+         * anchors its own position; the client's point only bounds latency. */
+        if (!orbital_under_roof(m->unit_index) ||
+            !orbital_near(&head, &m->target, 2.0f))
+            return;
+    }
+    else if (orbital_under_roof(m->unit_index) ||
+             !orbital_geometry(m->unit_index, &m->target))
         return;
-    s->consumed = TRUE; s->target = m->target;
-    s->impact_tick = now + ORBITAL_WARNING_TICKS;
-    warning = *m; warning.kind = 3; warning.header.game_time = now;
+    s->consumed = TRUE; s->target = breach ? head : m->target;
+    s->breach = breach;
+    s->impact_tick = now + (breach ? BREACH_WARNING_TICKS : ORBITAL_WARNING_TICKS);
+    warning = *m; warning.kind = breach ? 5 : 3;
+    warning.target = s->target;
+    warning.header.game_time = now;
     orbital_receive(&warning);
     if (game_connection() == _game_connection_network_server)
         distributed_send(&warning, _distributed_message_orbital_incoming, 1,
@@ -329,7 +373,8 @@ void killstreak_orbital_handle_message(long machine, word const *data, word size
         GET_MESSAGE_FLAGS(m.header.header) != 0 || m.header.count != 1 || m.reserved ||
         !m.serial || m.player_slot < 0 || m.player_slot >= HALO_PORT_MAXIMUM_NETWORK_PLAYERS)
         return;
-    if (m.header.type == _distributed_message_orbital_request && m.kind == 2)
+    if (m.header.type == _distributed_message_orbital_request &&
+        (m.kind == 2 || m.kind == 4))
     {
         /* NONE identifies host-to-client traffic, never a remote requester. */
         if (game_connection() == _game_connection_network_server && machine != NONE)
@@ -338,7 +383,8 @@ void killstreak_orbital_handle_message(long machine, word const *data, word size
     else if (game_connection() == _game_connection_network_client && machine == NONE &&
         ((m.header.type == _distributed_message_orbital_award && m.kind <= 1 &&
           m.target.x == 0 && m.target.y == 0 && m.target.z == 0) ||
-         (m.header.type == _distributed_message_orbital_incoming && m.kind == 3)))
+         (m.header.type == _distributed_message_orbital_incoming &&
+          (m.kind == 3 || m.kind == 5))))
         orbital_receive(&m);
 }
 static void orbital_impact(struct orbital_host_state *s)
@@ -354,7 +400,9 @@ static void orbital_impact(struct orbital_host_state *s)
     /* No effect asset lookup or client-side victim changes. The engine's
      * instant-kill helper credits the owner and replicates ordinary damage. */
     s->impact_tick = 0;
-    center = strike.target; center.z += 0.2f;
+    center = strike.target;
+    if (!strike.breach)
+        center.z += 0.2f;
     for (slot = 0; slot < HALO_PORT_MAXIMUM_NETWORK_PLAYERS; slot++)
     {
         /* Death callbacks may revoke another strike or this one. Keep the
@@ -369,13 +417,16 @@ static void orbital_impact(struct orbital_host_state *s)
             !game_team_is_enemy(p->team_index, (short)strike.team))
             continue;
         unit = unit_try_and_get(p->unit_index);
-        if (!orbital_near(&unit->object.position, &strike.target, ORBITAL_RADIUS))
+        if (!orbital_near(&unit->object.position, &strike.target,
+            strike.breach ? BREACH_RADIUS : ORBITAL_RADIUS))
             continue;
         unit_get_head_position(p->unit_index, &head);
         if (!orbital_point_valid(&head))
             continue;
         vector_from_points3d(&center, &head, &ray);
-        if (!collision_test_vector(ORBITAL_GROUND_FLAGS, &center, &ray, NONE, &hit))
+        if (!collision_test_vector(strike.breach ?
+                BREACH_CEILING_FLAGS : ORBITAL_GROUND_FLAGS,
+                &center, &ray, NONE, &hit))
             damage_kill_object_for_player(p->unit_index, strike.player_index);
     }
 }
@@ -409,14 +460,27 @@ static void orbital_input(short local)
         !(direction.x*direction.x + direction.y*direction.y + direction.z*direction.z >= 0.99f) ||
         !(direction.x*direction.x + direction.y*direction.y + direction.z*direction.z <= 1.01f))
         return;
-    scale_vector3d(&camera->forward, ORBITAL_RANGE, &ray);
-    if (!collision_test_vector(ORBITAL_GROUND_FLAGS, &camera->position, &ray, s->unit_index, &hit) ||
-        hit.type != _collision_result_structure || !(hit.plane.n.k > 0.5f) ||
-        !orbital_geometry(s->unit_index, &hit.point))
-        return;
     memset(&m, 0, sizeof(m));
-    m.header.game_time = game_time_get(); m.player_slot = (int)DATUM_INDEX_TO_ABSOLUTE_INDEX(id);
-    m.unit_index = (int)s->unit_index; m.serial = s->serial; m.target = hit.point; m.kind = 2;
+    m.header.game_time = game_time_get();
+    m.player_slot = (int)DATUM_INDEX_TO_ABSOLUTE_INDEX(id);
+    m.unit_index = (int)s->unit_index; m.serial = s->serial;
+    if (orbital_under_roof(s->unit_index))
+    {
+        /* Closed building: one aim-independent breach pulse near the actor.
+         * The host separately rechecks roof, range and recipient identity. */
+        m.target = head;
+        m.kind = 4;
+    }
+    else
+    {
+        scale_vector3d(&camera->forward, ORBITAL_RANGE, &ray);
+        if (!collision_test_vector(ORBITAL_GROUND_FLAGS, &camera->position,
+                &ray, s->unit_index, &hit) ||
+            hit.type != _collision_result_structure || !(hit.plane.n.k > 0.5f) ||
+            !orbital_geometry(s->unit_index, &hit.point))
+            return;
+        m.target = hit.point; m.kind = 2;
+    }
     /* No automatic resend: the player must intentionally tap again.
      * If the host rejects (or never receives) the request, restore the
      * ability to manually retry after 90 ticks, with a fresh input edge.
@@ -487,12 +551,15 @@ void killstreak_orbital_present(short local)
         {
             s->pending = FALSE;
             if (killstreak_feature_allowed(KILLSTREAK_ANNOUNCEMENTS))
-                game_engine_play_killstreak_sound(local, 10);
+                game_engine_play_killstreak_sound(local,
+                    orbital_under_roof(s->unit_index) ? 12 : 10);
         }
         if (game_time_get() >= s->next_notice)
         {
-            hud_print_message(local, s->requested ? L"ORBITAL: DESIGNATION SENT" :
-                L"ORBITAL READY: HOLD ZOOM + TAP FLASHLIGHT");
+            hud_print_message(local, s->requested ? L"STRIKE REQUEST SENT" :
+                orbital_under_roof(s->unit_index) ?
+                L"BREACH PULSE READY: HOLD ZOOM + TAP FLASHLIGHT" :
+                L"ORBITAL READY: AIM GROUND, ZOOM + FLASHLIGHT");
             s->next_notice = game_time_get() + 90;
         }
     }
@@ -502,12 +569,14 @@ void killstreak_orbital_present(short local)
         if (w->end > game_time_get() && (w->pending & (1u << local)))
         {
             w->pending &= ~(1u << local);
-            hud_print_message(local, L"Orbital bombardment incoming");
+            hud_print_message(local, w->breach ?
+                L"Breach pulse detonating" : L"Orbital bombardment incoming");
             if (w->sound_pending && local_player_get_next(NONE) == local)
             {
                 w->sound_pending = FALSE;
                 if (killstreak_feature_allowed(KILLSTREAK_ANNOUNCEMENTS))
-                    game_engine_play_killstreak_sound(local, 11);
+                    game_engine_play_killstreak_sound(local,
+                        w->breach ? 13 : 11);
             }
         }
     }

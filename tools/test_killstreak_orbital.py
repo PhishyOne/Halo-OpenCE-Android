@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from harness import constant, enum_with, function, mutated, read, structure
 ROOT = Path(__file__).resolve().parents[1]
 CASES = ("award", "wire", "authority", "replay", "lifecycle", "geometry", "impact",
-         "input", "retry", "presentation", "damage", "capacity")
+         "input", "retry", "presentation", "damage", "capacity", "breach")
 
 
 def generated(fault=None):
@@ -75,13 +75,14 @@ class OrbitalTest(unittest.TestCase):
             (("!killstreak_rewards_has_ten(id, m->unit_index) ||", "0 ||"), "authority"),
             (("!s->active || s->consumed ||", "!s->active ||"), "replay"),
             (("s->serial != m->serial ||", "0 ||"), "replay"),
-            (("if (!orbital_geometry(m->unit_index, &m->target))", "if (0)"), "geometry"),
+            (("else if (orbital_under_roof(m->unit_index) ||\n             !orbital_geometry(m->unit_index, &m->target))", "else if (0)"), "geometry"),
             (("game_time_get() >= s->impact_tick", "1"), "impact"),
             (("!game_team_is_enemy(p->team_index, (short)strike.team)", "0"), "impact"),
-            (("!orbital_near(&unit->object.position, &strike.target, ORBITAL_RADIUS)", "(orbital_near(&unit->object.position, &strike.target, ORBITAL_RADIUS) && 0)"), "impact"),
+            (("!orbital_near(&unit->object.position, &strike.target,\n            strike.breach ? BREACH_RADIUS : ORBITAL_RADIUS)", "0"), "impact"),
             (("down && !flashlight_down[controller_index] &&", "down && (flashlight_down[controller_index] ? down : down) &&"), "input"),
             (("game_time_get() >= orbital_local[local].request_timeout", "0"), "retry"),
             (("m->serial <= w->serial", "0"), "presentation"),
+            (("if (!orbital_under_roof(m->unit_index) ||", "if (0 ||"), "breach"),
         ):
             with self.subTest(fault=fault):
                 self.compile_run((case,), fault, 1)
@@ -97,11 +98,13 @@ class OrbitalTest(unittest.TestCase):
         self.assertIn("killstreak_recon_present(render.local_player_index)", hud)
         self.assertIn("hud_scripted_globals->show_hud", hud)
         self.assertIn("tools/test_killstreak_orbital.py -v", read(".github/workflows/build.yml"))
-        self.assertEqual(constant(read("port/linux/include/halo_port_limits.h"), "HALO_PORT_NETWORK_VERSION"), 47)
+        self.assertEqual(constant(read("port/linux/include/halo_port_limits.h"), "HALO_PORT_NETWORK_VERSION"), 48)
         raw = ROOT / "port/android/app/src/main/res/raw"
         for name, sha in (
             ("halo_reward_orbital_authorized.wav", "538b9024ef39a94d6f031b1e6a7f9bbfc7b341689d36ee3a8cbbea1d6772b546"),
             ("halo_reward_orbital_incoming.wav", "1155ad38bc3d1f32671159d783e5eb50b0a7be195de5c69f1e0cf19751726315"),
+            ("halo_reward_breach_ready.wav", "ee704c7068e41df95141c3fc9694dc9ebe20f8a8902a4b0b0181c7a0033410ef"),
+            ("halo_reward_breach_incoming.wav", "f258227c21c2877808178d5dca81119dfb507ff67b2fa83d51b3d9fb394c55b1"),
         ):
             self.assertEqual(hashlib.sha256((raw / name).read_bytes()).hexdigest(), sha)
             with wave.open(str(raw / name)) as w:
@@ -110,7 +113,22 @@ class OrbitalTest(unittest.TestCase):
             java = read("port/android/app/src/main/java/com/halo/decomp/HaloActivity.java")
             self.assertIn(f"rewardOrbital{name}Loaded = status == 0", java)
             self.assertIn(f"rewardOrbital{name}Sample", java)
+        java = read("port/android/app/src/main/java/com/halo/decomp/HaloActivity.java")
+        engine_audio = read("source/game/game_engine_multiplayer_sounds.c")
+        host = read("port/android/host/host_sdl.c")
+        for code in (12, 13):
+            self.assertIn(f"award != {code}", java)
+            self.assertIn(f"award != {code}", engine_audio)
+            self.assertIn(f"award != {code}", host)
+        for item in ("rewardBreachReadySample", "rewardBreachIncomingSample",
+                     "R.raw.halo_reward_breach_ready",
+                     "R.raw.halo_reward_breach_incoming"):
+            self.assertIn(item, java)
         module = read("port/linux/game/killstreak_orbital.c")
+        self.assertIn("m.kind = 4;", module)
+        self.assertIn("warning.kind = breach ? 5 : 3;", module)
+        self.assertIn("w->breach ? 13 : 11", module)
+        self.assertIn("orbital_under_roof(s->unit_index) ? 12 : 10", module)
         for name in ("orbital_accept", "orbital_receive", "killstreak_orbital_award"):
             body = function(module, name)
             self.assertNotIn("game_engine_play_killstreak_sound", body)

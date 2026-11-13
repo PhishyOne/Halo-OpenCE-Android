@@ -58,6 +58,10 @@ public class HaloActivity extends SDLActivity {
     private int rewardReconSample;
     private int rewardOrbitalAuthorizedSample;
     private int rewardOrbitalIncomingSample;
+    private int rewardBreachReadySample;
+    private int rewardBreachIncomingSample;
+    private boolean rewardBreachReadyLoaded;
+    private boolean rewardBreachIncomingLoaded;
     private boolean rewardOrbitalAuthorizedLoaded;
     private boolean rewardOrbitalIncomingLoaded;
     private int rewardActiveStream;
@@ -127,6 +131,10 @@ public class HaloActivity extends SDLActivity {
                             rewardOrbitalAuthorizedLoaded = status == 0;
                         if (sample == rewardOrbitalIncomingSample)
                             rewardOrbitalIncomingLoaded = status == 0;
+                        if (sample == rewardBreachReadySample)
+                            rewardBreachReadyLoaded = status == 0;
+                        if (sample == rewardBreachIncomingSample)
+                            rewardBreachIncomingLoaded = status == 0;
                         if (sample == rewardReconSample)
                             rewardReconLoaded = status == 0;
                         if (status != 0)
@@ -140,8 +148,13 @@ public class HaloActivity extends SDLActivity {
                     rewardCallouts.load(this, R.raw.halo_reward_orbital_authorized, 1);
             rewardOrbitalIncomingSample =
                     rewardCallouts.load(this, R.raw.halo_reward_orbital_incoming, 1);
+            rewardBreachReadySample =
+                    rewardCallouts.load(this, R.raw.halo_reward_breach_ready, 1);
+            rewardBreachIncomingSample =
+                    rewardCallouts.load(this, R.raw.halo_reward_breach_incoming, 1);
             if (rewardEnhancementsSample == 0 || rewardReconSample == 0 ||
-                    rewardOrbitalAuthorizedSample == 0 || rewardOrbitalIncomingSample == 0)
+                    rewardOrbitalAuthorizedSample == 0 || rewardOrbitalIncomingSample == 0 ||
+                    rewardBreachReadySample == 0 || rewardBreachIncomingSample == 0)
                 Log.w("HaloCallouts", "Could not queue bundled reward samples");
         } catch (RuntimeException failure) {
             Log.w("HaloCallouts", "Could not initialize bundled reward audio", failure);
@@ -157,7 +170,8 @@ public class HaloActivity extends SDLActivity {
      * Do not use Activity window focus as a gate: some Android devices
      * don't mark the SDL surface focused while touch input is active. */
     public void announceKillstreak(int award) {
-        if (award != 3 && award != 5 && award != 10 && award != 11)
+        if (award != 3 && award != 5 && award != 10 && award != 11 &&
+                award != 12 && award != 13)
             return;
         runOnUiThread(() -> {
             if (rewardAudioClosed || !rewardActivityResumed ||
@@ -165,10 +179,14 @@ public class HaloActivity extends SDLActivity {
                 return;
             int sample = award == 3 ? rewardEnhancementsSample :
                     award == 5 ? rewardReconSample :
-                    award == 10 ? rewardOrbitalAuthorizedSample : rewardOrbitalIncomingSample;
+                    award == 10 ? rewardOrbitalAuthorizedSample :
+                    award == 11 ? rewardOrbitalIncomingSample :
+                    award == 12 ? rewardBreachReadySample : rewardBreachIncomingSample;
             boolean loaded = award == 3 ? rewardEnhancementsLoaded :
                     award == 5 ? rewardReconLoaded :
-                    award == 10 ? rewardOrbitalAuthorizedLoaded : rewardOrbitalIncomingLoaded;
+                    award == 10 ? rewardOrbitalAuthorizedLoaded :
+                    award == 11 ? rewardOrbitalIncomingLoaded :
+                    award == 12 ? rewardBreachReadyLoaded : rewardBreachIncomingLoaded;
             if (sample == 0 || !loaded)
                 return;  // Accurate HUD text is still displayed.
             if (rewardActiveStream != 0)
@@ -326,6 +344,7 @@ public class HaloActivity extends SDLActivity {
         rewardAudioClosed = true;
         rewardEnhancementsLoaded = rewardReconLoaded = false;
         rewardOrbitalAuthorizedLoaded = rewardOrbitalIncomingLoaded = false;
+        rewardBreachReadyLoaded = rewardBreachIncomingLoaded = false;
         if (rewardCallouts != null) {
             rewardCallouts.release();
             rewardCallouts = null;

@@ -27,7 +27,8 @@ typedef struct { float i,j,k; } real_vector3d;
 #include "killstreak_orbital.h"
 enum { _object_dead_bit, _unit_active_camouflaged_bit, _damage_kill_instantly_bit };
 enum { _player_powerup_active_camouflage, _collision_test_structure_bit,
-    _collision_test_front_facing_surfaces_bit, _collision_result_structure,
+    _collision_test_front_facing_surfaces_bit, _collision_test_back_facing_surfaces_bit,
+    _collision_result_structure,
     _collision_test_for_line_of_sight_flags=0xC2AD, _director_perspective_first_person=0,
     _distributed_to_host_reliably=1, _distributed_to_clients_reliably=2 };
 enum { _game_control_flashlight=5, _game_control_zoom=11 };
@@ -56,7 +57,7 @@ static unsigned int policy;
 static boolean scripted_value, *director_camera_scripted=&scripted_value;
 static struct observer_result camera;
 static int sent,private_sent,public_sent,requests,last_type,last_machine,texts,sounds,last_sound,camo,shields,recon;
-static int geometry_calls,ground_missing,wall,steep,wrong_floor,ownership,damage_calls,damage_owner,last_damage;
+static int geometry_calls,ground_missing,wall,steep,wrong_floor,ceiling,ownership,damage_calls,damage_owner,last_damage;
 static int damage_kills_owner;
 static byte packet[128];
 static struct player_datum *player_try_and_get(long id) {
@@ -111,6 +112,18 @@ static int director_inhibited_input(short local) { (void)local; return inhibited
 static int collision_test_vector(unsigned long flags,real_point3d const *p,real_vector3d const *ray,long ignore,struct collision_result *hit) {
     (void)ignore; geometry_calls++;
     if(flags==_collision_test_for_line_of_sight_flags) return wall;
+    if(flags==(FLAG(_collision_test_structure_bit) |
+        FLAG(_collision_test_front_facing_surfaces_bit) |
+        FLAG(_collision_test_back_facing_surfaces_bit))) {
+        if(ray->i==0 && ray->j==0 && ray->k>16.0f) {
+            if(!ceiling) return 0;
+            memset(hit,0,sizeof(*hit));
+            hit->type=_collision_result_structure;
+            hit->point=*p; hit->point.z+=5.0f;
+            return 1;
+        }
+        return wall; /* structure blocks blast, but not the victim itself */
+    }
     if(ray->k<0 && ray->i==0 && ray->j==0) {
         memset(hit,0,sizeof(*hit)); hit->type=_collision_result_structure;
         hit->point=*p; hit->point.z=0; hit->plane.n.k=steep?0:1;
@@ -159,7 +172,7 @@ static void setup(void) {
     menu=cinematic=unreliable=scripted_value=perspective=inhibited=0;
     policy=KILLSTREAK_ENABLED|KILLSTREAK_ORBITAL|KILLSTREAK_ANNOUNCEMENTS;
     sent=private_sent=public_sent=requests=texts=sounds=camo=shields=recon=0;
-    geometry_calls=ground_missing=wall=steep=wrong_floor=damage_calls=damage_kills_owner=0;
+    geometry_calls=ground_missing=wall=steep=wrong_floor=ceiling=damage_calls=damage_kills_owner=0;
     globals.falling_damage.count=1; globals.falling_damage.address=&falling; falling.falling_damage.index=123;
     camera.position=units[0].object.position; camera.position.z=1;
     camera.forward.i=camera.forward.j=0; camera.forward.k=-1;
@@ -360,6 +373,56 @@ int main(int argc,char **argv) {
         killstreak_rewards_update(); CHECK(!orbital_local[0].ready);
         m.kind=3; packet_header(&m,_distributed_message_orbital_incoming,sizeof(m));
         receive(NONE,&m); killstreak_orbital_present(0); CHECK(sounds==1 && last_sound==11);
+    } else if(!strcmp(argv[1],"breach")) {
+        /* Ten kills under a roof: no floor target is needed. The host
+         * anchors the blast to the actual owner's head, with enemy-only
+         * radial LOS damage after a short fuse. */
+        localize(); ceiling=1; ground_missing=1; kills(10);
+        CHECK(orbital_local[0].ready);
+        killstreak_orbital_present(0);
+        CHECK(sounds==1 && last_sound==12); /* private British alert */
+        input_abstraction_globals.input_states[0].buttons[5]=1;
+        input_abstraction_globals.input_states[0].buttons[11]=1;
+        killstreak_rewards_update();
+        CHECK(public_sent==1 && orbital_host[0].consumed &&
+            orbital_host[0].breach && orbital_host[0].impact_tick==now+BREACH_WARNING_TICKS);
+        CHECK(orbital_warnings[0].breach);
+        killstreak_orbital_present(0);
+        CHECK(sounds==2 && last_sound==13); /* public incoming alert */
+        killstreak_orbital_present(0);
+        CHECK(sounds==2); /* exactly once per accepted warning */
+        units[1].object.position=orbital_host[0].target;
+        units[2].object.position=orbital_host[0].target;
+        players[2].team_index=0;
+        units[3].object.position=orbital_host[0].target;
+        units[3].object.position.x+=12;
+        now+=BREACH_WARNING_TICKS-1;
+        killstreak_rewards_update(); CHECK(!damage_calls);
+        now++; killstreak_rewards_update();
+        CHECK(damage_calls==1 && damage_owner==ids[0] && last_damage==unit_ids[1]);
+        CHECK(!TEST_FLAG(units[2].object.damage_flags,_object_dead_bit) &&
+            !TEST_FLAG(units[3].object.damage_flags,_object_dead_bit));
+        now++; killstreak_rewards_update(); CHECK(damage_calls==1);
+
+        setup(); ceiling=1; kills(10); m=request(); m.kind=4;
+        unit_get_head_position(unit_ids[0],&m.target);
+        m.target.x+=7; receive(1,&m); CHECK(!public_sent && !orbital_host[0].consumed);
+        now++; m.target.x-=7; ceiling=0;
+        receive(1,&m); CHECK(!public_sent && !orbital_host[0].consumed);
+        now++; ceiling=1; receive(1,&m);
+        CHECK(public_sent==1 && orbital_host[0].breach);
+
+        setup(); ceiling=1; localize(); kills(10);
+        input_abstraction_globals.input_states[0].buttons[5]=1;
+        input_abstraction_globals.input_states[0].buttons[11]=1;
+        killstreak_rewards_update(); CHECK(public_sent==1);
+        units[1].object.position=orbital_host[0].target;
+        wall=1; now+=BREACH_WARNING_TICKS; killstreak_rewards_update();
+        CHECK(!damage_calls);
+
+        setup(); ceiling=1; kills(10); m=request();
+        /* An untrusted guest cannot force an orbital indoors. */
+        receive(1,&m); CHECK(!public_sent && !orbital_host[0].consumed);
     } else if(!strcmp(argv[1],"damage")) {
         globals.falling_damage.count=0; damage_kill_object_for_player(unit_ids[1],ids[0]); CHECK(!damage_calls);
         globals.falling_damage.count=1; globals.falling_damage.address=NULL;

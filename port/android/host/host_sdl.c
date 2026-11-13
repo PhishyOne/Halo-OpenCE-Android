@@ -547,7 +547,8 @@ int host_android_announce_killstreak(int award)
 	jmethodID announce;
 	int delivered = 0;
 
-	if (award != 3 && award != 5 && award != 10 && award != 11)
+	if (award != 3 && award != 5 && award != 10 && award != 11 &&
+        award != 12 && award != 13)
 		return 0;
 	env = (JNIEnv *)SDL_GetAndroidJNIEnv();
 	if (!env)

@@ -281,9 +281,11 @@ extern int host_android_announce_killstreak(int award);
 void game_engine_play_killstreak_sound(short local_player_index, unsigned short award)
 {
     /* port: orbital callouts use the same original Android resources. */
-    if ((award != 3 && award != 5 && award != 10 && award != 11) ||
+    if ((award != 3 && award != 5 && award != 10 && award != 11 &&
+         award != 12 && award != 13) ||
         local_player_get_next(NONE) != local_player_index ||
-        (award != 11 && local_player_get_next(local_player_index) != NONE))
+        ((award != 11 && award != 13) &&
+         local_player_get_next(local_player_index) != NONE))
         return;
 #ifdef HALO_ANDROID
     (void)host_android_announce_killstreak((int)award);
