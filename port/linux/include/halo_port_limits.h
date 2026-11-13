@@ -73,7 +73,8 @@ Raise it with any change to what the machines send each other. */
    with their own reserved machine range 112..127, leaving real client
    machine slots available. Incompatible with versions 41..44. */
 /* v21: host-authorized orbital designation and lethal impact. */
-#define HALO_PORT_NETWORK_VERSION 48
+/* v26: type 100 also carries the host-confirmed Breach detonation visual. */
+#define HALO_PORT_NETWORK_VERSION 49
 /* ... the advertisement's reserved bytes: the version (a little-endian word),
 then flags, then the game's kind (an OpenCE gametype's mode, and Hardcore:
 port/linux/game/game_modes.h's game_modes_kind), for the server browser */
