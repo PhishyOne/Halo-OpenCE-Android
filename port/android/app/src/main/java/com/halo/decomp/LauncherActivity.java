@@ -548,6 +548,17 @@ public class LauncherActivity extends Activity {
             startActivity(Intent.createChooser(message, "Share Halo host IP"));
         });
         hostPanel.addView(shareActions);
+        // Serving is explicitly scoped to a LAN host's game process. This
+        // preference never enables a socket for standard, offline or joins.
+        CheckBox shareUpdates = new CheckBox(this);
+        shareUpdates.setText("SHARE MY HALO VERSION WITH LAN PLAYERS");
+        shareUpdates.setChecked(getSharedPreferences("launcher_ui", MODE_PRIVATE)
+            .getBoolean("lan_update_share", true));
+        hudCheck(shareUpdates);
+        hostPanel.addView(shareUpdates);
+        hostPanel.addView(lanText("Players with v23+ can check your version " +
+            "and download your installed APK over Wi-Fi. Android asks before installing. " +
+            "The game stays open while they download.", 11));
 
         String[] lanBotChoices = new String[LanConfig.MAX_LAN_BOTS + 1];
         lanBotChoices[0] = "None";
@@ -582,6 +593,20 @@ public class LauncherActivity extends Activity {
         hostIp.setSelectAllOnFocus(true);
         hudInput(hostIp);
         joinPanel.addView(hostIp);
+        Button checkHostUpdate = new Button(this);
+        checkHostUpdate.setText("CHECK HOST UPDATE");
+        hudButton(checkHostUpdate, false);
+        checkHostUpdate.setOnClickListener(view -> {
+            if (gameProcessStatus() != 0) {
+                feedback.setText("Close Halo before checking for an update.");
+                return;
+            }
+            LanUpdateClient.check(this, hostIp.getText().toString().trim(),
+                true, null, null);
+        });
+        joinPanel.addView(checkHostUpdate);
+        joinPanel.addView(lanText("Halo also checks the host version before " +
+            "joining. The first v23 update must be installed manually once.", 11));
         lanPanel.addView(joinPanel);
 
         Runnable updateRole = () -> {
@@ -1109,6 +1134,26 @@ public class LauncherActivity extends Activity {
                     return;
                 }
                 launcherPreferences.edit().putString("play_mode", "standard").apply();
+            }
+            if (lanMode.isChecked() && lanOnly.isChecked() &&
+                    !hostRole.isChecked() && !invitePending) {
+                // Before starting gameplay, avoid Halo's network-version
+                // mismatch by checking the *already entered* host IP.
+                play.setEnabled(false);
+                feedback.setText("Checking the Halo host for a LAN update...");
+                LanUpdateClient.check(this, hostIp.getText().toString().trim(),
+                    false, () -> startGame(), () -> play.setEnabled(true));
+                return;
+            }
+            if (lanMode.isChecked() && hostRole.isChecked() &&
+                    lanOnly.isChecked() && !invitePending) {
+                launcherPreferences.edit().putBoolean("lan_update_share",
+                    shareUpdates.isChecked()).apply();
+                Intent game = new Intent(this, HaloActivity.class);
+                if (shareUpdates.isChecked())
+                    game.putExtra(HaloActivity.LAN_UPDATE_HOST, true);
+                startGame(game);
+                return;
             }
             startGame();
         });

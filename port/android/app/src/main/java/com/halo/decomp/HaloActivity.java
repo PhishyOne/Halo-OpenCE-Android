@@ -32,6 +32,8 @@ import org.libsdl.app.SDLActivity;
  */
 public class HaloActivity extends SDLActivity {
     static final String OFFLINE_BOT_ARGUMENTS = "com.halo.decomp.OFFLINE_BOT_ARGUMENTS";
+    static final String LAN_UPDATE_HOST = "com.halo.decomp.LAN_UPDATE_HOST";
+    private LanUpdateServer lanUpdateServer;
     /** lets system link's broadcasts in over Wi-Fi while the game runs */
     private WifiManager.MulticastLock multicastLock;
     /**
@@ -86,8 +88,10 @@ public class HaloActivity extends SDLActivity {
         trackGestureInsets();
         acquireMulticastLock();
         initializeRewardCallouts();
-        // a new version looked for while the game starts
+        // The existing public-release updater is separate from local LAN sharing.
         Updater.start(this);
+        if (getIntent() != null && getIntent().getBooleanExtra(LAN_UPDATE_HOST, false))
+            lanUpdateServer = LanUpdateServer.start(this);
     }
 
     /** Load four *original* WAV callouts from the APK. Unlike Android TTS,
@@ -303,6 +307,10 @@ public class HaloActivity extends SDLActivity {
 
     @Override
     protected void onDestroy() {
+        if (lanUpdateServer != null) {
+            lanUpdateServer.stop();
+            lanUpdateServer = null;
+        }
         rewardActivityResumed = false;
         rewardAudioClosed = true;
         rewardEnhancementsLoaded = rewardReconLoaded = false;

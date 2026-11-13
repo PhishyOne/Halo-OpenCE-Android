@@ -352,7 +352,7 @@ final class Updater {
      * allow this app to install apps the first time, replaces the game
      * (closing it) and offers to open the new version.
      */
-    private static void install(Activity activity) {
+    static void install(Activity activity) {
         Intent intent = new Intent(Intent.ACTION_VIEW);
 
         intent.setDataAndType(Uri.parse("content://" + UpdateProvider.AUTHORITY + "/" + UpdateProvider.APK),

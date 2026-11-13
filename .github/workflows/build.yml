@@ -207,7 +207,14 @@ jobs:
           python3 tools/test_coop_unit_resync.py -v
           python3 tools/test_android_launcher_layout.py -v
           python3 tools/test_android_experiment_package.py -v
+          python3 tools/test_lan_apk_update.py -v
           mkdir -p "$RUNNER_TEMP/halo-test-classes"
+          # Host/guest update wire, subnet and fixed-route tests without Android.
+          javac -d "$RUNNER_TEMP/halo-test-classes" \
+            port/android/app/src/main/java/com/halo/decomp/LanUpdateProtocol.java \
+            port/android/app/src/main/java/com/halo/decomp/LanUpdateSocket.java \
+            tools/lan/LanUpdateProtocolTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LanUpdateProtocolTest
           javac -d "$RUNNER_TEMP/halo-test-classes" \
             port/android/app/src/main/java/com/halo/decomp/LanConfig.java \
             tools/lan/LanConfigSmokeTest.java
