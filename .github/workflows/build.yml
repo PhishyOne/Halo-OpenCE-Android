@@ -209,7 +209,14 @@ jobs:
           python3 tools/test_android_launcher_layout.py -v
           python3 tools/test_android_experiment_package.py -v
           python3 tools/test_lan_apk_update.py -v
+          python3 tools/test_campaign_save_backup.py -v
           mkdir -p "$RUNNER_TEMP/halo-test-classes"
+          # Pure JDK checks: portable Xbox save backup/restore, rollback,
+          # safe ZIP paths, duplicate entries, truncated and oversized files.
+          javac -d "$RUNNER_TEMP/halo-test-classes" \
+            port/android/app/src/main/java/com/halo/decomp/CampaignSaveArchive.java \
+            tools/lan/CampaignSaveArchiveTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.CampaignSaveArchiveTest
           # Host/guest update wire, subnet and fixed-route tests without Android.
           javac -d "$RUNNER_TEMP/halo-test-classes" \
             port/android/app/src/main/java/com/halo/decomp/LanUpdateProtocol.java \

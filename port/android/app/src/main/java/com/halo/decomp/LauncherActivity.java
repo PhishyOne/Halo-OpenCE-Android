@@ -71,6 +71,8 @@ public class LauncherActivity extends Activity {
     private static final int PICK_CUSTOM_FOLDER = 5;
     private static final int PICK_CUSTOM_ZIP = 6;
     private static final int SAVE_DIAGNOSTICS = 7;
+    private static final int PICK_CAMPAIGN_BACKUP = 8;
+    private static final int PICK_CAMPAIGN_RESTORE = 9;
     // Halo-style HUD colours. Native Android widgets remain accessible,
     // including the system file picker and LAN diagnostics.
     private static final int HUD_TEXT = Color.rgb(226, 237, 231);
@@ -94,6 +96,9 @@ public class LauncherActivity extends Activity {
     private Button customMapZipButton;
     private TextView customMapStatus;
     private TextView diagnosticStatus;
+    private TextView campaignSaveStatus;
+    private Button campaignBackupButton;
+    private Button campaignRestoreButton;
     private Button playButton;
     private volatile boolean repairBusy;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -945,6 +950,82 @@ public class LauncherActivity extends Activity {
         customMapStatus.setTextColor(HUD_WARNING);
         customMapsPanel.addView(customMapStatus);
 
+        // Campaign progress is in save/u and save/z under app-owned storage.
+        // An update preserves these, but Android uninstall/clear-data does
+        // not. Offer a portable backup in a player-selected external location.
+        Button savesToggle = new Button(this);
+        savesToggle.setText("CAMPAIGN SAVES");
+        hudButton(savesToggle, false);
+        content.addView(savesToggle);
+        LinearLayout campaignSavesPanel = hudPanel();
+        campaignSavesPanel.setVisibility(View.GONE);
+        content.addView(campaignSavesPanel);
+        savesToggle.setOnClickListener(view ->
+            campaignSavesPanel.setVisibility(campaignSavesPanel.getVisibility()
+                == View.VISIBLE ? View.GONE : View.VISIBLE));
+        campaignSavesPanel.addView(hudSection("KEEP YOUR CAMPAIGN PROGRESS"));
+        campaignSavesPanel.addView(lanText(
+            "Normal Android UPDATE preserves progress. Never uninstall Halo "
+            + "to update it. If a reinstall is unavoidable, first back up "
+            + "your saves to Downloads or another folder outside Android/data. "
+            + "The backup contains player profiles and checkpoints only.", 12));
+        campaignBackupButton = new Button(this);
+        campaignBackupButton.setText("BACK UP CAMPAIGN PROGRESS");
+        hudButton(campaignBackupButton, false);
+        campaignBackupButton.setOnClickListener(view -> {
+            if (repairBusy)
+                return;
+            if (gameProcessStatus() != 0) {
+                campaignSaveStatus.setText(
+                    "Close or force-stop Halo before backing up saves.");
+                return;
+            }
+            if (!CampaignSaveArchive.hasSaves(dataRoot)) {
+                campaignSaveStatus.setText(
+                    "No saved campaign profiles found yet.");
+                return;
+            }
+            Intent picker = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            picker.addCategory(Intent.CATEGORY_OPENABLE);
+            picker.setType("application/zip");
+            picker.putExtra(Intent.EXTRA_TITLE,
+                "Halo-Campaign-Backup-" +
+                new java.text.SimpleDateFormat("yyyyMMdd-HHmm",
+                    java.util.Locale.US).format(new java.util.Date()) + ".zip");
+            startActivityForResult(picker, PICK_CAMPAIGN_BACKUP);
+        });
+        campaignSavesPanel.addView(campaignBackupButton);
+
+        campaignRestoreButton = new Button(this);
+        campaignRestoreButton.setText("RESTORE CAMPAIGN BACKUP");
+        hudButton(campaignRestoreButton, false);
+        campaignRestoreButton.setOnClickListener(view -> {
+            if (repairBusy)
+                return;
+            if (gameProcessStatus() != 0) {
+                campaignSaveStatus.setText(
+                    "Close or force-stop Halo before restoring saves.");
+                return;
+            }
+            Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            picker.addCategory(Intent.CATEGORY_OPENABLE);
+            picker.setType("application/zip");
+            startActivityForResult(picker, PICK_CAMPAIGN_RESTORE);
+        });
+        campaignSavesPanel.addView(campaignRestoreButton);
+        campaignSavesPanel.addView(lanText(
+            "Restore replaces current campaign saves after validating the "
+            + "entire ZIP. The old saves are kept on this phone for rollback. "
+            + "Do not send backups to strangers; they may contain profile names.", 11));
+        campaignSaveStatus = lanText(
+            CampaignSaveArchive.hasSaves(dataRoot) ?
+                "Campaign save data found. A backup is recommended before "
+                + "switching builds or uninstalling." :
+                "No campaign progress detected yet. You can restore a backup.",
+            12);
+        campaignSaveStatus.setTextColor(HUD_WARNING);
+        campaignSavesPanel.addView(campaignSaveStatus);
+
         // On-demand, file-picker-scoped diagnostics. Never auto-upload logs,
         // include config.toml, or request broad Android storage permissions.
         Button diagnostics = new Button(this);
@@ -1046,7 +1127,7 @@ public class LauncherActivity extends Activity {
         hudButton(play, true);
         play.setOnClickListener(view -> {
             if (repairBusy) {
-                feedback.setText("Finish the Sidewinder map repair before starting Halo.");
+                feedback.setText("Finish the file or save operation before starting Halo.");
                 return;
             }
             if (invitePending && !lanMode.isChecked()) {
@@ -1203,6 +1284,84 @@ public class LauncherActivity extends Activity {
         }
         KillstreakConfig.save(file, selected);
         saved.apply();
+    }
+
+    /** Saves are accessed only after :game is stopped. This does not touch
+     * the original maps, mods or configuration and uses no storage grants
+     * except the system document picker chosen by the player. */
+    private interface CampaignSaveOperation {
+        String apply() throws Exception;
+    }
+
+    private void runCampaignSaveOperation(String initial, CampaignSaveOperation operation) {
+        if (repairBusy)
+            return;
+        if (gameProcessStatus() != 0) {
+            campaignSaveStatus.setText(
+                "Close or force-stop the Halo game before working with saves.");
+            return;
+        }
+        repairBusy = true;
+        campaignSaveStatus.setText(initial);
+        if (playButton != null)
+            playButton.setEnabled(false);
+        if (campaignBackupButton != null)
+            campaignBackupButton.setEnabled(false);
+        if (campaignRestoreButton != null)
+            campaignRestoreButton.setEnabled(false);
+        new Thread(() -> {
+            String result;
+            try {
+                if (gameProcessStatus() != 0)
+                    throw new java.io.IOException(
+                        "The Halo game started. No save files were changed.");
+                result = operation.apply();
+            } catch (Exception error) {
+                result = "Campaign backup/restore failed: " +
+                    (error.getMessage() == null ?
+                     error.getClass().getSimpleName() : error.getMessage());
+            }
+            final String message = result;
+            handler.post(() -> {
+                repairBusy = false;
+                campaignSaveStatus.setText(message);
+                if (campaignBackupButton != null)
+                    campaignBackupButton.setEnabled(true);
+                if (campaignRestoreButton != null)
+                    campaignRestoreButton.setEnabled(true);
+                if (playButton != null)
+                    playButton.setEnabled(true);
+            });
+        }, "Halo-Campaign-Backup").start();
+    }
+
+    private void exportCampaignSave(Uri target) {
+        runCampaignSaveOperation("Exporting campaign profiles and checkpoints...", () -> {
+            try (OutputStream output = getContentResolver().openOutputStream(target, "w")) {
+                if (output == null)
+                    throw new java.io.IOException("Android couldn't create the backup ZIP.");
+                CampaignSaveArchive.Result result =
+                    CampaignSaveArchive.exportTo(dataRoot, output);
+                return "Campaign backup saved (" + result.files +
+                    " files, " + result.bytes / 1024 + " KiB). Keep this ZIP outside " +
+                    "Halo's Android/data folder. Updating in place preserves progress.";
+            }
+        });
+    }
+
+    private void restoreCampaignSave(Uri source) {
+        runCampaignSaveOperation("Validating and restoring campaign progress...", () -> {
+            try (InputStream input = getContentResolver().openInputStream(source)) {
+                if (input == null)
+                    throw new java.io.IOException("Couldn't read the campaign backup ZIP.");
+                CampaignSaveArchive.Result result =
+                    CampaignSaveArchive.restoreFrom(dataRoot, input);
+                return "Restored " + result.files + " campaign save files. " +
+                    (result.previousSave == null ? "There were no previous saves." :
+                    "Your previous save folder was preserved for rollback. ") +
+                    "Reopen Halo to continue the campaign.";
+            }
+        });
     }
 
     private interface RepairOperation {
@@ -1623,6 +1782,28 @@ public class LauncherActivity extends Activity {
         if (requestCode == SAVE_DIAGNOSTICS) {
             if (resultCode == RESULT_OK && data != null && data.getData() != null)
                 saveDiagnostics(data.getData());
+            return;
+        }
+        if (requestCode == PICK_CAMPAIGN_BACKUP) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null)
+                exportCampaignSave(data.getData());
+            return;
+        }
+        if (requestCode == PICK_CAMPAIGN_RESTORE) {
+            if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+                final Uri document = data.getData();
+                new AlertDialog.Builder(this)
+                    .setTitle("Restore campaign progress?")
+                    .setMessage("This backup will replace the current Halo "
+                        + "campaign profiles and checkpoints. The existing "
+                        + "save directory will be preserved separately on "
+                        + "this phone in case you need to roll back. "
+                        + "Halo must be closed before restoring.")
+                    .setNegativeButton("CANCEL", null)
+                    .setPositiveButton("RESTORE", (dialog, which) ->
+                        restoreCampaignSave(document))
+                    .show();
+            }
             return;
         }
         if (requestCode != PICK_IMAGE || resultCode != RESULT_OK || data == null || data.getData() == null)

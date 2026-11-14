@@ -110,6 +110,19 @@ com.halo.decomp app remains untouched if present. Normal builds without
 the flag continue to use com.halo.decomp. Do not change the applicationId
 to achieve a display-name change: Android would treat it as a new app.
 
+**Campaign saves:** An in-place Android **Update**, with unchanged package
+identity and signer, retains the Xbox profiles under \`save/u\` and
+checkpoints under \`save/z\`. **Uninstall** and **Clear storage** remove those
+app-owned folders. The original \`com.halo.decomp\` and experimental
+\`com.halo.decomp.experiment\` have separate saves even though both apps
+are displayed as Halo. Do not uninstall just to update.
+
+Starting with experimental v27, the launcher's **CAMPAIGN SAVES** section
+can export a portable ZIP of player profiles/checkpoints to Downloads or
+a player-chosen location outside Android/data, then restore it after a
+forced reinstall. See \`docs/campaign_saves_v27.md\`. Already-deleted
+campaign progress cannot be reconstructed without an earlier backup.
+
 ### Co-op spectator repair and session diagnostics
 
 If a client receives a live player-unit state from its co-op host but
