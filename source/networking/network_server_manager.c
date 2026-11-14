@@ -1580,6 +1580,8 @@ static void network_game_server_port_bots(
 	long wanted = 0;
 	long slot;
 	long bot_index;
+	long added_this_idle = 0;
+	long add_budget = BOTS_MAXIMUM;
 	boolean changed = FALSE;
 
 	if (server->state != _network_game_server_state_pregame || server->sent_start_game_message)
@@ -1598,6 +1600,13 @@ static void network_game_server_port_bots(
 		else if (!config_boolean("network.online"))
 			wanted = bots_system_link_wanted_count();
 	}
+	/* A 64-bot LAN lobby should not allocate 64 network players and
+	   broadcast an enormous roster update in a single server idle tick.
+	   Grow in batches of 8; the pregame reconciler will continue on its
+	   next idle ticks. Leave all previously proven <=16 and offline
+	   behavior unchanged, and keep shrinking immediate when overloaded. */
+	if (!network_game_is_splitscreen_local() && wanted > 16)
+		add_budget = 8;
 	for (bot_index = 0; bot_index < BOTS_MAXIMUM; bot_index++)
 		slot_of_bot[bot_index] = NONE;
 	for (slot = 0; slot < MAXIMUM_NETWORK_PLAYER_COUNT; slot++)
@@ -1651,6 +1660,8 @@ static void network_game_server_port_bots(
 		if (slot_of_bot[bot_index] == NONE)
 		{
 			struct network_player joining;
+			if (added_this_idle >= add_budget)
+				break;
 			long virtual_machine_index = bots_first_machine() + bot_index;
 
 			if (server->game.player_count >= server->game.maximum_players)
@@ -1668,6 +1679,7 @@ static void network_game_server_port_bots(
 			if (!network_game_add_player(&server->game, &joining))
 				break;
 			network_event("bots: bot %ld joined the lobby (team %ld)", bot_index + 1, team_index);
+			added_this_idle++;
 			changed = TRUE;
 		}
 		else if (server->game.players[slot_of_bot[bot_index]].team_index != team_index)

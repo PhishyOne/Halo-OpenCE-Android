@@ -36,7 +36,7 @@ public final class LobbyBotControls extends LinearLayout {
                     int value = status & 255;
                     boolean lan = (status & 0x100) != 0;
                     count.setText((lan ? "LAN " : "") + "BOTS  " + value +
-                        " / " + (lan ? "16" : "127"));
+                        " / " + (lan ? "64" : "127"));
                 }
             }
             postDelayed(this, POLL_MS);

@@ -179,11 +179,16 @@ and **BOTS +** at the left of the bottom button row, plus its current target
 bot count. These work for local offline Slayer, CTF and King, and for a LAN
 System Link host, but not for a joining client, Internet host or active
 game. The buttons cycle useful presets: offline 0, 4, 8, 12, 16, 24, 32,
-48, 64, 96, 127; LAN 0, 2, 4, 6, 8, 12, 16. The saved count is changed
-through the game's native config_write and existing authoritative
+48, 64, 96, 127; LAN 0, 2, 4, 6, 8, 12, 16, 24, 32, 48, 64
+(starting with experimental v28). Above 16, treat LAN bots as a
+high-load option: larger maps are more suitable, and network/gameplay
+smoothness depends on the phones and number of players. The saved
+count is changed through the game's native config_write and existing authoritative
 pregame network_game_server_port_bots reconciler adds or removes synthetic
 players on its next idle tick. No game reload, app restart, player-data
-migration or new network protocol is needed. All normal lobby functions
+migration is needed. v28 requires network protocol 50 because the reserved
+virtual machine-slot range increases to 64..127, so all LAN players
+must upgrade together. All normal lobby functions
 (Start Now, Add Player, Switch Team, Leave, map vote) remain unchanged.
 
 For 127-bot stress maps like King of the Hill, return to the lobby and

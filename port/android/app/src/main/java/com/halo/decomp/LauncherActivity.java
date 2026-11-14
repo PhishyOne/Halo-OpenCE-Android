@@ -565,12 +565,20 @@ public class LauncherActivity extends Activity {
             "and download your installed APK over Wi-Fi. Android asks before installing. " +
             "The game stays open while they download.", 11));
 
-        String[] lanBotChoices = new String[LanConfig.MAX_LAN_BOTS + 1];
-        lanBotChoices[0] = "None";
-        for (int index = 1; index < lanBotChoices.length; index++)
-            lanBotChoices[index] = Integer.toString(index);
+        final int[] lanBotCounts = LanConfig.choicesIncluding(
+            settings.systemLinkBotCount);
+        String[] lanBotChoices = new String[lanBotCounts.length];
+        for (int index = 0; index < lanBotCounts.length; index++)
+            lanBotChoices[index] = lanBotCounts[index] == 0 ?
+                "None" : Integer.toString(lanBotCounts[index]);
         Spinner lanBots = botChoice(hostPanel, "BOT COUNT",
-            lanBotChoices, settings.systemLinkBotCount);
+            lanBotChoices, LanConfig.choiceIndex(lanBotCounts,
+                settings.systemLinkBotCount));
+        hostPanel.addView(lanText(
+            "Large maps: try 16, 24, 32, 48 or 64 bots. 32+ is an "
+            + "experimental high-load mode over hotspot LAN. Bigger teams "
+            + "use more CPU and network bandwidth; if players stutter "
+            + "or disconnect, lower the count in the pregame lobby.", 11));
         String[] lanSkillChoices = { "Recruit", "Easy", "Normal", "Heroic", "Veteran", "Legendary" };
         int lanSkillSelection = 2;
         for (int index = 0; index < LanConfig.BOT_SKILLS.length; index++) {
@@ -1186,7 +1194,8 @@ public class LauncherActivity extends Activity {
                         hostIp.getText().toString(), lanOnly.isChecked());
                     boolean hosting = hostRole.isChecked() && lanOnly.isChecked()
                         && !invitePending;
-                    int count = hosting ? lanBots.getSelectedItemPosition() : 0;
+                    int count = hosting ?
+                        lanBotCounts[lanBots.getSelectedItemPosition()] : 0;
                     String skill = hosting
                         ? LanConfig.BOT_SKILLS[lanSkill.getSelectedItemPosition()] : null;
                     LanConfig.save(new File(dataRoot, "config.toml"),

@@ -2,12 +2,12 @@
 #define HALO_LOBBY_BOT_COUNT_POLICY_H
 
 /* Choosing bots while WAITING in the lobby. No mid-match player changes.
- * Offline permits 127 simulated bots, LAN permits up to 16. The host's
+ * Offline permits 127 simulated bots, LAN permits up to 64. The host's
  * existing pregame reconciler adds/removes the bots on its next idle tick. */
 static int halo_lobby_next_bot_count(int current, int delta, int lan)
 {
     static const int offline[] = {0,4,8,12,16,24,32,48,64,96,127};
-    static const int network[] = {0,2,4,6,8,12,16};
+    static const int network[] = {0,2,4,6,8,12,16,24,32,48,64};
     const int *counts = lan ? network : offline;
     int maximum = lan ? (int)(sizeof(network)/sizeof(network[0])) :
         (int)(sizeof(offline)/sizeof(offline[0]));

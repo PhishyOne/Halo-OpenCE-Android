@@ -143,7 +143,34 @@ public final class LanConfigSmokeTest {
             check(!LanConfig.load(botsConfig).lanOnly
                 && LanConfig.load(botsConfig).systemLinkBotCount == 0,
                 "internet mode disables host-only bots and LAN-only mode");
-            for (int count : new int[] { -1, 17, 99 }) {
+            // New 32/48/64 LAN tiers retain the original offline count.
+            for (int n : new int[] {24, 32, 48, 64}) {
+                LanConfig.save(botsConfig, "", "", true, n, "heroic");
+                check(LanConfig.load(botsConfig).systemLinkBotCount == n,
+                    "larger LAN bot count did not round-trip");
+                check(Files.readString(botsConfig.toPath()).contains(
+                    "count = 15"), "host bot count changed offline configuration");
+            }
+            // An old arbitrary 1..16 setting must not silently get
+            // rounded when the player opens the new preset selector.
+            LanConfig.save(botsConfig, "", "", true, 7);
+            int[] choices = LanConfig.choicesIncluding(7);
+            check(choices[LanConfig.choiceIndex(choices, 7)] == 7,
+                "previous nonpreset count not preserved in launcher");
+            check(LanConfig.choicesIncluding(64)[
+                LanConfig.choiceIndex(LanConfig.choicesIncluding(64),64)] == 64,
+                "64-bot preset missing");
+            for (int n = 0; n <= LanConfig.MAX_LAN_BOTS; n++) {
+                int[] choiceList = LanConfig.choicesIncluding(n);
+                check(choiceList[LanConfig.choiceIndex(choiceList,n)] == n,
+                    "launcher lost requested LAN bot count " + n);
+                for (int i = 1; i < choiceList.length; i++)
+                    check(choiceList[i] > choiceList[i-1],
+                        "launcher repeated or unsorted count " + n);
+            }
+            for (int i=1; i<choices.length; i++)
+                check(choices[i] > choices[i-1], "preset menu not sorted");
+            for (int count : new int[] { -1, 65, 99 }) {
                 String previous = Files.readString(botsConfig.toPath());
                 boolean rejected = false;
                 try {

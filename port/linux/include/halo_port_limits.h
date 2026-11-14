@@ -74,7 +74,8 @@ Raise it with any change to what the machines send each other. */
    machine slots available. Incompatible with versions 41..44. */
 /* v21: host-authorized orbital designation and lethal impact. */
 /* v26: type 100 also carries the host-confirmed Breach detonation visual. */
-#define HALO_PORT_NETWORK_VERSION 49
+/* v28: reserve virtual LAN machine indices 64..127 for up to 64 bots. */
+#define HALO_PORT_NETWORK_VERSION 50
 /* ... the advertisement's reserved bytes: the version (a little-endian word),
 then flags, then the game's kind (an OpenCE gametype's mode, and Hardcore:
 port/linux/game/game_modes.h's game_modes_kind), for the server browser */

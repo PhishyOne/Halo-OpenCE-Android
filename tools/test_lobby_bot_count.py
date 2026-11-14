@@ -17,24 +17,31 @@ C=r"""
 int main(void){
   int i;
   const int offline[]={0,4,8,12,16,24,32,48,64,96,127};
-  const int lan[]={0,2,4,6,8,12,16};
+  const int lan[]={0,2,4,6,8,12,16,24,32,48,64};
   CHECK(halo_lobby_next_bot_count(0,0,0)==0);
   for(i=0;i<11;i++){
     CHECK(halo_lobby_next_bot_count(offline[i],-1,0)==offline[i==0?0:i-1]);
     CHECK(halo_lobby_next_bot_count(offline[i],1,0)==offline[i==10?10:i+1]);
   }
-  for(i=0;i<7;i++){
+  for(i=0;i<11;i++){
     CHECK(halo_lobby_next_bot_count(lan[i],-1,1)==lan[i==0?0:i-1]);
-    CHECK(halo_lobby_next_bot_count(lan[i],1,1)==lan[i==6?6:i+1]);
+    CHECK(halo_lobby_next_bot_count(lan[i],1,1)==lan[i==10?10:i+1]);
   }
+  CHECK(halo_lobby_next_bot_count(16,1,1)==24);
+  CHECK(halo_lobby_next_bot_count(24,1,1)==32);
+  CHECK(halo_lobby_next_bot_count(32,1,1)==48);
+  CHECK(halo_lobby_next_bot_count(48,1,1)==64);
+  CHECK(halo_lobby_next_bot_count(64,-1,1)==48);
+  CHECK(halo_lobby_next_bot_count(63,1,1)==64);
+  CHECK(halo_lobby_next_bot_count(63,-1,1)==48);
   CHECK(halo_lobby_next_bot_count(63,1,0)==64);
   CHECK(halo_lobby_next_bot_count(63,-1,0)==48);
   CHECK(halo_lobby_next_bot_count(5,1,1)==6);
   CHECK(halo_lobby_next_bot_count(5,-1,1)==4);
   CHECK(halo_lobby_next_bot_count(999,1,0)==127);
   CHECK(halo_lobby_next_bot_count(-12,-1,0)==0);
-  CHECK(halo_lobby_next_bot_count(127,1,1)==16);
-  CHECK(halo_lobby_next_bot_count(127,-1,1)==16);
+  CHECK(halo_lobby_next_bot_count(127,1,1)==64);
+  CHECK(halo_lobby_next_bot_count(127,-1,1)==64);
   puts("Lobby bot count preset/cap policy PASS");
   return 0;
 }
@@ -128,6 +135,13 @@ class LobbyBotCountTest(unittest.TestCase):
         self.assertIn('Java_com_halo_decomp_LobbyBotControls_nativeStatus',bridge)
         self.assertIn('Java_com_halo_decomp_LobbyBotControls_nativeAdjust',bridge)
         self.assertIn('HOST_LOBBY_LEASE_NS',bridge)
+        self.assertIn('(lan ? "64" : "127")',ui)
+        self.assertIn('BOTS_SYSTEM_LINK_MAXIMUM 64',(
+            ROOT/'port/linux/game/bots.h').read_text())
+        self.assertIn('BOTS_LAN_FIRST_MACHINE (HALO_PORT_MAXIMUM_NETWORK_MACHINES - BOTS_SYSTEM_LINK_MAXIMUM)',(
+            ROOT/'port/linux/game/bots.h').read_text())
+        self.assertIn('HALO_PORT_MAXIMUM_NETWORK_PLAYERS 128',(
+            ROOT/'port/linux/include/halo_port_limits.h').read_text())
         self.assertIn('lobby_delta = 0;',bridge)
         self.assertIn('delta == -1 || delta == 1',bridge)
         self.assertIn('pthread_mutex_lock(&touch_lock)',bridge)

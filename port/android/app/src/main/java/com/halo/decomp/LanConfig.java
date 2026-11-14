@@ -19,7 +19,39 @@ final class LanConfig {
     private static final Pattern BOT_SKILL_KEY = Pattern.compile("^\\s*skill\\s*=.*$");
     private static final Pattern BOT_VEHICLE_KEY = Pattern.compile("^\\s*vehicle_seats\\s*=.*$");
     private static final Pattern BOT_OBJECTIVE_KEY = Pattern.compile("^\\s*objective_modes\\s*=.*$");
-    static final int MAX_LAN_BOTS = 16;
+    static final int MAX_LAN_BOTS = 64;
+    /* An intentionally short list for a landscape phone. The native
+     * lobby uses the same progression and can adjust without exiting.
+     * Any older non-preset count is inserted so merely pressing Play
+     * cannot silently change someone's existing configuration. */
+    static final int[] LAN_BOT_PRESETS = {0,2,4,6,8,12,16,24,32,48,64};
+
+    static int[] choicesIncluding(int current) {
+        if (current < 0 || current > MAX_LAN_BOTS)
+            current = 0;
+        for (int preset : LAN_BOT_PRESETS)
+            if (preset == current)
+                return LAN_BOT_PRESETS.clone();
+        int[] all = new int[LAN_BOT_PRESETS.length + 1];
+        int out = 0;
+        boolean inserted = false;
+        for (int preset : LAN_BOT_PRESETS) {
+            if (!inserted && current < preset) {
+                all[out++] = current;
+                inserted = true;
+            }
+            all[out++] = preset;
+        }
+        return all;
+    }
+
+    static int choiceIndex(int[] choices, int count) {
+        for (int i = 0; i < choices.length; i++)
+            if (choices[i] == count)
+                return i;
+        return 0;
+    }
+
     static final String[] BOT_SKILLS = { "recruit", "easy", "normal", "heroic", "veteran", "legendary" };
     private static final long MAX_BYTES = 1024 * 1024;
 
@@ -187,7 +219,7 @@ final class LanConfig {
         if (vehicleSeats != null && lanBotCount == null)
             throw new IOException("Vehicle seat settings require an explicit bot count.");
         if (lanBotCount != null && (lanBotCount < 0 || lanBotCount > MAX_LAN_BOTS))
-            throw new IOException("LAN bot count must be from 0 to 16.");
+            throw new IOException("LAN bot count must be from 0 to 64.");
         if (lanBotSkill != null && (lanBotCount == null || !validBotSkill(lanBotSkill)))
             throw new IOException("LAN bot difficulty must be Recruit through Legendary.");
         local = local.trim();

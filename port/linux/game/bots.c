@@ -436,7 +436,8 @@ long bots_wanted_count(void)
 }
 
 /* port: experimental networked bots are separate from offline bots.count.
-With four LAN bots field-tested, try up to sixteen host-simulated players. */
+With four LAN bots field-tested, support up to 64 host-simulated players.
+Higher counts need physical hotspot/performance tests. */
 long bots_system_link_wanted_count(void)
 {
 	long count = config_integer("bots.system_link_count");

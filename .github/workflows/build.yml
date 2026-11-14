@@ -196,6 +196,7 @@ jobs:
           python3 tools/test_bot_vehicle_flip.py
           python3 tools/test_bot_garbage_policy.py -v
           python3 tools/test_lobby_bot_count.py -v
+          python3 tools/test_lan_64_bot_capacity.py -v
           python3 tools/test_commander_feature_policy.py -v
           python3 tools/test_commander_tactical.py -v
           python3 tools/test_commander_roles.py -v

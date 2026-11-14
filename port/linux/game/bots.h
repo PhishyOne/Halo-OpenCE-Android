@@ -14,13 +14,13 @@ struct player_action;
 struct network_player;
 
 /* Offline stress-test ceiling: 127 synthetic machines + host machine 0.
-   LAN bots are a SEPARATE sixteen-bot experiment and reserve only
-   their upper 16 slots, keeping 111 guest machine slots available. */
+   LAN bots are a SEPARATE opt-in 64-bot experiment and reserve only
+   their upper 64 machine slots, keeping 64 real client machine slots available. */
 #define BOTS_MAXIMUM 127
-#define BOTS_SYSTEM_LINK_MAXIMUM 16
+#define BOTS_SYSTEM_LINK_MAXIMUM 64
 /* offline local split screen only: simulated machine indices 1..127 */
 #define BOTS_FIRST_MACHINE (HALO_PORT_MAXIMUM_NETWORK_MACHINES - BOTS_MAXIMUM)
-/* LAN only: synthetic machine indices 112..127; other clients use lower slots */
+/* LAN only: synthetic machine indices 64..127; up to 64 real client slots remain. */
 #define BOTS_LAN_FIRST_MACHINE (HALO_PORT_MAXIMUM_NETWORK_MACHINES - BOTS_SYSTEM_LINK_MAXIMUM)
 
 enum
