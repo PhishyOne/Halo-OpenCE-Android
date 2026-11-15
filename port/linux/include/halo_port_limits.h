@@ -69,13 +69,14 @@ Raise it with any change to what the machines send each other. */
 /* port: experimental System Link bot-player identities and host relayed
    bot controls. Even with no bots configured, refuse mixing with clients
    built before the authoritative bot path existed. Rebase before upstream. */
-/* port: 127 offline bots use machines 1..127. LAN bots now allow 16,
-   with their own reserved machine range 112..127, leaving real client
-   machine slots available. Incompatible with versions 41..44. */
+/* Port: 127 offline bots use machines 1..127. LAN hosts may reserve
+   virtual machines 64..127 for 64 bots, leaving 0..63 for real humans.
+   Clients and hosts with different network versions never mix. */
 /* v21: host-authorized orbital designation and lethal impact. */
 /* v26: type 100 also carries the host-confirmed Breach detonation visual. */
 /* v28: reserve virtual LAN machine indices 64..127 for up to 64 bots. */
-#define HALO_PORT_NETWORK_VERSION 50
+/* v29: host bots support Oddball and Race game engines. */
+#define HALO_PORT_NETWORK_VERSION 51
 /* ... the advertisement's reserved bytes: the version (a little-endian word),
 then flags, then the game's kind (an OpenCE gametype's mode, and Hardcore:
 port/linux/game/game_modes.h's game_modes_kind), for the server browser */

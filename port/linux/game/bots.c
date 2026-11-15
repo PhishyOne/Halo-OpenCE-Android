@@ -78,6 +78,7 @@ and each bot's kills and deaths; debug.bot_trace logs each bot's state.
 #include "cseries/errors.h"
 #include "game/game.h"
 #include "game/game_engine.h"
+#include "game/game_engine_race.h"
 #include "game/players.h"
 #include "objects/objects.h"
 #include "units/units.h"
@@ -112,6 +113,9 @@ and each bot's kills and deaths; debug.bot_trace logs each bot's state.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Oddball's host-owned per-player ball state (game_engine_oddball.c). */
+boolean player_has_ball(long player_index);
 
 /* port/linux/src/port_config.c */
 const char *config_string(char const *name);
@@ -1951,9 +1955,49 @@ static boolean bots_objectives_active(void)
 
 	return config_boolean("bots.objective_modes") && variant &&
 		(variant->game_engine_index == game_engine_ctf ||
-		 variant->game_engine_index == game_engine_king);
+		 variant->game_engine_index == game_engine_king ||
+		 variant->game_engine_index == game_engine_oddball ||
+		 variant->game_engine_index == game_engine_race);
 }
 
+/* In standard Oddball the objective is a physical weapon; in Magic/
+ * Terminator the engine tracks a player as the scoring ball. Use its
+ * authoritative owner state for both. CTF keeps its flag-inventory rule. */
+static boolean bots_carries_objective(struct player_datum *player, long index)
+{
+	struct game_variant *variant = game_engine_get_variant();
+	return variant && variant->game_engine_index == game_engine_oddball ?
+		player_has_ball(index) : bots_carries_flag(player);
+}
+
+/* Carrying an Oddball is the objective; don't chase your own moving
+ * marker. Pick a fresh, map-known walkable roaming destination every
+ * few seconds. Ordinary pathing and collision gates still apply. */
+static boolean bots_oddball_carrier_escape(struct bots_bot *bot, int bot_index)
+{
+	long now = game_time_get();
+	long point;
+	if (bot->goal_kind == _bots_goal_objective &&
+		bot->goal_surface_index != NONE &&
+		now - bot->goal_tick < TICKS_PER_SECOND * 8)
+		return TRUE;
+	if (bot_index < 0 || bots_globals.roam_point_count <= 0)
+		return FALSE;
+	point = (bot_index * 13 + now / (TICKS_PER_SECOND * 8)) %
+		bots_globals.roam_point_count;
+	if (point == bot->roam_index && bots_globals.roam_point_count > 1)
+		point = (point + 1) % bots_globals.roam_point_count;
+	bot->roam_index = (short)point;
+	bots_set_goal(bot, _bots_goal_objective,
+		&bots_globals.roam_points[point], bots_globals.roam_surfaces[point]);
+	return TRUE;
+}
+
+/* CTF and King retain their existing goals. Oddball uses the actual
+ * live ball goals emitted by the engine, including carried targets.
+ * Race asks its own scoring engine which checkpoints THIS player may
+ * legally touch (Normal, Any Order and Rally). No direct scoring or
+ * event injection: movement and native pickups produce the points. */
 static boolean bots_choose_objective_goal(struct bots_bot *bot, long player_index)
 {
 	struct game_variant *variant;
@@ -1966,21 +2010,54 @@ static boolean bots_choose_objective_goal(struct bots_bot *bot, long player_inde
 	if (!bots_objectives_active())
 		return FALSE;
 	variant = game_engine_get_variant();
-	if (!variant || (variant->game_engine_index != game_engine_ctf &&
-		variant->game_engine_index != game_engine_king))
+	if (!variant)
 		return FALSE;
 	player = player_get(player_index);
 	bot_index = (int)(player->network_player_data.machine_index - bots_first_machine());
-	count = variant->game_engine_index == game_engine_king ? BOTS_OBJECTIVE_MAX_KING_HILLS : 4;
-	for (slot = 0; slot < count; slot++)
-		if (game_engine_get_goal_in_use((short)slot))
-			active |= (1u << slot);
-	if (variant->game_engine_index == game_engine_king)
-		goal_slot = bots_king_goal_slot(bot_index, active);
-	else
+	if (bot_index < 0 || bot_index >= BOTS_MAXIMUM)
+		return FALSE;
+
+	switch (variant->game_engine_index)
+	{
+	case game_engine_ctf:
+		count = 4;
+		for (slot = 0; slot < count; slot++)
+			if (game_engine_get_goal_in_use((short)slot))
+				active |= (1u << slot);
 		goal_slot = bots_ctf_goal_slot(bot_index, player->team_index,
 			bots_carries_flag(player), active);
-	if (goal_slot < 0)
+		break;
+
+	case game_engine_king:
+		count = BOTS_OBJECTIVE_MAX_KING_HILLS;
+		for (slot = 0; slot < count; slot++)
+			if (game_engine_get_goal_in_use((short)slot))
+				active |= (1u << slot);
+		goal_slot = bots_king_goal_slot(bot_index, active);
+		break;
+
+	case game_engine_oddball:
+		if (bots_carries_objective(player, player_index))
+			return bots_oddball_carrier_escape(bot, bot_index);
+		count = (int)PIN(variant->game_engine_variant.oddball.ball_spawn_count,
+			0, BOTS_OBJECTIVE_MAX_ODDBALLS);
+		for (slot = 0; slot < count; slot++)
+			if (game_engine_get_goal_in_use((short)slot))
+				active |= (1u << slot);
+		goal_slot = bots_oddball_goal_slot(bot_index, active, FALSE);
+		break;
+
+	case game_engine_race:
+		/* The race engine owns progress and eligibility per player. */
+		active = (unsigned int)race_engine_bot_eligible_goals(player_index);
+		goal_slot = bots_race_goal_slot(bot_index, active);
+		break;
+
+	default:
+		return FALSE;
+	}
+
+	if (goal_slot < 0 || !game_engine_get_goal_in_use((short)goal_slot))
 		return FALSE;
 	game_engine_get_goal_position(&point, (short)goal_slot);
 	surface = bots_surface_below(&point, &ground);
@@ -2360,7 +2437,10 @@ static void bots_choose_goal(struct bots_bot *bot, long player_index, real_point
 	}
 	/* Vehicle goals are subordinate to a fight, but can replace roaming.
 	   A failed reservation backs off rather than making the bot circle a seat. */
-	if (config_boolean("bots.vehicle_seats"))
+	/* Race bots follow checkpoint routes on foot for now. Boarding as
+	   passengers without driver AI would trap them and stall laps. */
+	if (config_boolean("bots.vehicle_seats") &&
+		game_engine_get_type() != game_engine_race)
 	{
 		if (bot->goal_kind == _bots_goal_vehicle_flip)
 		{
@@ -3306,8 +3386,8 @@ static void bots_bot_weapons(struct bots_bot *bot, struct bots_tick *tick)
 	}
 }
 
-/* Some flag pickups use the player's nearby-weapon action prompt.
-   The main CTF engine still validates flag ownership, pickup and scoring;
+/* Some flag and Oddball pickups use the player's nearby-weapon action
+   prompt. The CTF/Oddball engine validates ownership, pickup and scoring;
    this only presses the same button a human would, and leaves ordinary
    weapon pickups to bots_bot_weapons. Walking over an automatic flag
    pickup needs no special input. */
@@ -3318,10 +3398,11 @@ static void bots_bot_objective_action(struct bots_bot *bot, struct bots_tick *ti
     struct game_variant *variant;
 
     if (bot->goal_kind != _bots_goal_objective || !bots_objectives_active() ||
-        bots_carries_flag(tick->player))
+        bots_carries_objective(tick->player, bot->player_index))
         return;
     variant = game_engine_get_variant();
-    if (!variant || variant->game_engine_index != game_engine_ctf)
+    if (!variant || (variant->game_engine_index != game_engine_ctf &&
+        variant->game_engine_index != game_engine_oddball))
         return;
     if (tick->player->action_result != _player_action_result_pickup_weapon &&
         tick->player->action_result != _player_action_result_swap_for_weapon &&
@@ -3330,7 +3411,8 @@ static void bots_bot_objective_action(struct bots_bot *bot, struct bots_tick *ti
     item_index = tick->player->action_object_index;
     weapon = (struct weapon_datum *)object_try_and_get_and_verify_type(item_index, _object_mask_weapon);
     if (weapon && weapon_is_flag(item_index) &&
-        weapon->object.owner_team_index != tick->player->team_index)
+        (variant->game_engine_index == game_engine_oddball ||
+         weapon->object.owner_team_index != tick->player->team_index))
         tick->flags |= FLAG(_unit_control_swap_weapons_bit);
 }
 
@@ -3575,7 +3657,8 @@ static void bots_bot_update(struct bots_bot *bot, long bot_index, struct player_
 	tick.weapon_index = bots_current_weapon(tick.unit);
 	/* A flag carrier runs home rather than abandoning the capture to duel.
 	   Everyone else still fights normally, including hill defenders. */
-	if (!(bots_objectives_active() && bots_carries_flag(tick.player)) &&
+	if (!(bots_objectives_active() &&
+		bots_carries_objective(tick.player, bot->player_index)) &&
 		bot->target_player_index != NONE && tick.now - bot->target_seen_tick <= TICKS_PER_SECOND / 2)
 		bots_bot_fight(bot, &tick);
 	/* Objectives may change while we are fighting; update the destination
@@ -3603,7 +3686,8 @@ static void bots_bot_update(struct bots_bot *bot, long bot_index, struct player_
 				tick.moving = TRUE;
 		}
 	}
-	if (!(bots_objectives_active() && bots_carries_flag(tick.player)))
+	if (!(bots_objectives_active() &&
+		bots_carries_objective(tick.player, bot->player_index)))
 		bots_bot_weapons(bot, &tick);
 	bots_bot_objective_action(bot, &tick);
 	bots_bot_vehicle_action(bot, &tick);

@@ -1586,12 +1586,15 @@ static void network_game_server_port_bots(
 
 	if (server->state != _network_game_server_state_pregame || server->sent_start_game_message)
 		return;
-	/* CTF and King are opt-in experiments; keep the proven Slayer default
-	   and never spawn LAN bots in internet games or during a match. */
+\t/* All five original multiplayer game engines now accept host
+\t   simulated bots. Oddball/Race/CTF/King objective logic is opt-in;
+\t   Slayer remains unchanged. Never create bots in internet or co-op. */
 	if (server->game.variant.game_engine_index == game_engine_slayer ||
 		(config_boolean("bots.objective_modes") &&
 		 (server->game.variant.game_engine_index == game_engine_ctf ||
-		  server->game.variant.game_engine_index == game_engine_king)))
+		  server->game.variant.game_engine_index == game_engine_king ||
+		  server->game.variant.game_engine_index == game_engine_oddball ||
+		  server->game.variant.game_engine_index == game_engine_race)))
 	{
 		if (network_game_is_splitscreen_local())
 			wanted = PIN(bots_wanted_count(), 0, BOTS_MAXIMUM);

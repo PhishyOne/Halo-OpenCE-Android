@@ -32,7 +32,7 @@ class Lan64BotsTest(unittest.TestCase):
         # can keep their lower range. 4 humans + 64 bots = 68 < 128.
         self.assertEqual(128-64,64)
         self.assertLessEqual(4+64,128)
-        self.assertIn("HALO_PORT_NETWORK_VERSION 50", NETWORK)
+        self.assertIn("HALO_PORT_NETWORK_VERSION 51", NETWORK)
 
     def test_host_only_pregame_reconciler_and_no_internet(self):
         server = SERVER()

@@ -5,6 +5,51 @@
 #define HALO_BOTS_OBJECTIVES_POLICY_H
 
 #define BOTS_OBJECTIVE_MAX_KING_HILLS 5
+#define BOTS_OBJECTIVE_MAX_ODDBALLS 16
+#define BOTS_OBJECTIVE_MAX_RACE_CHECKPOINTS 32
+
+/* When several live Oddballs exist, spread bot candidates across them.
+ * A ball carrier should escape/roam, never chase its own ball marker.
+ * This is a selection only; Halo handles pickups and scoring. */
+static int bots_oddball_goal_slot(int bot_index, unsigned int active_goals,
+    int carrying)
+{
+    int count = 0, slot, pick;
+    if (carrying || bot_index < 0)
+        return -1;
+    for (slot = 0; slot < BOTS_OBJECTIVE_MAX_ODDBALLS; slot++)
+        if (active_goals & (1u << slot))
+            count++;
+    if (!count)
+        return -1;
+    pick = bot_index % count;
+    for (slot = 0; slot < BOTS_OBJECTIVE_MAX_ODDBALLS; slot++)
+        if ((active_goals & (1u << slot)) && pick-- == 0)
+            return slot;
+    return -1;
+}
+
+/* The race engine itself provides only legal checkpoints for this
+ * individual player, respecting the chosen race variant and progress.
+ * Distribute any-order choices across bots, rather than sending all 64
+ * synthetic racers to one checkpoint on a large multiplayer track. */
+static int bots_race_goal_slot(int bot_index, unsigned int eligible_goals)
+{
+    int count = 0, slot, pick;
+    if (bot_index < 0)
+        return -1;
+    for (slot = 0; slot < BOTS_OBJECTIVE_MAX_RACE_CHECKPOINTS; slot++)
+        if (eligible_goals & (1u << slot))
+            count++;
+    if (!count)
+        return -1;
+    pick = bot_index % count;
+    for (slot = 0; slot < BOTS_OBJECTIVE_MAX_RACE_CHECKPOINTS; slot++)
+        if ((eligible_goals & (1u << slot)) && pick-- == 0)
+            return slot;
+    return -1;
+}
+
 
 /* -1 means that there is no usable objective. Distribute bot indices across
    live hills, so Multi-Hill does not concentrate everybody in one place. */

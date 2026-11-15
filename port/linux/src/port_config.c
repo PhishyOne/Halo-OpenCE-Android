@@ -546,8 +546,8 @@ static const struct config_setting config_settings[] =
 		"\"veteran\" or \"legendary\" (how soon they react, how well they aim,\n"
 		"how far they see, and how they fight: blows, grenades, strafes, retreats)." },
 	{ "bots.objective_modes", _config_boolean, "true", "HALO_BOT_OBJECTIVES", _environment_value, _platform_all,
-		"Experimental host-only bots in Capture the Flag and King of the Hill.\n"
-		"Always on for bot games; Slayer remains unchanged. Bots use ordinary\n"
+		"Experimental host-only bots in CTF, King, Oddball and Race.\n"
+		"On by default for bot games; Slayer remains unchanged. Bots use ordinary\n"
 		"game objective and team-scoring rules.\n" },
 	{ "bots.vehicle_seats", _config_boolean, "true", "HALO_BOT_VEHICLE_SEATS", _environment_value, _platform_all,
 		"Experimental multiplayer bots can walk to and board open vehicle\n"

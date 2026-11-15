@@ -1136,6 +1136,33 @@ static boolean race_goal_matches_player(
 	return result;
 }
 
+/* Read-only list of valid race checkpoints. Reuse the game engine's
+ * actual eligibility rules for Normal Race, Any Order, and Flag Rally.
+ * The native host simulates bot movement; this never increments laps.
+ * No client may choose another player's race target. */
+unsigned long race_engine_bot_eligible_goals(long player_index)
+{
+    unsigned long eligible = 0;
+    struct player_datum *player;
+    long absolute_index;
+    short slot;
+
+    if (player_index == NONE || game_engine_get_type() != game_engine_race)
+        return 0;
+    absolute_index = DATUM_INDEX_TO_ABSOLUTE_INDEX(player_index);
+    if (!VALID_INDEX(absolute_index, MULTIPLAYER_MAXIMUM_PLAYERS))
+        return 0;
+    player = player_try_and_get(player_index);
+    if (!player || player->unit_index == NONE)
+        return 0;
+
+    for (slot = 0; slot < MAXIMUM_RACE_FLAGS; slot++)
+        if (TEST_FLAG(race_globals.lap_completed_value, slot) &&
+            race_goal_matches_player(player_index, slot))
+            SET_FLAG(eligible, slot, TRUE);
+    return eligible;
+}
+
 static long count_bits_32(
 	unsigned long flags)
 {

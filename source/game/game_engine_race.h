@@ -19,6 +19,11 @@ struct race_globals;
 void race_flags_make_unique(
 	void);
 
+/* Read-only, authoritative checkpoint choices for a bot player.
+ * Uses the same race_goal_matches_player scoring eligibility as humans.
+ * No checkpoint index is invented or marked complete here. */
+unsigned long race_engine_bot_eligible_goals(long player_index);
+
 /* ---------- globals */
 
 extern struct game_engine race_engine;

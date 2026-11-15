@@ -182,7 +182,11 @@ game. The buttons cycle useful presets: offline 0, 4, 8, 12, 16, 24, 32,
 48, 64, 96, 127; LAN 0, 2, 4, 6, 8, 12, 16, 24, 32, 48, 64
 (starting with experimental v28). Above 16, treat LAN bots as a
 high-load option: larger maps are more suitable, and network/gameplay
-smoothness depends on the phones and number of players. The saved
+smoothness depends on the phones and number of players. Since v29 bots
+can play **Slayer, CTF, King, Oddball and Race**; Oddball bots pursue
+and carry the ball, while Race bots follow actual checkpoints on foot.
+They cannot yet drive race vehicles. See
+\`docs/bots_all_multiplayer_modes_v29.md\`. The saved
 count is changed through the game's native config_write and existing authoritative
 pregame network_game_server_port_bots reconciler adds or removes synthetic
 players on its next idle tick. No game reload, app restart, player-data

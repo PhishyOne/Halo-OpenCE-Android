@@ -590,8 +590,9 @@ public class LauncherActivity extends Activity {
         Spinner lanSkill = botChoice(hostPanel, "DIFFICULTY",
             lanSkillChoices, lanSkillSelection);
         hostPanel.addView(lanText("Vehicle crews are automatic. "
-            + "Bots pursue flags in CTF and hills in King; "
-            + "Slayer bots keep their normal tactics.", 12));
+            + "Bots pursue flags in CTF, hills in King, and balls in Oddball. "
+            + "Race bots run checkpoints on foot; vehicle driving is "
+            + "not implemented yet. Slayer behavior is unchanged.", 12));
         lanPanel.addView(hostPanel);
 
         LinearLayout joinPanel = new LinearLayout(this);
@@ -690,8 +691,9 @@ public class LauncherActivity extends Activity {
         Spinner offlineTeam = botChoice(offlinePanel, "TEAM ASSIGNMENT",
             offlineTeams, offlinePreferences.getInt("team", 0));
         offlinePanel.addView(lanText("Vehicle crews are automatic. "
-            + "CTF and King bots play their objectives; other modes "
-            + "are unaffected. Choose the game type inside Halo.", 12));
+            + "Bots play goals in CTF, King, Oddball and Race; Race bots "
+            + "follow checkpoints on foot. Slayer combat stays the same. "
+            + "Choose the game type inside Halo.", 12));
 
         // Host-only, opt-in commander support. All saved choices stay
         // independent from the network and bot preferences. The native

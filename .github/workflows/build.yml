@@ -193,6 +193,7 @@ jobs:
         if: ${{ inputs.android_only }}
         run: |
           python3 tools/test_bot_objective_policy.py -v
+          python3 tools/test_all_multiplayer_modes.py -v
           python3 tools/test_bot_vehicle_flip.py
           python3 tools/test_bot_garbage_policy.py -v
           python3 tools/test_lobby_bot_count.py -v
