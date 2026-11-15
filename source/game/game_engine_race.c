@@ -1147,7 +1147,8 @@ unsigned long race_engine_bot_eligible_goals(long player_index)
     long absolute_index;
     short slot;
 
-    if (player_index == NONE || game_engine_get_type() != game_engine_race)
+    if (player_index == NONE || !game_engine_get_variant() ||
+        game_engine_get_variant()->game_engine_index != game_engine_race)
         return 0;
     absolute_index = DATUM_INDEX_TO_ABSOLUTE_INDEX(player_index);
     if (!VALID_INDEX(absolute_index, MULTIPLAYER_MAXIMUM_PLAYERS))

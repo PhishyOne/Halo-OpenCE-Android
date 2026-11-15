@@ -2440,7 +2440,8 @@ static void bots_choose_goal(struct bots_bot *bot, long player_index, real_point
 	/* Race bots follow checkpoint routes on foot for now. Boarding as
 	   passengers without driver AI would trap them and stall laps. */
 	if (config_boolean("bots.vehicle_seats") &&
-		game_engine_get_type() != game_engine_race)
+		(!game_engine_get_variant() ||
+		 game_engine_get_variant()->game_engine_index != game_engine_race))
 	{
 		if (bot->goal_kind == _bots_goal_vehicle_flip)
 		{

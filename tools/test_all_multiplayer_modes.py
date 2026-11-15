@@ -63,7 +63,7 @@ class AllMultiplayerBotModesTest(unittest.TestCase):
         end=RACE.index("static long count_bits_32(",begin)
         fn=RACE[begin:end]
         for fragment in (
-            "game_engine_get_type() != game_engine_race",
+            "game_engine_get_variant()->game_engine_index != game_engine_race",
             "DATUM_INDEX_TO_ABSOLUTE_INDEX(player_index)",
             "VALID_INDEX(absolute_index, MULTIPLAYER_MAXIMUM_PLAYERS)",
             "player_try_and_get(player_index)",
@@ -82,7 +82,9 @@ class AllMultiplayerBotModesTest(unittest.TestCase):
         self.assertIn("race_engine_bot_eligible_goals(player_index)", BOTS)
         self.assertIn("bots_race_goal_slot(bot_index, active)", BOTS)
         self.assertIn("BOTS_OBJECTIVE_MAX_RACE_CHECKPOINTS 32", POLICY)
-        self.assertIn("game_engine_get_type() != game_engine_race", BOTS)
+        self.assertIn("game_engine_get_variant()->game_engine_index != game_engine_race", BOTS)
+        self.assertNotIn("game_engine_get_type()", BOTS)
+        self.assertNotIn("game_engine_get_type()", RACE)
 
     def test_original_ctf_and_king_behavior_preserved(self):
         for s in ("bots_ctf_goal_slot(bot_index, player->team_index,",
