@@ -29,7 +29,7 @@ class BotAutomaticModesTest(unittest.TestCase):
         source=LAUNCHER.read_text()
         self.assertIn('boolean crews = true;',source)
         self.assertIn('boolean objectives = true;',source)
-        self.assertIn('count, skill, true, true);',source)
+        self.assertIn('count, skill, true, true, hosting && driverBots.isChecked());',source)
         self.assertNotIn('vehicleSeatsOffline =',source)
         self.assertNotIn('vehicleSeatsLan =',source)
         self.assertNotIn('objectiveBotsOffline =',source)

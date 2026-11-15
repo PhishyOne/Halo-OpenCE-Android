@@ -45,7 +45,7 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         s = self.source
         self.assertIn('LanConfig.peerForRole(hostRole.isChecked()', s)
         self.assertIn('LanConfig.save(new File(dataRoot, "config.toml")', s)
-        self.assertIn('count, skill, true, true);', s)
+        self.assertIn('count, skill, true, true, hosting && driverBots.isChecked());', s)
         self.assertNotIn('objectiveBotsLan', s)
         self.assertNotIn('vehicleSeatsLan', s)
         self.assertIn('if (!canStartGame(feedback, appSettings))', s)

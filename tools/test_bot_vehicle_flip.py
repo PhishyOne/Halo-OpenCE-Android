@@ -16,7 +16,10 @@ ROOT = Path(__file__).resolve().parent.parent
 SOURCE = read("port/linux/game/bots.c")
 COMPILER = os.environ.get("CC") or shutil.which("cc") or shutil.which("clang")
 SEAT_CASES = (
-    "gunner-empty-vehicle", "no-driver-control", "passenger-needs-driver",
+    "gunner-empty-vehicle", "no-driver-control", "driver-enabled-warthog",
+    "driver-enabled-ghost", "driver-rejects-banshee",
+    "driver-rejects-occupied", "driver-rejects-no-animation",
+    "passenger-needs-driver",
     "occupied-seat", "disabled-vehicle", "dead-vehicle", "invalid-vehicle",
     "no-animation", "empty-seat-label", "action-press", "wrong-action",
     "already-seated", "cooldown", "flipped-seat-rejected", "flip-action",
@@ -60,7 +63,8 @@ def build(work, name, sources, fault=None):
     command = [
         COMPILER, "-std=gnu99", "-Wall", "-Werror",
         "-Wno-unused-function", "-Wno-unused-variable",
-        "-I", str(ROOT / "tools/harness/include"), "-I", str(folder),
+        "-I", str(ROOT / "tools/harness/include"),
+        "-I", str(ROOT / "port/linux/game"), "-I", str(folder),
         str(ROOT / f"tools/harness/tests/{name}.c"),
         "-o", str(target), "-lm",
     ]

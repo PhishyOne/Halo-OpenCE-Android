@@ -37,6 +37,7 @@ struct vehicle_datum {
 struct bots_bot {
     long player_index, vehicle_index;
     short goal_kind, vehicle_seat_index;
+    boolean driver_seat_reserved;
     long vehicle_ignore_index, vehicle_ignore_until_tick, next_vehicle_scan_tick;
     long goal_tick, goal_surface_index;
     real_point3d goal_point;

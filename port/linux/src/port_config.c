@@ -553,6 +553,10 @@ static const struct config_setting config_settings[] =
 		"Experimental multiplayer bots can walk to and board open vehicle\n"
 		"gunner seats, and passenger seats when a driver is present. Bots do\n"
 		"not drive. Enabled by default; infantry behavior remains bounded." },
+	{ "bots.vehicle_driving", _config_boolean, "false", "HALO_BOT_DRIVING", _environment_value, _platform_all,
+		"Experimental host-only ground vehicle driving through normal player inputs.\\n"
+		"Off by default; at most six Warthog, Ghost and Scorpion bot drivers.\\n"
+		"Banshee flight requires separate collision and altitude navigation." },
 	{ "bots.teams", _config_string, "\"even\"", "HALO_BOT_TEAMS", _environment_value, _platform_all,
 		"In team games: \"even\" puts the bots on both teams, evening them with\n"
 		"the players; \"against\" puts them all on the team the players are not on." },

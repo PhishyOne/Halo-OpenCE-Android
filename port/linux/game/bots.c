@@ -107,6 +107,7 @@ and each bot's kills and deaths; debug.bot_trace logs each bot's state.
 #include "bots.h"
 #include "bots_combat.h"
 #include "bots_objectives_policy.h"
+#include "bot_vehicle_driver_policy.h"
 #include "bot_target_range_gate.h"
 
 #include <math.h>
@@ -150,6 +151,12 @@ void platform_log(char const *format, ...);
    wreck that never offers the real player's Flip Vehicle prompt. */
 #define BOTS_VEHICLE_FLIP_RESERVATION_TICKS (TICKS_PER_SECOND * 8)
 #define BOTS_VEHICLE_FLIP_APPROACH_RADIUS 1.4f
+/* v30: limited number of real player-controlled ground vehicle drivers.
+   Rate-limit steering and use existing host-relayed player_action inputs. */
+#define BOTS_DRIVER_MAX_ACTIVE 6
+#define BOTS_DRIVER_PROGRESS_TICKS (TICKS_PER_SECOND * 3)
+#define BOTS_DRIVER_REVERSE_TICKS TICKS_PER_SECOND
+#define BOTS_DRIVER_MIN_PROGRESS 1.0f
 
 /* where a bot is going */
 enum
@@ -315,6 +322,13 @@ struct bots_bot
 	long vehicle_press_tick;
 	long vehicle_ignore_index;
 	long vehicle_ignore_until_tick;
+	/* Ground vehicle driving. The vehicle still handles collision/physics.
+	   Separate from pedestrian stuck timers and transient seat claims. */
+	long driver_vehicle_index;
+	boolean driver_seat_reserved;
+	long driver_progress_tick;
+	long driver_reverse_until_tick;
+	real_point3d driver_progress_point;
 	/* the path there (steps of the engine's path), and when it was found */
 	struct path_result path;
 	long path_tick;
@@ -2087,14 +2101,19 @@ static boolean bots_vehicle_seat_usable(long bot_unit_index, long vehicle_index,
     if (seat_index < 0 || seat_index >= definition->unit.seats.count)
         return FALSE;
     seat = TAG_BLOCK_GET_ELEMENT(&definition->unit.seats, seat_index, struct unit_seat);
-    /* Driving and flying need a different navigation controller. Do not
-       take a human's driver seat or evict an occupant, even when possible. */
-    if (TEST_FLAG(seat->flags, _unit_seat_driver_bit))
+    /* Drivers are opt-in, ground only, never on an occupied driver slot.
+       unit_can_enter_seat remains the final engine authority for the
+       actual entry animation and avoiding occupant eviction. */
+    if (TEST_FLAG(seat->flags, _unit_seat_driver_bit) &&
+        (!config_boolean("bots.vehicle_driving") ||
+         !bot_driver_supported(tag_get_name(vehicle->definition_index)) ||
+         vehicle->unit.driver_object_index != NONE))
         return FALSE;
     *gunner = TEST_FLAG(seat->flags, _unit_seat_gunner_bit);
     /* A passenger in an immobile vehicle isn't useful; an empty Warthog
        turret is useful. */
-    if (!*gunner && vehicle->unit.driver_object_index == NONE)
+    if (!TEST_FLAG(seat->flags, _unit_seat_driver_bit) &&
+        !*gunner && vehicle->unit.driver_object_index == NONE)
         return FALSE;
     /* The player's nearby-action scanner performs the private seat-label
        compatibility test before offering an Action prompt. This policy
@@ -2106,6 +2125,43 @@ static boolean bots_vehicle_seat_usable(long bot_unit_index, long vehicle_index,
     /* Match the vanilla player prompt's seat-entrance geometry. */
     return unit_get_seat_entrance_point(bot_unit_index, vehicle_index, seat_index,
         entrance, NULL, NULL);
+}
+
+/* Avoid six drivers selecting the same available seat. Count existing
+   simulated drivers and in-progress reservations (never human seats). */
+static boolean bots_vehicle_driver_claimed(struct bots_bot const *claimant,
+    long vehicle_index)
+{
+    long index;
+    for (index = 0; index < BOTS_MAXIMUM; index++)
+    {
+        struct bots_bot const *other = &bots_globals.bots[index];
+        if (other != claimant && other->player_index != NONE &&
+            ((other->goal_kind == _bots_goal_vehicle &&
+              other->vehicle_index == vehicle_index &&
+              other->driver_seat_reserved) ||
+             other->driver_vehicle_index == vehicle_index))
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static int bots_vehicle_driver_limit_reached(struct bots_bot const *claimant)
+{
+    long index;
+    int active = 0;
+    for (index = 0; index < BOTS_MAXIMUM; index++)
+    {
+        struct bots_bot const *other = &bots_globals.bots[index];
+        if (other == claimant || other->player_index == NONE)
+            continue;
+        if (other->driver_vehicle_index != NONE ||
+            (other->goal_kind == _bots_goal_vehicle &&
+             other->vehicle_index != NONE &&
+             other->driver_seat_reserved))
+            active++;
+    }
+    return active >= BOTS_DRIVER_MAX_ACTIVE;
 }
 
 /* Only an unoccupied, stationary, overturned vehicle can be recovered.
@@ -2221,6 +2277,7 @@ static void bots_vehicle_stop_seeking(struct bots_bot *bot, long now)
     bot->vehicle_ignore_until_tick = now + BOTS_VEHICLE_RETRY_TICKS;
     bot->vehicle_index = NONE;
     bot->vehicle_seat_index = NONE;
+    bot->driver_seat_reserved = FALSE;
     bot->goal_kind = _bots_goal_none;
     bot->path.valid = FALSE;
     bot->next_vehicle_scan_tick = now + TICKS_PER_SECOND * 2;
@@ -2237,6 +2294,7 @@ static boolean bots_vehicle_pick(struct bots_bot *bot, long bot_unit_index,
     real best_score = REAL_MAX;
     real_point3d best_ground;
     long best_surface = NONE;
+    boolean best_driver = FALSE;
 
     object_iterator_new(&iterator, _object_mask_vehicle, 0);
     while (object_iterator_next(&iterator))
@@ -2262,21 +2320,30 @@ static boolean bots_vehicle_pick(struct bots_bot *bot, long bot_unit_index,
         for (seat_index = 0; seat_index < definition->unit.seats.count; seat_index++)
         {
             real_point3d entrance, ground;
-            boolean gunner;
+            boolean gunner, driver;
+            struct unit_seat *seat;
             long surface;
             real score;
             if (!bots_vehicle_seat_usable(bot_unit_index, iterator.index, seat_index,
                 &entrance, &gunner))
                 continue;
+            seat = TAG_BLOCK_GET_ELEMENT(&definition->unit.seats, seat_index,
+                struct unit_seat);
+            driver = TEST_FLAG(seat->flags, _unit_seat_driver_bit);
+            if (driver && (bots_vehicle_driver_claimed(bot, iterator.index) ||
+                           bots_vehicle_driver_limit_reached(bot)))
+                continue;
             surface = bots_surface_below(&entrance, &ground);
             if (surface == NONE)
                 continue;
-            score = bots_distance3d(position, &entrance) + (gunner ? 0.0f : 5.0f);
+            score = bots_distance3d(position, &entrance) +
+                (driver ? -3.0f : gunner ? 0.0f : 5.0f);
             if (score < best_score)
             {
                 best_score = score;
                 best_vehicle = iterator.index;
                 best_seat = seat_index;
+                best_driver = driver;
                 best_ground = ground;
                 best_surface = surface;
             }
@@ -2286,6 +2353,7 @@ static boolean bots_vehicle_pick(struct bots_bot *bot, long bot_unit_index,
         return FALSE;
     bot->vehicle_index = best_vehicle;
     bot->vehicle_seat_index = best_seat;
+    bot->driver_seat_reserved = best_driver;
     bots_set_goal(bot, _bots_goal_vehicle, &best_ground, best_surface);
     platform_log("bots: bot player %ld seeking vehicle %ld seat %d",
         (long)DATUM_INDEX_TO_ABSOLUTE_INDEX(bot->player_index),
@@ -2424,12 +2492,25 @@ the map */
 static void bots_choose_goal(struct bots_bot *bot, long player_index, real_point3d const *position, boolean fighting)
 {
 	long now = game_time_get();
+	struct player_datum *player = player_get(player_index);
+	long virtual_slot = player->network_player_data.machine_index - bots_first_machine();
+	boolean driver_candidate = config_boolean("bots.vehicle_driving") &&
+		config_boolean("bots.vehicle_seats") &&
+		virtual_slot >= 0 && virtual_slot < BOTS_MAXIMUM &&
+		virtual_slot % 5 == 0;
+	boolean objective;
 
-	/* Capture/defend a flag or occupy the current hill before roaming.
-	   Slayer and unconfigured modes continue through the old planner. */
-	if (bots_choose_objective_goal(bot, player_index))
+	/* One in five eligible bots may seek a driver seat before proceeding
+	   with the normal objective. Other bots retain ordinary CTF, King,
+	   Oddball and Race goals without interruption. */
+	if (driver_candidate && bot->goal_kind == _bots_goal_vehicle &&
+		bots_vehicle_keep_goal(bot, player->unit_index))
 		return;
-	if (!fighting && bot->target_player_index != NONE && bot->target_last_surface_index != NONE &&
+	objective = bots_choose_objective_goal(bot, player_index);
+	if (objective && !driver_candidate)
+		return;
+	if (!driver_candidate && !fighting && bot->target_player_index != NONE &&
+		bot->target_last_surface_index != NONE &&
 		now - bot->target_seen_tick < TICKS_PER_SECOND * 8)
 	{
 		bots_set_goal(bot, _bots_goal_enemy, &bot->target_last_position, bot->target_last_surface_index);
@@ -2437,11 +2518,12 @@ static void bots_choose_goal(struct bots_bot *bot, long player_index, real_point
 	}
 	/* Vehicle goals are subordinate to a fight, but can replace roaming.
 	   A failed reservation backs off rather than making the bot circle a seat. */
-	/* Race bots follow checkpoint routes on foot for now. Boarding as
-	   passengers without driver AI would trap them and stall laps. */
+	/* Race bots may only board when driver AI is explicitly enabled.
+	   Otherwise the previous on-foot checkpoint navigation remains. */
 	if (config_boolean("bots.vehicle_seats") &&
 		(!game_engine_get_variant() ||
-		 game_engine_get_variant()->game_engine_index != game_engine_race))
+		 game_engine_get_variant()->game_engine_index != game_engine_race ||
+		 config_boolean("bots.vehicle_driving")))
 	{
 		if (bot->goal_kind == _bots_goal_vehicle_flip)
 		{
@@ -2468,6 +2550,10 @@ static void bots_choose_goal(struct bots_bot *bot, long player_index, real_point
 	{
 		bots_vehicle_stop_seeking(bot, now);
 	}
+	/* If a vehicle was unavailable, still obey the actual mode goal,
+	   instead of letting item hunting erase our objective destination. */
+	if (objective)
+		return;
 	/* a better weapon near (looked for once a second; given up after a
 	while) */
 	if (bot->goal_kind == _bots_goal_item)
@@ -3461,10 +3547,74 @@ static void bots_bot_vehicle_action(struct bots_bot *bot, struct bots_tick *tick
     }
 }
 
-/* A seated gunner still thinks like an ordinary bot, but uses its vehicle's
-   gun instead of its holstered rifle. The unit update already forwards a
-   gunner's trigger and aim to the parent vehicle. Passengers never fire or
-   steer, and bots never become drivers in this experiment. */
+/* Host-only driving: authentic player_action inputs, not injected vehicle
+ * motion. The engine owns all steering physics, collisions and replication.
+ * Cap acceleration, distribute waypoints and back out when stuck. */
+static void bots_bot_driver_control(struct bots_bot *bot, long bot_index,
+    struct bots_tick *tick, long vehicle_index, struct unit_datum *vehicle)
+{
+    struct bot_driver_controls steering;
+    real_point3d position = vehicle->object.position;
+    long now = tick->now;
+    boolean objective = FALSE;
+
+    if (!config_boolean("bots.vehicle_driving") ||
+        !bot_driver_supported(tag_get_name(vehicle->definition_index)) ||
+        TEST_FLAG(vehicle->object.damage_flags, _object_dead_bit) ||
+        vehicle->object.up.k < 0.4f)
+        return;
+    if (bot->driver_vehicle_index != vehicle_index)
+    {
+        bot->driver_vehicle_index = vehicle_index;
+        bot->driver_progress_tick = now;
+        bot->driver_progress_point = position;
+        bot->driver_reverse_until_tick = 0;
+        bot->goal_kind = _bots_goal_none;
+        bot->path.valid = FALSE;
+        platform_log("bots: bot %ld started ground vehicle %ld",
+            bot_index + 1, vehicle_index);
+    }
+    if (bots_objectives_active())
+        objective = bots_choose_objective_goal(bot, bot->player_index);
+    if (!objective &&
+        (bot->goal_kind != _bots_goal_roam ||
+         now - bot->goal_tick > TICKS_PER_SECOND * 12 ||
+         bots_distance2d(&position, &bot->goal_point) < 4.0f))
+        bots_pick_roam_goal(bot, &position);
+    if (bot->goal_kind != _bots_goal_objective &&
+        bot->goal_kind != _bots_goal_roam)
+        return;
+    /* A high ledge is walkable to a Spartan, not necessarily drivable. */
+    if (fabs(bot->goal_point.z - position.z) > 6.0f)
+        return;
+
+    if (now - bot->driver_progress_tick >= BOTS_DRIVER_PROGRESS_TICKS)
+    {
+        if (bots_distance2d(&position, &bot->driver_progress_point) <
+                BOTS_DRIVER_MIN_PROGRESS &&
+            bots_distance2d(&position, &bot->goal_point) > 5.0f)
+        {
+            bot->driver_reverse_until_tick = now + BOTS_DRIVER_REVERSE_TICKS;
+            bot->goal_kind = _bots_goal_none;
+            platform_log("bots: driver %ld reversing (stalled)", bot_index + 1);
+        }
+        bot->driver_progress_point = position;
+        bot->driver_progress_tick = now;
+    }
+    steering = bot_driver_steering(position.x, position.y,
+        (real)atan2(vehicle->object.forward.j, vehicle->object.forward.i),
+        bot->goal_point.x, bot->goal_point.y,
+        now < bot->driver_reverse_until_tick);
+    tick->action->desired_facing.yaw = steering.desired_yaw;
+    tick->action->desired_facing.pitch = 0.0f;
+    tick->action->throttle.i = steering.forward;
+    tick->action->throttle.j = steering.lateral;
+    tick->action->control_flags = 0;
+    tick->action->primary_trigger = 0.0f;
+}
+
+/* Existing gunners still use normal weapon controls; ground drivers use
+ * bounded steering and throttle. Unarmed passengers remain passive. */
 static boolean bots_bot_vehicle_occupied(struct bots_bot *bot, long bot_index,
     struct bots_tick *tick)
 {
@@ -3474,16 +3624,23 @@ static boolean bots_bot_vehicle_occupied(struct bots_bot *bot, long bot_index,
         return FALSE;
 
     if (bot->vehicle_index != NONE)
+    {
         platform_log("bots: bot %ld entered vehicle %ld seat %d",
             bot_index + 1, vehicle_index, (int)tick->unit->unit.parent_seat_index);
-    bot->goal_kind = _bots_goal_none;
+        bot->goal_kind = _bots_goal_none;
+        bot->path.valid = FALSE;
+    }
     bot->vehicle_index = NONE;
     bot->vehicle_seat_index = NONE;
-    bot->path.valid = FALSE;
+    bot->driver_seat_reserved = FALSE;
     vehicle = (struct unit_datum *)object_try_and_get_and_verify_type(
         vehicle_index, _object_mask_vehicle);
-    if (vehicle && unit_seat_is_gunner(vehicle_index, tick->unit->unit.parent_seat_index))
+    if (vehicle && vehicle->unit.driver_object_index == tick->player->unit_index)
+        bots_bot_driver_control(bot, bot_index, tick, vehicle_index, vehicle);
+    else if (vehicle && unit_seat_is_gunner(vehicle_index,
+            tick->unit->unit.parent_seat_index))
     {
+        bot->driver_vehicle_index = NONE;
         bots_bot_look(bot, tick);
         tick->weapon_index = bots_current_weapon(vehicle);
         if (bot->target_player_index != NONE &&
@@ -3503,6 +3660,7 @@ static boolean bots_bot_vehicle_occupied(struct bots_bot *bot, long bot_index,
     else
     {
         /* Passenger with no mounted weapon, or nonvehicle parent. */
+        bot->driver_vehicle_index = NONE;
         tick->action->control_flags = 0;
         tick->action->primary_trigger = 0.0f;
     }
@@ -3606,12 +3764,21 @@ static void bots_bot_update(struct bots_bot *bot, long bot_index, struct player_
 		bot->goal_kind = _bots_goal_none;
 		bot->vehicle_index = NONE;
 		bot->vehicle_seat_index = NONE;
+		bot->driver_vehicle_index = NONE;
+		bot->driver_seat_reserved = FALSE;
+		bot->driver_progress_tick = 0;
+		bot->driver_reverse_until_tick = 0;
 		bot->previous_control_flags = 0;
 		return;
 	}
 	tick.unit = unit_get(tick.player->unit_index);
 	tick.object = object_get(tick.player->unit_index);
 	tick.position = tick.object->object.position;
+	if (tick.object->object.parent_object_index == NONE)
+	{
+		bot->driver_vehicle_index = NONE;
+		bot->driver_seat_reserved = FALSE;
+	}
 	if (bot->unit_index != tick.player->unit_index)
 	{
 		/* (spawned: it looks the way its unit faces) */
@@ -3625,6 +3792,10 @@ static void bots_bot_update(struct bots_bot *bot, long bot_index, struct player_
 		bot->goal_kind = _bots_goal_none;
 		bot->vehicle_index = NONE;
 		bot->vehicle_seat_index = NONE;
+		bot->driver_vehicle_index = NONE;
+		bot->driver_seat_reserved = FALSE;
+		bot->driver_progress_tick = 0;
+		bot->driver_reverse_until_tick = 0;
 		bot->vehicle_ignore_index = NONE;
 		bot->next_vehicle_scan_tick = tick.now + (bot_index % (TICKS_PER_SECOND * 3));
 		bot->next_look_tick = tick.now + (bot_index % 3);

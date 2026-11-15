@@ -281,6 +281,43 @@ public final class LanConfigSmokeTest {
             check(objectiveRejected
                 && Files.readString(botsConfig.toPath()).equals(duplicateObjectives),
                 "duplicate objective settings were not refused atomically");
+            // Ground driver opt-in must be explicit and cannot be retained
+            // for joiners or enabled accidentally by legacy config writers.
+            Files.writeString(botsConfig.toPath(),
+                "[bots]\ncount = 31\nsystem_link_count = 8\nvehicle_driving = false\n",
+                StandardCharsets.UTF_8);
+            check(!LanConfig.load(botsConfig).vehicleDriving,
+                "ground vehicle driver must be off by default");
+            LanConfig.save(botsConfig, "", "", true, 8, "heroic", true, true, true);
+            check(LanConfig.load(botsConfig).vehicleDriving
+                && Files.readString(botsConfig.toPath()).contains("count = 31"),
+                "driver toggle did not persist or overwrote offline count");
+            LanConfig.save(botsConfig, "", "", true, 8, "normal", true, true);
+            check(LanConfig.load(botsConfig).vehicleDriving,
+                "old save overload unexpectedly erased driving preference");
+            LanConfig.save(botsConfig, "", "10.28.111.42", true, 0,
+                null, true, true, false);
+            check(!LanConfig.load(botsConfig).vehicleDriving,
+                "joiner retained the host-only driving toggle");
+            LanConfig.save(botsConfig, "", "", false, 0,
+                null, false, false, false);
+            check(!LanConfig.load(botsConfig).vehicleDriving,
+                "internet session retained bot vehicle driving");
+            String duplicateDriving =
+                "[bots]\nvehicle_driving = true\nvehicle_driving = false\n";
+            Files.writeString(botsConfig.toPath(), duplicateDriving,
+                StandardCharsets.UTF_8);
+            boolean drivingRejected = false;
+            try {
+                LanConfig.save(botsConfig, "", "", true, 8, "normal",
+                    true, true, true);
+            } catch (IOException expected) {
+                drivingRejected = true;
+            }
+            check(drivingRejected &&
+                Files.readString(botsConfig.toPath()).equals(duplicateDriving),
+                "duplicate driving toggle not rejected atomically");
+
             // Reuse the existing vehicle duplicate test next.
             String duplicate = "[bots]\nvehicle_seats = false\nvehicle_seats = true\n";
             Files.writeString(botsConfig.toPath(), duplicate, StandardCharsets.UTF_8);

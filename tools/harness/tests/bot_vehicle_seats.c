@@ -2,6 +2,7 @@
    All game state and object/seat tags here are fake; no game maps needed. */
 #define TICKS_PER_SECOND 30
 #include "harness.h"
+#include "bot_vehicle_driver_policy.h"
 typedef struct { float x, y, z; } point3;
 struct tag_block { int count; };
 struct unit_seat { unsigned long flags; char label[32]; };
@@ -23,6 +24,7 @@ struct bots_bot {
     long vehicle_press_tick;
     long player_index;
     long vehicle_ignore_index, vehicle_ignore_until_tick, next_vehicle_scan_tick;
+    boolean driver_seat_reserved;
     struct { boolean valid; } path;
 };
 struct bots_tick {
@@ -58,6 +60,15 @@ static struct unit_seat test_seats[3];
 static struct unit_definition test_definition;
 static struct unit_datum test_vehicle;
 static int animation_ok = 1, seat_available = 1;
+static int driver_enabled = 0;
+static char const *vehicle_tag = "vehicles\\warthog\\warthog";
+static int config_boolean(char const *key) {
+    return strcmp(key, "bots.vehicle_driving") == 0 && driver_enabled;
+}
+static char const *tag_get_name(long definition_index) {
+    (void)definition_index;
+    return vehicle_tag;
+}
 static int seat_entry_calls = 0, direct_board_calls = 0;
 static void *object_try_and_get_and_verify_type(long index, long type)
 {
@@ -129,6 +140,46 @@ int main(int argc, char **argv)
         accepted = bots_vehicle_seat_usable(7, 33, 0, &entrance, &gunner);
         CHECK(!accepted && seat_entry_calls == 0 && !direct_board_calls,
               "bot tried to take a driver's seat");
+        return 0;
+    }
+    CASE("driver-enabled-warthog")
+    {
+        driver_enabled = 1;
+        accepted = bots_vehicle_seat_usable(7, 33, 0, &entrance, &gunner);
+        CHECK(accepted && !gunner && entrance.x == 0.0f,
+            "ground driver could not enter an empty Warthog");
+        return 0;
+    }
+    CASE("driver-enabled-ghost")
+    {
+        driver_enabled = 1;
+        vehicle_tag = "vehicles\\ghost\\ghost";
+        accepted = bots_vehicle_seat_usable(7, 33, 0, &entrance, &gunner);
+        CHECK(accepted && !gunner, "ground driver could not enter an empty Ghost");
+        return 0;
+    }
+    CASE("driver-rejects-banshee")
+    {
+        driver_enabled = 1;
+        vehicle_tag = "vehicles\\banshee\\banshee";
+        CHECK(!bots_vehicle_seat_usable(7, 33, 0, &entrance, &gunner),
+            "ground AI tried to fly a Banshee");
+        return 0;
+    }
+    CASE("driver-rejects-occupied")
+    {
+        driver_enabled = 1;
+        test_vehicle.unit.driver_object_index = 800; /* human driver */
+        CHECK(!bots_vehicle_seat_usable(7, 33, 0, &entrance, &gunner),
+            "bot stole an already occupied driver seat");
+        return 0;
+    }
+    CASE("driver-rejects-no-animation")
+    {
+        driver_enabled = 1;
+        animation_ok = 0;
+        CHECK(!bots_vehicle_seat_usable(7, 33, 0, &entrance, &gunner),
+            "bot bypassed the engine's entry animation check");
         return 0;
     }
     CASE("passenger-needs-driver")

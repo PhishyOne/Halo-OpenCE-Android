@@ -589,10 +589,20 @@ public class LauncherActivity extends Activity {
         }
         Spinner lanSkill = botChoice(hostPanel, "DIFFICULTY",
             lanSkillChoices, lanSkillSelection);
+        CheckBox driverBots = new CheckBox(this);
+        driverBots.setText("BOTS DRIVE GROUND VEHICLES (EXPERIMENTAL)");
+        driverBots.setChecked(settings.vehicleDriving);
+        hudCheck(driverBots);
+        hostPanel.addView(driverBots);
+        hostPanel.addView(lanText(
+            "Optional: up to 6 bots can drive empty Warthogs, Ghosts or "
+            + "Scorpions. They steer through Halo's normal vehicle physics, "
+            + "slow on bends and reverse if stuck. Not Banshees yet. "
+            + "Turn this off for ordinary infantry games.", 11));
         hostPanel.addView(lanText("Vehicle crews are automatic. "
             + "Bots pursue flags in CTF, hills in King, and balls in Oddball. "
-            + "Race bots run checkpoints on foot; vehicle driving is "
-            + "not implemented yet. Slayer behavior is unchanged.", 12));
+            + "Race bots follow checkpoints; vehicle-driving AI is "
+            + "optional. Slayer behavior is unchanged.", 12));
         lanPanel.addView(hostPanel);
 
         LinearLayout joinPanel = new LinearLayout(this);
@@ -959,6 +969,12 @@ public class LauncherActivity extends Activity {
         customMapStatus = lanText("Maps stay separate from the original Xbox maps.", 12);
         customMapStatus.setTextColor(HUD_WARNING);
         customMapsPanel.addView(customMapStatus);
+        Button checkBeachResources = new Button(this);
+        checkBeachResources.setText("CHECK BEACH ASSAULT RESOURCES");
+        hudButton(checkBeachResources, false);
+        checkBeachResources.setOnClickListener(view ->
+            customMapStatus.setText(beachAssaultResourceStatus()));
+        customMapsPanel.addView(checkBeachResources);
 
         // Campaign progress is in save/u and save/z under app-owned storage.
         // An update preserves these, but Android uninstall/clear-data does
@@ -1202,7 +1218,7 @@ public class LauncherActivity extends Activity {
                         ? LanConfig.BOT_SKILLS[lanSkill.getSelectedItemPosition()] : null;
                     LanConfig.save(new File(dataRoot, "config.toml"),
                         local.getText().toString(), peer, lanOnly.isChecked(),
-                        count, skill, true, true);
+                        count, skill, true, true, hosting && driverBots.isChecked());
                     saveCommanderChoices(new File(dataRoot, "config.toml"),
                         commanderChecks, commanderPrefs, hosting);
                     saveKillstreakChoices(new File(dataRoot, "config.toml"),
@@ -1499,6 +1515,34 @@ public class LauncherActivity extends Activity {
             return "Previous Silent Cartographer map restored. "
                 + "The newer b30.map is preserved separately.";
         });
+    }
+
+    /** Check only app-owned files; scoped-storage Android keeps them
+     * inaccessible to Termux. Beach Assault's Halo CE cache actually
+     * references all three standard external resource maps. The user must
+     * import their own legitimate CE resources if any are absent. */
+    private String beachAssaultResourceStatus() {
+        if (dataRoot == null)
+            return "Halo app storage is unavailable.";
+        File maps = new File(dataRoot, "maps");
+        File beach = new File(maps, "beach_assault.map");
+        if (!beach.isFile())
+            return "Beach Assault is not installed in Halo's map directory.";
+        StringBuilder missing = new StringBuilder();
+        for (String resource : new String[] {
+                "bitmaps.map", "sounds.map", "loc.map" }) {
+            if (!new File(maps, resource).isFile()) {
+                if (missing.length() != 0) missing.append(", ");
+                missing.append(resource);
+            }
+        }
+        if (missing.length() != 0)
+            return "Beach Assault references Custom Edition resources. Missing: " +
+                missing + ". Import the matching files via Custom Maps; " +
+                "don't remove the current map or campaign saves.";
+        return "All three external CE resource files exist. If Beach Assault " +
+            "still draws blue, export Halo Diagnostics after reproducing it. " +
+            "Resource compatibility or rendering still needs investigation.";
     }
 
     /** The display name is only used after it passes CustomMapImporter's
