@@ -1586,9 +1586,9 @@ static void network_game_server_port_bots(
 
 	if (server->state != _network_game_server_state_pregame || server->sent_start_game_message)
 		return;
-\t/* All five original multiplayer game engines now accept host
-\t   simulated bots. Oddball/Race/CTF/King objective logic is opt-in;
-\t   Slayer remains unchanged. Never create bots in internet or co-op. */
+	/* All five original multiplayer game engines now accept host
+	   simulated bots. Oddball/Race/CTF/King objective logic is opt-in;
+	   Slayer remains unchanged. Never create bots in internet or co-op. */
 	if (server->game.variant.game_engine_index == game_engine_slayer ||
 		(config_boolean("bots.objective_modes") &&
 		 (server->game.variant.game_engine_index == game_engine_ctf ||

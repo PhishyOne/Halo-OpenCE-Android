@@ -31,6 +31,8 @@ class AllMultiplayerBotModesTest(unittest.TestCase):
         self.assertIn("server->sent_start_game_message", SERVER)
         self.assertIn("network_game_server_send_game_data_pregame(server)", SERVER)
         self.assertIn("HALO_PORT_NETWORK_VERSION 51", LIMITS)
+        self.assertNotIn(chr(92)+"t/* All five original", SERVER)
+        self.assertNotIn(chr(92)+"t   simulated bots.", SERVER)
 
     def test_oddball_uses_live_engine_goals_and_normal_pickup(self):
         for fragment in (
