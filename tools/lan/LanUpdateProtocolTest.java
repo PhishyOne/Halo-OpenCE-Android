@@ -78,6 +78,53 @@ public final class LanUpdateProtocolTest {
         check(LanUpdateProtocol.lanInterface("wlan0"), "wifi");
         check(LanUpdateProtocol.lanInterface("swlan0"), "wifi 2");
         check(LanUpdateProtocol.lanInterface("eth0"), "ethernet");
+
+        // v23-v30 failed closed on some legitimate hotspot interfaces
+        // advertising a /32, /8 or unknown prefix. New fallback is /24,
+        // never a wildcard or broad carrier/VPN subnet.
+        check(LanUpdateProtocol.usableHostPrefix("ap0", 24) == 24,
+            "retain real hotspot /24");
+        check(LanUpdateProtocol.usableHostPrefix("wlan0", 28) == 28,
+            "retain real Wi-Fi /28");
+        for (int unusual : new int[]{-1, 0, 8, 31, 32}) {
+            check(LanUpdateProtocol.usableHostPrefix("ap0", unusual) == 24,
+                "conservative Android hotspot prefix fallback");
+            check(LanUpdateProtocol.usableHostPrefix("swlan0", unusual) == 24,
+                "conservative secondary hotspot prefix fallback");
+            check(LanUpdateProtocol.usableHostPrefix("eth0", unusual) == -1,
+                "no unexpected ethernet broad fallback");
+            check(LanUpdateProtocol.usableHostPrefix("rmnet_data0", unusual) == -1,
+                "no mobile data fallback");
+            check(LanUpdateProtocol.usableHostPrefix("tun0", unusual) == -1,
+                "no VPN fallback");
+        }
+        check(!LanUpdateProtocol.sameSubnet(a, c,
+            LanUpdateProtocol.usableHostPrefix("ap0", 32)),
+            "fallback still rejects adjacent /24");
+        check(LanUpdateProtocol.sameSubnet(a, b,
+            LanUpdateProtocol.usableHostPrefix("ap0", 32)),
+            "fallback accepts private same-/24 peer");
+
+        check(LanUpdateProtocol.connectionHelp(
+                new IOException("Halo hotspot subnet rejected this phone"))
+                .contains("outside its hotspot subnet"),
+            "host refusal must explain the actual subnet guard");
+        check(LanUpdateProtocol.connectionHelp(
+                new IOException("Halo update host is busy"))
+                .contains("busy sending Halo updates"),
+            "full host queue has actionable guest error");
+        for (IOException cause : new IOException[]{
+                new java.net.ConnectException("UNTRUSTED_CONNECT_DETAIL"),
+                new java.net.SocketTimeoutException("UNTRUSTED_TIMEOUT_DETAIL"),
+                new java.net.NoRouteToHostException("UNTRUSTED_ROUTE_DETAIL"),
+                new IOException("UNTRUSTED_HTTP_DETAIL")}) {
+            String help = LanUpdateProtocol.connectionHelp(cause);
+            check(help.contains("LAN") && help.contains("Host") &&
+                help.contains("5162") && help.contains("Share My Halo Version"),
+                "manual update failure should give reproducible setup");
+            check(!help.contains(cause.getMessage()),
+                "don't leak raw OS error or remote-controlled strings");
+        }
     }
 
     private static void messages() throws Exception {
@@ -168,9 +215,31 @@ public final class LanUpdateProtocolTest {
         }
     }
 
+    private static void busyResponse() throws Exception {
+        // Exercise the real 503 response on a local JDK socket. It carries
+        // zero APK bytes and is not an arbitrary proxy or internet listener.
+        try (java.net.ServerSocket server = new java.net.ServerSocket(
+                0, 1, java.net.InetAddress.getLoopbackAddress());
+             java.net.Socket guest = new java.net.Socket(
+                java.net.InetAddress.getLoopbackAddress(), server.getLocalPort())) {
+            guest.setSoTimeout(1000);
+            java.net.Socket accepted = server.accept();
+            LanUpdateSocket.busy(accepted);
+            byte[] response = guest.getInputStream().readAllBytes();
+            String header = new String(response, StandardCharsets.US_ASCII);
+            check(header.startsWith("HTTP/1.0 503 Service Unavailable\r\n"),
+                "busy response should use 503");
+            check(header.contains("Content-Length: 0\r\n"),
+                "busy response must be zero-byte");
+            check(header.endsWith("\r\n\r\n"),
+                "busy response must not include a body");
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         addresses();
         messages();
+        busyResponse();
         System.out.println("PASS " + assertions +
             " Halo LAN update policy, fixed routes, metadata, APK transfer checks");
     }

@@ -88,6 +88,62 @@ class LanApkUpdateTests(unittest.TestCase):
         self.assertIn("static void install(Activity activity)", UPDATER.read_text())
         self.assertIn('static final String APK = "halo.apk"', PROVIDER.read_text())
 
+    def test_android_single_instance_host_listener_rearm_and_tether_diagnostics(self):
+        game = GAME.read_text()
+        server = HOST.read_text()
+        protocol = PROTOCOL.read_text()
+        client = CLIENT.read_text()
+        launcher = LAUNCHER.read_text()
+        report = (JAVA / "HaloDiagnostics.java").read_text()
+        manifest = MANIFEST.read_text()
+        self.assertIn('android:launchMode="singleInstance"', manifest)
+        for fragment in (
+            'public void onNewIntent(Intent intent)',
+            'super.onNewIntent(intent);',
+            'setIntent(intent);',
+            'updateLanShare(intent);',
+            'getBooleanExtra(LAN_UPDATE_HOST, false)',
+            'lanUpdateServer.stop();',
+            'lanUpdateServer = null;',
+            'lanUpdateServer = LanUpdateServer.start(this);',
+        ):
+            self.assertIn(fragment, game, fragment)
+        self.assertLess(game.index('public void onNewIntent(Intent intent)'),
+            game.index('private void updateLanShare(Intent intent)'))
+        for fragment in (
+            'LanUpdateProtocol.usableHostPrefix(',
+            'LanUpdateProtocol.privateAddress(local.getHostAddress())',
+            'new ServerSocket(LanUpdateProtocol.PORT,',
+            'LanUpdateProtocol.sameSubnet(boundIp, peer, prefix)',
+        ):
+            # The subnet check lives in LanUpdateSocket. All other
+            # bind decisions must be constrained to a private interface.
+            self.assertIn(fragment, server + WIRE.read_text())
+        self.assertIn('for (int attempt = 0; !closed && attempt < 6', server)
+        self.assertIn('Thread.sleep(900)', server)
+        self.assertIn('status("READY"', server)
+        self.assertIn('status("UNAVAILABLE"', server)
+        self.assertIn('status("STOPPED"', server)
+        self.assertIn('"lan-update-status.txt"', server)
+        self.assertIn('File.createTempFile(', server)
+        self.assertIn('StandardCopyOption.REPLACE_EXISTING', server)
+        self.assertIn('static int usableHostPrefix(', protocol)
+        self.assertIn('return hotspot ? 24 : -1', protocol)
+        self.assertIn('!lanInterface(interfaceName)', protocol)
+        self.assertNotIn('n.startsWith("rmnet")', protocol)
+        self.assertNotIn('n.startsWith("tun")', protocol)
+        self.assertIn('LanUpdateProtocol.connectionHelp(exception)', client)
+        self.assertIn('int attempts = manual ? 3 : 1', client)
+        self.assertIn('instanceof java.net.ConnectException', client)
+        self.assertIn('Thread.sleep(450L * (attempt + 1))', client)
+        self.assertIn('"CHECK HOST UPDATE"', launcher)
+        self.assertIn('checkHostUpdate.setEnabled(false)', launcher)
+        self.assertIn('checkHostUpdate.setEnabled(true)', launcher)
+        self.assertIn('"lan-update-status.txt"', report)
+        self.assertIn('## LAN update server', report)
+        self.assertIn('IP.matcher(line)', report)
+        self.assertIn('EMAIL.matcher(', report)
+
     def test_no_public_cleartext_exception_or_game_protocol_changes(self):
         source = WIRE.read_text()
         self.assertIn("new Socket()", source)

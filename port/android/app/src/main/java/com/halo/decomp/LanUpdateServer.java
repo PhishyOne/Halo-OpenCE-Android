@@ -6,7 +6,11 @@ import android.util.Log;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.net.Inet4Address;
 import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
@@ -35,13 +39,40 @@ final class LanUpdateServer {
     private final List<Socket> connections = Collections.synchronizedList(
         new ArrayList<>());
     private final ThreadPoolExecutor clients = new ThreadPoolExecutor(
-        2, 2, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(2),
+        2, 2, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(6),
         task -> {
             Thread thread = new Thread(task, "Halo-LAN-update-client");
             thread.setDaemon(true);
             return thread;
         }, new ThreadPoolExecutor.AbortPolicy());
     private volatile boolean closed;
+
+    /** A small, private-app-storage diagnostic snapshot survives returning
+     * to the launcher. Other apps cannot choose its path or content. */
+    private void status(String state, String detail) {
+        File root = context.getExternalFilesDir(null);
+        if (root == null || !root.isDirectory())
+            return;
+        File temporary = null;
+        try {
+            temporary = File.createTempFile("halo-lan-update-", ".tmp", root);
+            File target = new File(root, "lan-update-status.txt");
+            String body = "LAN update server: " + state + "\n" +
+                "Details: " + detail + "\n";
+            try (FileOutputStream out = new FileOutputStream(temporary)) {
+                out.write(body.getBytes(StandardCharsets.UTF_8));
+                out.getFD().sync();
+            }
+            Files.move(temporary.toPath(), target.toPath(),
+                StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException unavailable) {
+            Log.i(LOG, "Cannot save LAN status: " +
+                unavailable.getClass().getSimpleName());
+        } finally {
+            if (temporary != null)
+                temporary.delete();
+        }
+    }
 
     private LanUpdateServer(Context context) {
         this.context = context.getApplicationContext();
@@ -76,10 +107,12 @@ final class LanUpdateServer {
     private void startWorker() {
         try {
             if (closed) return;
+            status("STARTING", "Inspecting installed APK and hotspot interfaces");
             String source = context.getApplicationInfo().sourceDir;
             String[] splits = context.getApplicationInfo().splitSourceDirs;
             if (source == null || (splits != null && splits.length > 0)) {
                 Log.w(LOG, "Split/unknown APK cannot be shared as a single update");
+                status("UNAVAILABLE", "Split or unknown APK package");
                 return;
             }
             File apk = new File(source);
@@ -94,10 +127,15 @@ final class LanUpdateServer {
                 context.getPackageName(), version, size, hash(apk));
             if (closed) return;
 
-            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             int bound = 0;
-            while (!closed && interfaces != null && interfaces.hasMoreElements() &&
-                    bound < 8) {
+            /* Android hotspots can bring up their IPv4 address slightly
+             * after the game activity starts. v23-v30 scanned only once
+             * and stayed unavailable for the whole match. Retry for a
+             * bounded period, never open a wildcard or cellular socket. */
+            for (int attempt = 0; !closed && attempt < 6 && bound == 0; attempt++) {
+              Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+              while (!closed && interfaces != null && interfaces.hasMoreElements() &&
+                      bound < 8) {
                 NetworkInterface nic = interfaces.nextElement();
                 if (!LanUpdateProtocol.lanInterface(nic.getName()) ||
                     nic.isLoopback() || !nic.isUp())
@@ -106,19 +144,24 @@ final class LanUpdateServer {
                     if (closed || bound >= 8) break;
                     if (!(address.getAddress() instanceof Inet4Address)) continue;
                     Inet4Address local = (Inet4Address) address.getAddress();
-                    int prefix = address.getNetworkPrefixLength();
-                    if (prefix < 16 || prefix > 30 ||
+                    int prefix = LanUpdateProtocol.usableHostPrefix(
+                        nic.getName(), address.getNetworkPrefixLength());
+                    if (prefix < 0 ||
                         LanUpdateProtocol.privateAddress(local.getHostAddress()) == null)
                         continue;
                     try {
                         ServerSocket listener = new ServerSocket(LanUpdateProtocol.PORT,
-                            4, local);
+                            8, local);
                         listeners.add(listener);
                         if (closed) {
                             listener.close();
                             return;
                         }
                         bound++;
+                        if (bound == 1)
+                            status("READY", "Listening on " +
+                                local.getHostAddress() + ":" + LanUpdateProtocol.PORT +
+                                " (interface " + nic.getName() + ", prefix /" + prefix + ")");
                         Log.i(LOG, "LAN updates available on " + local.getHostAddress()
                             + ":" + LanUpdateProtocol.PORT);
                         Thread worker = new Thread(
@@ -130,11 +173,22 @@ final class LanUpdateServer {
                         Log.w(LOG, "Couldn't bind LAN update interface: " + bindError);
                     }
                 }
+              }
+              if (bound == 0 && !closed && attempt < 5)
+                  Thread.sleep(900);
             }
-            if (bound == 0)
+            if (bound == 0 && !closed) {
+                status("UNAVAILABLE", "No eligible private hotspot/Wi-Fi address or port 5162");
                 Log.w(LOG, "LAN APK share unavailable: no eligible Wi-Fi/hotspot interface");
+            }
+        } catch (InterruptedException stopped) {
+            Thread.currentThread().interrupt();
         } catch (Exception problem) {
-            Log.w(LOG, "LAN APK share unavailable", problem);
+            if (!closed) {
+                status("UNAVAILABLE", "Startup error: " +
+                    problem.getClass().getSimpleName());
+                Log.w(LOG, "LAN APK share unavailable", problem);
+            }
         }
     }
 
@@ -158,7 +212,7 @@ final class LanUpdateServer {
                     });
                 } catch (java.util.concurrent.RejectedExecutionException busy) {
                     connections.remove(incoming);
-                    incoming.close();
+                    LanUpdateSocket.busy(incoming);
                 }
             } catch (IOException failure) {
                 if (!closed)
@@ -170,6 +224,7 @@ final class LanUpdateServer {
 
     void stop() {
         closed = true;
+        status("STOPPED", "Halo host game closed or stopped sharing");
         synchronized (listeners) {
             for (ServerSocket listener : listeners) {
                 try { listener.close(); } catch (IOException ignored) { }

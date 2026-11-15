@@ -63,15 +63,20 @@ final class LanUpdateSocket {
 
         Socket socket = new Socket();
         try {
-            socket.connect(new InetSocketAddress(host, LanUpdateProtocol.PORT), 1500);
-            socket.setSoTimeout(6500);
+            socket.connect(new InetSocketAddress(host, LanUpdateProtocol.PORT), 2500);
+            socket.setSoTimeout(8000);
             OutputStream writer = socket.getOutputStream();
             writer.write(("GET " + path + " HTTP/1.0\r\nHost: " + host +
                 "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
             writer.flush();
 
             InputStream input = new BufferedInputStream(socket.getInputStream(), 65536);
-            if (!"HTTP/1.0 200 OK".equals(line(input, 128)))
+            String status = line(input, 128);
+            if ("HTTP/1.0 403 Forbidden".equals(status))
+                throw new IOException("Halo hotspot subnet rejected this phone");
+            if ("HTTP/1.0 503 Service Unavailable".equals(status))
+                throw new IOException("Halo update host is busy");
+            if (!"HTTP/1.0 200 OK".equals(status))
                 throw new IOException("Halo update host refused the request");
             long length = -1;
             int lines = 0;
@@ -179,12 +184,23 @@ final class LanUpdateSocket {
     private static void headers(OutputStream out, int code, String type, long size)
             throws IOException {
         String reason = code == 200 ? "OK" : code == 403 ? "Forbidden" :
-            code == 404 ? "Not Found" : "Bad Request";
+            code == 404 ? "Not Found" : code == 503 ? "Service Unavailable" :
+            "Bad Request";
         out.write(("HTTP/1.0 " + code + " " + reason + "\r\n" +
             "Content-Type: " + type + "\r\n" +
             "Content-Length: " + size + "\r\n" +
             "Cache-Control: no-store\r\nConnection: close\r\n\r\n")
             .getBytes(StandardCharsets.US_ASCII));
+    }
+
+    /** A busy server sends a small, fixed 503 response rather than
+     * silently resetting sockets. No APK bytes or user data are included. */
+    static void busy(Socket socket) {
+        try (Socket connection = socket) {
+            OutputStream out = connection.getOutputStream();
+            headers(out, 503, "text/plain", 0);
+            out.flush();
+        } catch (IOException ignored) { }
     }
 
     /** One bounded request, two fixed GET routes, no user-named files. The

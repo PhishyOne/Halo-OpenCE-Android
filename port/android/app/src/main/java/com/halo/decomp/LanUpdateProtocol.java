@@ -91,6 +91,52 @@ final class LanUpdateProtocol {
             n.startsWith("rndis") || n.startsWith("usb");
     }
 
+    /** Some Android hotspot implementations publish a /32 or no usable
+     * interface prefix even when their peers are a private /24 LAN.
+     * Bound to a local private IP and a recognized Wi-Fi/AP interface, a
+     * conservative /24 peer check allows those devices without exposing
+     * a wildcard internet-facing listener. Carrier/VPN and ordinary
+     * ethernet interfaces still fail closed on invalid prefixes. */
+    static int usableHostPrefix(String interfaceName, int prefix) {
+        if (!lanInterface(interfaceName))
+            return -1;
+        if (prefix >= 16 && prefix <= 30)
+            return prefix;
+        String name = interfaceName.toLowerCase(Locale.ROOT);
+        boolean hotspot = name.startsWith("ap") ||
+            name.startsWith("softap") || name.startsWith("swlan") ||
+            name.startsWith("wlan") || name.startsWith("br") ||
+            name.startsWith("rndis") || name.startsWith("usb");
+        return hotspot ? 24 : -1;
+    }
+
+    /** Manual guest diagnostics distinguish a host's unavailable update
+     * socket from a failed APK verifier, without exposing stack traces,
+     * credentials, or peer-supplied untrusted error text. */
+    static String connectionHelp(IOException cause) {
+        String title;
+        if ("Halo update host is busy".equals(cause.getMessage())) {
+            title = "The host is busy sending Halo updates to other players.";
+        } else if ("Halo hotspot subnet rejected this phone".equals(cause.getMessage())) {
+            title = "The host rejected this phone as outside its hotspot subnet.";
+        } else if (cause instanceof java.net.ConnectException) {
+            title = "The host's Halo update port is closed.";
+        } else if (cause instanceof java.net.SocketTimeoutException) {
+            title = "The host did not answer before the update check timed out.";
+        } else if (cause instanceof java.net.NoRouteToHostException) {
+            title = "This phone cannot reach the host's network address.";
+        } else {
+            title = "The host's update service did not return a valid response.";
+        }
+        return title + "\n\nOn the host phone: choose LAN → Host, enable " +
+            "'Share My Halo Version', and press Play. Leave the Halo game " +
+            "running while friends enter the HOST IP and check for the " +
+            "update. The update service uses TCP port 5162. " +
+            "If gameplay works but this still fails, save the Halo " +
+            "Diagnostic Report from the host launcher and check the " +
+            "'LAN update server' section. Do not uninstall Halo.";
+    }
+
     static boolean sameSubnet(byte[] local, byte[] peer, int prefix) {
         if (local == null || peer == null || local.length != 4 || peer.length != 4 ||
             prefix < 16 || prefix > 30 ||

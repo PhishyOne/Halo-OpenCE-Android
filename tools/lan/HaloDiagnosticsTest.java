@@ -40,10 +40,17 @@ public final class HaloDiagnosticsTest {
                 recent.append(i).append(" co-op: client spectating while host alive\n");
             Files.writeString(root.resolve("debug.txt"),recent.toString());
 
+            Files.writeString(root.resolve("lan-update-status.txt"),
+                "LAN update server: READY\n" +
+                "Details: Listening on 192.168.43.1:5162 (interface ap0)\n");
             ByteArrayOutputStream out=new ByteArrayOutputStream();
             HaloDiagnostics.write(root.toFile(),out);
             String report=out.toString(StandardCharsets.UTF_8);
             check(report.contains("sidewinder.map"),"Missing Xbox map inventory");
+            check(report.contains("## LAN update server"),"No hotspot status");
+            check(report.contains("LAN update server: READY"),"No bound listener state");
+            check(report.contains("Listening on [IP]:5162"),"Listener IP not redacted");
+            check(!report.contains("192.168.43.1"),"Hotspot address leaked");
             check(report.contains("gephyrophobia.map"),"Missing custom map inventory");
             check(report.contains("co-op: missing object"),"Missing relevant older co-op log");
             check(report.contains("dead_bipeds 158"),"Periodic corpse-performance record omitted");

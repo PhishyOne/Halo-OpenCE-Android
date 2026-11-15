@@ -137,6 +137,28 @@ final class HaloDiagnostics {
         }
         if (found == 0)
             report.append("(No qualifying log lines were found.)\n");
+        /* The host's update server writes a small bounded status snapshot
+         * in app storage. Android normally prevents Termux from reading
+         * another app's logs, so this user-approved export can tell us
+         * whether the listener ever bound to the hotspot. */
+        report.append("\n## LAN update server\n");
+        File lanStatus = safeRegular(root, "lan-update-status.txt");
+        if (lanStatus != null && lanStatus.length() > 0 &&
+            lanStatus.length() <= 2048) {
+            String state = Files.readString(lanStatus.toPath(), StandardCharsets.UTF_8);
+            String[] lines = state.split("\\r?\\n");
+            for (int i = 0; i < Math.min(lines.length, 8); i++) {
+                String line = lines[i].trim();
+                if (!line.isEmpty() && !PRIVATE_LINE.matcher(line).find()) {
+                    if (line.length() > MAX_LINE)
+                        line = line.substring(0, MAX_LINE);
+                    report.append(EMAIL.matcher(IP.matcher(line).replaceAll("[IP]"))
+                        .replaceAll("[email]")).append('\n');
+                }
+            }
+        } else {
+            report.append("(No LAN sharing status; host may never have started a share session.)\n");
+        }
         report.append("\nNo config.toml, credentials, or map contents included.\n");
         byte[] bytes = report.toString().getBytes(StandardCharsets.UTF_8);
         if (bytes.length > 128 * 1024)

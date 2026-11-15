@@ -561,9 +561,10 @@ public class LauncherActivity extends Activity {
             .getBoolean("lan_update_share", true));
         hudCheck(shareUpdates);
         hostPanel.addView(shareUpdates);
-        hostPanel.addView(lanText("Players with v23+ can check your version " +
-            "and download your installed APK over Wi-Fi. Android asks before installing. " +
-            "The game stays open while they download.", 11));
+        hostPanel.addView(lanText("The LAN updater starts after you press PLAY "
+            + "as Host. Leave Halo running in the lobby or match. Friends with "
+            + "v23+ can enter this phone's hotspot HOST IP and choose "
+            + "CHECK HOST UPDATE; Android asks before installing.", 11));
 
         final int[] lanBotCounts = LanConfig.choicesIncluding(
             settings.systemLinkBotCount);
@@ -625,12 +626,16 @@ public class LauncherActivity extends Activity {
                 feedback.setText("Close Halo before checking for an update.");
                 return;
             }
+            checkHostUpdate.setEnabled(false);
+            feedback.setText("Checking the host update service on TCP 5162...");
             LanUpdateClient.check(this, hostIp.getText().toString().trim(),
-                true, null, null);
+                true, null, () -> checkHostUpdate.setEnabled(true));
         });
         joinPanel.addView(checkHostUpdate);
-        joinPanel.addView(lanText("Halo also checks the host version before " +
-            "joining. The first v23 update must be installed manually once.", 11));
+        joinPanel.addView(lanText("Wait until the host has pressed PLAY in "
+            + "LAN → Host with sharing enabled. Joining the Wi-Fi alone "
+            + "does not start the updater. Halo also checks before joining. "
+            + "The first v23 update requires manual installation once.", 11));
         lanPanel.addView(joinPanel);
 
         Runnable updateRole = () -> {

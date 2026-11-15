@@ -52,8 +52,30 @@ final class LanUpdateClient {
         new Thread(() -> {
             LanUpdateProtocol.Manifest offer = null;
             IOException failure = null;
-            try { offer = LanUpdateSocket.fetchManifest(host); }
-            catch (IOException error) { failure = error; }
+            /* A host hotspot listener may appear shortly after game launch.
+             * Three bounded attempts for explicit Check, only one quick
+             * attempt for auto-Play so older hosts launch without delay. */
+            int attempts = manual ? 3 : 1;
+            for (int attempt = 0; attempt < attempts; attempt++) {
+                try {
+                    offer = LanUpdateSocket.fetchManifest(host);
+                    failure = null;
+                    break;
+                } catch (IOException error) {
+                    failure = error;
+                    if (!(error instanceof java.net.ConnectException ||
+                          error instanceof java.net.SocketTimeoutException ||
+                          error instanceof java.net.NoRouteToHostException ||
+                          "Halo update host is busy".equals(error.getMessage())) ||
+                        attempt + 1 >= attempts)
+                        break;
+                    try { Thread.sleep(450L * (attempt + 1)); }
+                    catch (InterruptedException canceled) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
             LanUpdateProtocol.Manifest found = offer;
             IOException exception = failure;
             activity.runOnUiThread(() -> {
@@ -64,9 +86,8 @@ final class LanUpdateClient {
                 if (exception != null) {
                     complete(reenablePlay);
                     if (manual) {
-                        message(activity, "Host update unavailable",
-                            "The host isn't offering a Halo LAN update. It may be " +
-                            "running an older build, not hosting, or unreachable.");
+                        message(activity, "Can't reach host updater",
+                            LanUpdateProtocol.connectionHelp(exception));
                     } else if (continuePlay != null) {
                         continuePlay.run(); // old peers still use normal network checks
                     }

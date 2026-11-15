@@ -105,8 +105,37 @@ public class HaloActivity extends SDLActivity {
         initializeRewardCallouts();
         // The existing public-release updater is separate from local LAN sharing.
         Updater.start(this);
-        if (getIntent() != null && getIntent().getBooleanExtra(LAN_UPDATE_HOST, false))
+        updateLanShare(getIntent());
+    }
+
+    /** Single-instance Android activities are reused after returning to
+     * the launcher. v23-v30 started the listener only in onCreate(), so a
+     * reused :game Activity could host matches with no update endpoint.
+     * Always synchronize with the *new* launch role, including disabling
+     * sharing when the next session is a join/ordinary game. */
+    @Override
+    public void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        /* The previous server may exist but have failed initial hotspot
+         * binding. Every explicit new LAN launch is a fresh opportunity
+         * to bind the currently active interface. */
+        if (lanUpdateServer != null) {
+            lanUpdateServer.stop();
+            lanUpdateServer = null;
+        }
+        updateLanShare(intent);
+    }
+
+    private void updateLanShare(Intent intent) {
+        boolean shouldShare = intent != null &&
+            intent.getBooleanExtra(LAN_UPDATE_HOST, false);
+        if (shouldShare && lanUpdateServer == null) {
             lanUpdateServer = LanUpdateServer.start(this);
+        } else if (!shouldShare && lanUpdateServer != null) {
+            lanUpdateServer.stop();
+            lanUpdateServer = null;
+        }
     }
 
     /** Load four *original* WAV callouts from the APK. Unlike Android TTS,
