@@ -145,7 +145,10 @@ final class HaloDiagnostics {
         File lanStatus = safeRegular(root, "lan-update-status.txt");
         if (lanStatus != null && lanStatus.length() > 0 &&
             lanStatus.length() <= 2048) {
-            String state = Files.readString(lanStatus.toPath(), StandardCharsets.UTF_8);
+            // Files.readString is absent from the Android SDK's java.nio
+            // API surface; readAllBytes is supported and bounded by 2 KiB.
+            String state = new String(Files.readAllBytes(lanStatus.toPath()),
+                StandardCharsets.UTF_8);
             String[] lines = state.split("\\r?\\n");
             for (int i = 0; i < Math.min(lines.length, 8); i++) {
                 String line = lines[i].trim();

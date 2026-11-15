@@ -143,6 +143,8 @@ class LanApkUpdateTests(unittest.TestCase):
         self.assertIn('## LAN update server', report)
         self.assertIn('IP.matcher(line)', report)
         self.assertIn('EMAIL.matcher(', report)
+        self.assertIn('Files.readAllBytes(lanStatus.toPath())', report)
+        self.assertNotIn('Files.readString(lanStatus.toPath()', report)
 
     def test_no_public_cleartext_exception_or_game_protocol_changes(self):
         source = WIRE.read_text()
