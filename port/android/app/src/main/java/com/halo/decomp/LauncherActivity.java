@@ -1529,7 +1529,9 @@ public class LauncherActivity extends Activity {
     private String beachAssaultResourceStatus() {
         if (dataRoot == null)
             return "Halo app storage is unavailable.";
-        File maps = new File(dataRoot, "maps");
+        // Imported Custom Edition maps and their resource archives live
+        // under custom_maps, not the stock Xbox maps directory.
+        File maps = new File(dataRoot, "custom_maps");
         File beach = new File(maps, "beach_assault.map");
         if (!beach.isFile())
             return "Beach Assault is not installed in Halo's map directory.";
