@@ -137,6 +137,7 @@ class GroundDriverTest(unittest.TestCase):
         b=src.index("private String customMapDisplayName(",a)
         check=src[a:b]
         for token in (
+            'new File(dataRoot, "custom_maps")',
             'new File(maps, "beach_assault.map")',
             '"bitmaps.map", "sounds.map", "loc.map"',
             'new File(maps, resource).isFile()',
