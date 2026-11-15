@@ -92,6 +92,18 @@ JDK=/mnt/nomatoka-terrain-scratch/halo-opence-android/toolchains/jdk/bin
   com.halo.decomp.LanConfigSmokeTest
 ```
 
+## CI reliability
+
+The v30 native guest and Android JNI libraries passed compilation in the
+first exact-head GitHub Actions build, but Gradle's Maven Central dependency
+resolution then received HTTP **429 Too Many Requests** on the shared
+runner. \`port/android/settings.gradle\` now prefers Google's published
+Maven Central mirror in both plugin and dependency resolution; Google Maven,
+the original Maven Central repository and Gradle Plugin Portal remain
+available. This is an upstream dependency-download workaround, not a
+change to Android source or signed-APK identity. Source checks ensure the
+mirror keeps the original repository fallback.
+
 The tests run the exact production seat filter, entry action and flip
 reservation against a fake world, plus the compiled steering policy,
 config role changes, unsafe tags and campaign preservation gates.

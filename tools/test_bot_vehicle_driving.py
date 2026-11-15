@@ -149,6 +149,17 @@ class GroundDriverTest(unittest.TestCase):
                           'Files.move(', 'rm -rf', 'new FileOutputStream('):
             self.assertNotIn(forbidden,check)
 
+    def test_ci_maven_mirror_has_canonical_fallback(self):
+        settings=(ROOT/"port/android/settings.gradle").read_text()
+        mirror='https://maven-central.storage-download.googleapis.com/maven2/'
+        # Two repository scopes: plugin classpath and app runtime dependencies.
+        self.assertEqual(settings.count(mirror),2)
+        self.assertEqual(settings.count("mavenCentral()"),2)
+        self.assertEqual(settings.count("google()"),2)
+        self.assertIn("gradlePluginPortal()",settings)
+        self.assertLess(settings.index(mirror),settings.index("mavenCentral()"))
+        self.assertNotIn("http://",settings)
+
     def test_toggle_is_explicit_off_by_default(self):
         launcher=LAUNCHER.read_text()
         config=CONFIG.read_text()
