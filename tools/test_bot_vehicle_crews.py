@@ -99,8 +99,13 @@ class CrewRegression(unittest.TestCase):
             (folder/"under_test_gun.inc").write_text(
                 function(BOTS,"bots_bot_ground_gun_engage"))
             fixture=ROOT/"tools/harness/tests/bot_vehicle_gun.c"
+            # Only one production function is extracted here. Other
+            # static helpers in the included policy header are used by
+            # bots.c, but intentionally unused by this single-function
+            # fixture. Preserve -Werror for all other warnings.
             compile=subprocess.run([cc,"-std=gnu99","-Wall","-Wextra",
-                "-Werror","-I",str(folder),"-I",str(HEADER.parent),
+                "-Werror","-Wno-unused-function",
+                "-I",str(folder),"-I",str(HEADER.parent),
                 str(fixture),"-lm","-o",str(folder/"test")],
                 capture_output=True,text=True)
             self.assertEqual(compile.returncode,0,compile.stderr)
