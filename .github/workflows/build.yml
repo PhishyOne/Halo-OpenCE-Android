@@ -196,6 +196,7 @@ jobs:
           python3 tools/test_all_multiplayer_modes.py -v
           python3 tools/test_bot_vehicle_flip.py
           python3 tools/test_bot_vehicle_driving.py -v
+          python3 tools/test_bot_vehicle_crews.py -v
           python3 tools/test_bot_garbage_policy.py -v
           python3 tools/test_lobby_bot_count.py -v
           python3 tools/test_lan_64_bot_capacity.py -v

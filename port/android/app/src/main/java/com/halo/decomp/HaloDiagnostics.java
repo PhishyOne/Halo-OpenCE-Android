@@ -28,7 +28,9 @@ final class HaloDiagnostics {
         + "network went down|objects:|bots: perf|bots: tick|"
         + "failed to load|host has local player|custom edition|"
         + "resource map|structure bsp|bsp:|bitmap:|texture:|"
-        + "shader:|gl error|rasterizer:)");
+        + "shader:|gl error|rasterizer:|"
+        + "bots: ground gunner|bots: driver |"
+        + "bots: bot [0-9]+ (seeking|entered) vehicle)");
     private static final Pattern PRIVATE_LINE = Pattern.compile(
         "(?i)(password|authorization|bearer|secret|token|credential|"
         + "hardware.id|session.key|invitation.key)");

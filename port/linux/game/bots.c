@@ -108,6 +108,7 @@ and each bot's kills and deaths; debug.bot_trace logs each bot's state.
 #include "bots_combat.h"
 #include "bots_objectives_policy.h"
 #include "bot_vehicle_driver_policy.h"
+#include "bot_vehicle_crew_policy.h"
 #include "bot_target_range_gate.h"
 
 #include <math.h>
@@ -2295,6 +2296,11 @@ static boolean bots_vehicle_pick(struct bots_bot *bot, long bot_unit_index,
     real_point3d best_ground;
     long best_surface = NONE;
     boolean best_driver = FALSE;
+    long virtual_slot = player_get(bot->player_index)->network_player_data.machine_index -
+        bots_first_machine();
+    boolean driver_candidate = config_boolean("bots.vehicle_driving") &&
+        virtual_slot >= 0 && virtual_slot < BOTS_MAXIMUM &&
+        virtual_slot % 5 == 0;
 
     object_iterator_new(&iterator, _object_mask_vehicle, 0);
     while (object_iterator_next(&iterator))
@@ -2304,6 +2310,23 @@ static boolean bots_vehicle_pick(struct bots_bot *bot, long bot_unit_index,
         short seat_index;
         real vehicle_distance;
         real speed_squared;
+        boolean friendly_human_driver = FALSE;
+        if (vehicle->unit.driver_object_index != NONE)
+        {
+            struct unit_datum *driver = unit_get(vehicle->unit.driver_object_index);
+            struct player_datum *driver_player = driver->unit.player_index == NONE ?
+                NULL : player_try_and_get(driver->unit.player_index);
+            if (driver_player)
+            {
+                /* A bot never helps an enemy team's human Warthog turret. */
+                if (game_engine_has_teams() &&
+                    bots_is_enemy(player_get(bot->player_index), driver_player))
+                    continue;
+                friendly_human_driver =
+                    driver_player->network_player_data.machine_index <
+                        bots_first_machine();
+            }
+        }
         if (bot->vehicle_ignore_index == iterator.index &&
             game_time_get() < bot->vehicle_ignore_until_tick)
             continue;
@@ -2313,8 +2336,7 @@ static boolean bots_vehicle_pick(struct bots_bot *bot, long bot_unit_index,
         speed_squared = vehicle->object.translational_velocity.i * vehicle->object.translational_velocity.i +
             vehicle->object.translational_velocity.j * vehicle->object.translational_velocity.j +
             vehicle->object.translational_velocity.k * vehicle->object.translational_velocity.k;
-        if (speed_squared > 0.02f * 0.02f ||
-            TEST_FLAG(vehicle->object.damage_flags, _object_dead_bit))
+        if (TEST_FLAG(vehicle->object.damage_flags, _object_dead_bit))
             continue;
         definition = unit_definition_get(vehicle->definition_index);
         for (seat_index = 0; seat_index < definition->unit.seats.count; seat_index++)
@@ -2330,14 +2352,18 @@ static boolean bots_vehicle_pick(struct bots_bot *bot, long bot_unit_index,
             seat = TAG_BLOCK_GET_ELEMENT(&definition->unit.seats, seat_index,
                 struct unit_seat);
             driver = TEST_FLAG(seat->flags, _unit_seat_driver_bit);
-            if (driver && (bots_vehicle_driver_claimed(bot, iterator.index) ||
-                           bots_vehicle_driver_limit_reached(bot)))
+            if (!bot_crew_seat_role_allowed(driver, gunner, driver_candidate) ||
+                !bot_crew_speed_safe(speed_squared, gunner,
+                    friendly_human_driver) ||
+                (driver && (bots_vehicle_driver_claimed(bot, iterator.index) ||
+                            bots_vehicle_driver_limit_reached(bot))))
                 continue;
             surface = bots_surface_below(&entrance, &ground);
             if (surface == NONE)
                 continue;
-            score = bots_distance3d(position, &entrance) +
-                (driver ? -3.0f : gunner ? 0.0f : 5.0f);
+            score = bot_crew_seat_score(
+                bots_distance3d(position, &entrance), driver, gunner,
+                friendly_human_driver);
             if (score < best_score)
             {
                 best_score = score;
@@ -2498,6 +2524,8 @@ static void bots_choose_goal(struct bots_bot *bot, long player_index, real_point
 		config_boolean("bots.vehicle_seats") &&
 		virtual_slot >= 0 && virtual_slot < BOTS_MAXIMUM &&
 		virtual_slot % 5 == 0;
+	boolean crew_candidate = bot_crew_objective_candidate(
+		virtual_slot, driver_candidate);
 	boolean objective;
 
 	/* One in five eligible bots may seek a driver seat before proceeding
@@ -2507,7 +2535,7 @@ static void bots_choose_goal(struct bots_bot *bot, long player_index, real_point
 		bots_vehicle_keep_goal(bot, player->unit_index))
 		return;
 	objective = bots_choose_objective_goal(bot, player_index);
-	if (objective && !driver_candidate)
+	if (objective && !crew_candidate)
 		return;
 	if (!driver_candidate && !fighting && bot->target_player_index != NONE &&
 		bot->target_last_surface_index != NONE &&
@@ -2536,7 +2564,9 @@ static void bots_choose_goal(struct bots_bot *bot, long player_index, real_point
 			if (bots_vehicle_keep_goal(bot, player_get(player_index)->unit_index))
 				return;
 		}
-		if (!fighting && now >= bot->next_vehicle_scan_tick)
+		/* A teammate may need a Warthog gunner even during a firefight.
+		 * Most bots still honor the actual CTF/King/Oddball/Race objective. */
+		if ((!fighting || crew_candidate) && now >= bot->next_vehicle_scan_tick)
 		{
 			bot->next_vehicle_scan_tick = now + TICKS_PER_SECOND * 3;
 			if (bots_vehicle_pick_flip(bot, position))
@@ -3613,6 +3643,82 @@ static void bots_bot_driver_control(struct bots_bot *bot, long bot_index,
     tick->action->primary_trigger = 0.0f;
 }
 
+/* A Scorpion or Ghost driver may also be the actual gunner. v30 set every
+ * driver trigger to zero, so a bot could steer a tank but never engage.
+ * Match the game's real driver/gunner ownership before emitting player
+ * gun controls; never take over a human gunner or invent a projectile.
+ * The engine transfers controls through UNIT_CONTROL_GUNNER_MASK and
+ * controls the weapon's cooldown, ammunition, damage and replication. */
+static void bots_bot_ground_gun_engage(struct bots_bot *bot,
+    struct bots_tick *tick, struct unit_datum *vehicle)
+{
+    char const *name;
+    struct player_datum *target;
+    struct object_datum *enemy;
+    real_point3d point;
+    real dx, dy, dz, horizontal, distance;
+    real desired_yaw, desired_pitch, heading;
+    long age;
+
+    if (!config_boolean("bots.vehicle_driving") ||
+        vehicle->unit.driver_object_index != tick->player->unit_index ||
+        vehicle->unit.gunner_object_index != tick->player->unit_index ||
+        TEST_FLAG(vehicle->object.damage_flags, _object_dead_bit) ||
+        vehicle->object.up.k < 0.4f)
+        return;
+    name = tag_get_name(vehicle->definition_index);
+    if (!name || (!strstr(name, "scorpion") && !strstr(name, "ghost")))
+        return;
+
+    /* The real Scorpion/ Ghost weapon is owned by the vehicle; the seated
+     * Spartan still sends the normal trigger and desired facing. */
+    tick->weapon_index = bots_current_weapon(vehicle);
+    if (tick->weapon_index == NONE)
+        return;
+    heading = (real)atan2(vehicle->object.forward.j, vehicle->object.forward.i);
+    bot->yaw = heading;
+    bot->pitch = 0.0f;
+    bots_bot_look(bot, tick);  /* Existing hostile-target and LOS checks. */
+    if (bot->target_player_index == NONE)
+        return;
+    target = player_try_and_get(bot->target_player_index);
+    if (!target || target->unit_index == NONE ||
+        !bots_is_enemy(tick->player, target))
+        return;
+    enemy = object_try_and_get(target->unit_index);
+    if (!enemy || TEST_FLAG(enemy->object.damage_flags, _object_dead_bit))
+        return;
+    age = tick->now - bot->target_seen_tick;
+    if (age < 0 || age > 4)
+        return;
+    point = enemy->object.bounding_sphere_center;
+    dx = point.x - vehicle->object.position.x;
+    dy = point.y - vehicle->object.position.y;
+    dz = point.z - vehicle->object.bounding_sphere_center.z;
+    horizontal = (real)sqrt(dx * dx + dy * dy);
+    distance = (real)sqrt(horizontal * horizontal + dz * dz);
+    desired_yaw = (real)atan2(dy, dx);
+    desired_pitch = (real)atan2(dz, MAX(horizontal, 0.1f));
+
+    /* Turn the vehicle's aiming vector toward a visible enemy, keeping
+     * the bounded ground-drive throttle. It can still manoeuvre if the
+     * shot is out of its narrow forward cone. */
+    if (distance >= 10.0f && distance <= 75.0f) {
+        tick->action->desired_facing.yaw = desired_yaw;
+        tick->action->desired_facing.pitch = desired_pitch;
+    }
+    if (!bot_crew_tank_fire_allowed(TRUE, TRUE, distance,
+            bots_angle_difference(desired_yaw, heading), desired_pitch, age) ||
+        tick->now < bot->burst_until_tick)
+        return;
+    tick->action->control_flags |= FLAG(_unit_control_weapon_primary_trigger_bit);
+    tick->action->primary_trigger = 1.0f;
+    bot->burst_until_tick = tick->now + TICKS_PER_SECOND;
+    platform_log("bots: ground gunner %ld engaging enemy %ld (range %.1f)",
+        (long)DATUM_INDEX_TO_ABSOLUTE_INDEX(bot->player_index),
+        (long)DATUM_INDEX_TO_ABSOLUTE_INDEX(bot->target_player_index), distance);
+}
+
 /* Existing gunners still use normal weapon controls; ground drivers use
  * bounded steering and throttle. Unarmed passengers remain passive. */
 static boolean bots_bot_vehicle_occupied(struct bots_bot *bot, long bot_index,
@@ -3636,7 +3742,10 @@ static boolean bots_bot_vehicle_occupied(struct bots_bot *bot, long bot_index,
     vehicle = (struct unit_datum *)object_try_and_get_and_verify_type(
         vehicle_index, _object_mask_vehicle);
     if (vehicle && vehicle->unit.driver_object_index == tick->player->unit_index)
+    {
         bots_bot_driver_control(bot, bot_index, tick, vehicle_index, vehicle);
+        bots_bot_ground_gun_engage(bot, tick, vehicle);
+    }
     else if (vehicle && unit_seat_is_gunner(vehicle_index,
             tick->unit->unit.parent_seat_index))
     {
