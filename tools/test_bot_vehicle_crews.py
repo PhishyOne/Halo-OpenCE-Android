@@ -114,6 +114,7 @@ class CrewRegression(unittest.TestCase):
             'bot_crew_objective_candidate(',
             'if (objective && !crew_candidate)',
             '(!fighting || crew_candidate) && now >= bot->next_vehicle_scan_tick',
+            '!fighting && bots_vehicle_pick_flip(bot, position)',
             'bot_crew_speed_safe(speed_squared, gunner,',
             'bot_crew_seat_score(',
             'friendly_human_driver',

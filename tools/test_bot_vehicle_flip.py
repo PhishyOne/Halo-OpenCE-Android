@@ -94,7 +94,8 @@ def main():
     update = function(SOURCE, "bots_bot_update")
     assert "bots_vehicle_pick_flip(bot, position)" in planner
     assert "bots_vehicle_keep_flip_goal(bot)" in planner
-    assert "!fighting && now >= bot->next_vehicle_scan_tick" in planner
+    assert "(!fighting || crew_candidate) && now >= bot->next_vehicle_scan_tick" in planner
+    assert "!fighting && bots_vehicle_pick_flip(bot, position)" in planner
     assert "bot->goal_kind == _bots_goal_vehicle_flip" in update
     assert "bots_bot_vehicle_action(bot, &tick)" in update
 

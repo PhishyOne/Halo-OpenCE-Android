@@ -2569,7 +2569,10 @@ static void bots_choose_goal(struct bots_bot *bot, long player_index, real_point
 		if ((!fighting || crew_candidate) && now >= bot->next_vehicle_scan_tick)
 		{
 			bot->next_vehicle_scan_tick = now + TICKS_PER_SECOND * 3;
-			if (bots_vehicle_pick_flip(bot, position))
+			/* Vehicle flipping remains an out-of-combat job. An objective
+			 * gunner candidate may board during a firefight, but must not
+			 * abandon it to chase an overturned Warthog. */
+			if (!fighting && bots_vehicle_pick_flip(bot, position))
 				return;
 			if (bots_vehicle_pick(bot, player_get(player_index)->unit_index, position))
 				return;
