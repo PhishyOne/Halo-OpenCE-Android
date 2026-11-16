@@ -238,7 +238,11 @@ jobs:
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.CustomMapPackTest
           javac -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/OfflineBotConfig.java tools/lan/OfflineBotConfigTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.OfflineBotConfigTest
-          javac -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/HaloDiagnostics.java tools/lan/HaloDiagnosticsTest.java
+          # Validate actual CE map resource references with strict bounds,
+          # using the pure-Java production diagnostic (no game assets needed).
+          javac -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/CeResourceAudit.java tools/lan/CeResourceAuditTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.CeResourceAuditTest
+          javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/HaloDiagnostics.java tools/lan/HaloDiagnosticsTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.HaloDiagnosticsTest
           javac -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/CommanderConfig.java tools/lan/CommanderConfigTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.CommanderConfigTest

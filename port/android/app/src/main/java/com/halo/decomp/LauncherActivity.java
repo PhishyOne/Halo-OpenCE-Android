@@ -600,6 +600,10 @@ public class LauncherActivity extends Activity {
             + "Scorpions. They steer through Halo's normal vehicle physics, "
             + "slow on bends and reverse if stuck. Not Banshees yet. "
             + "Turn this off for ordinary infantry games.", 11));
+        hostPanel.addView(lanText("Want Banshees or other map vehicles "
+            + "on Blood Gulch? In Halo's GAME TYPE settings choose "
+            + "VEHICLES → PC (not Default). This allows vehicles the "
+            + "map actually contains; it won't create absent ones.", 11));
         hostPanel.addView(lanText("Vehicle crews are automatic. "
             + "Bots pursue flags in CTF, hills in King, and balls in Oddball. "
             + "Race bots follow checkpoints; vehicle-driving AI is "
@@ -977,8 +981,20 @@ public class LauncherActivity extends Activity {
         Button checkBeachResources = new Button(this);
         checkBeachResources.setText("CHECK BEACH ASSAULT RESOURCES");
         hudButton(checkBeachResources, false);
-        checkBeachResources.setOnClickListener(view ->
-            customMapStatus.setText(beachAssaultResourceStatus()));
+        checkBeachResources.setOnClickListener(view -> {
+            // The audit checks up to 65K tag instances and resource indexes.
+            // Keep it off the UI thread and never modify imported maps.
+            checkBeachResources.setEnabled(false);
+            customMapStatus.setText("Checking installed Beach Assault resource tags...");
+            new Thread(() -> {
+                final String result = beachAssaultResourceStatus();
+                handler.post(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    customMapStatus.setText(result);
+                    checkBeachResources.setEnabled(true);
+                });
+            }, "Halo-Beach-Assault-audit").start();
+        });
         customMapsPanel.addView(checkBeachResources);
 
         // Campaign progress is in save/u and save/z under app-owned storage.
@@ -1527,29 +1543,7 @@ public class LauncherActivity extends Activity {
      * references all three standard external resource maps. The user must
      * import their own legitimate CE resources if any are absent. */
     private String beachAssaultResourceStatus() {
-        if (dataRoot == null)
-            return "Halo app storage is unavailable.";
-        // Imported Custom Edition maps and their resource archives live
-        // under custom_maps, not the stock Xbox maps directory.
-        File maps = new File(dataRoot, "custom_maps");
-        File beach = new File(maps, "beach_assault.map");
-        if (!beach.isFile())
-            return "Beach Assault is not installed in Halo's map directory.";
-        StringBuilder missing = new StringBuilder();
-        for (String resource : new String[] {
-                "bitmaps.map", "sounds.map", "loc.map" }) {
-            if (!new File(maps, resource).isFile()) {
-                if (missing.length() != 0) missing.append(", ");
-                missing.append(resource);
-            }
-        }
-        if (missing.length() != 0)
-            return "Beach Assault references Custom Edition resources. Missing: " +
-                missing + ". Import the matching files via Custom Maps; " +
-                "don't remove the current map or campaign saves.";
-        return "All three external CE resource files exist. If Beach Assault " +
-            "still draws blue, export Halo Diagnostics after reproducing it. " +
-            "Resource compatibility or rendering still needs investigation.";
+        return CeResourceAudit.beachReport(dataRoot);
     }
 
     /** The display name is only used after it passes CustomMapImporter's

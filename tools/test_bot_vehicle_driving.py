@@ -15,6 +15,7 @@ ROOT=Path(__file__).resolve().parents[1]
 POLICY=ROOT/"port/linux/game/bot_vehicle_driver_policy.h"
 GAME=ROOT/"port/linux/game/bots.c"
 LAUNCHER=ROOT/"port/android/app/src/main/java/com/halo/decomp/LauncherActivity.java"
+JAVA=LAUNCHER.parent
 CONFIG=ROOT/"port/android/app/src/main/java/com/halo/decomp/LanConfig.java"
 
 TEST=r"""
@@ -136,16 +137,24 @@ class GroundDriverTest(unittest.TestCase):
         a=src.index("private String beachAssaultResourceStatus()")
         b=src.index("private String customMapDisplayName(",a)
         check=src[a:b]
+        audit = (JAVA / "CeResourceAudit.java").read_text()
         for token in (
-            'new File(dataRoot, "custom_maps")',
-            'new File(maps, "beach_assault.map")',
-            '"bitmaps.map", "sounds.map", "loc.map"',
-            'new File(maps, resource).isFile()',
             '"CHECK BEACH ASSAULT RESOURCES"',
             'beachAssaultResourceStatus()',
-            'export Halo Diagnostics after reproducing it',
+            'CeResourceAudit.beachReport(dataRoot)',
+            'new Thread(() ->',
+            '"Halo-Beach-Assault-audit"',
         ):
-            self.assertIn(token,src)
+            self.assertIn(token, src)
+        for token in (
+            'new File(appRoot, "custom_maps")',
+            '"beach_assault.map"',
+            '"bitmaps.map", "sounds.map", "loc.map"',
+            'ref.index < entryNames.length',
+            'soundNames.contains(ref.name)',
+            'External resource references match installed files',
+        ):
+            self.assertIn(token, audit)
         for forbidden in ('Files.delete(', 'deleteRecursively(',
                           'Files.move(', 'rm -rf', 'new FileOutputStream('):
             self.assertNotIn(forbidden,check)

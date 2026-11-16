@@ -52,6 +52,10 @@ public final class HaloDiagnosticsTest {
             check(report.contains("Listening on [IP]:5162"),"Listener IP not redacted");
             check(!report.contains("192.168.43.1"),"Hotspot address leaked");
             check(report.contains("gephyrophobia.map"),"Missing custom map inventory");
+            check(report.contains("## Beach Assault installed resource compatibility"),
+                "No CE compatibility diagnosis section");
+            check(report.contains("beach_assault.map is missing or invalid"),
+                "Absent Beach Assault should be reported, not invented");
             check(report.contains("co-op: missing object"),"Missing relevant older co-op log");
             check(report.contains("dead_bipeds 158"),"Periodic corpse-performance record omitted");
             check(report.contains("[IP]"),"IP address not redacted");
