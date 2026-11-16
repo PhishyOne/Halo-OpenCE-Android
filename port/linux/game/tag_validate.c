@@ -1498,8 +1498,8 @@ static boolean validate_tag_table(
 		}
 		/* (a group's parents are what the game asks a tag's group by
 		(tag_get): they are the group's, not the map's) */
-		parent_group_tags[0] = group ? group->parent_group_tags[0] : NONE;
-		parent_group_tags[1] = group ? group->parent_group_tags[1] : NONE;
+		parent_group_tags[0] = group ? group->parent_group_tags[0] : (unsigned long)NONE;
+		parent_group_tags[1] = group ? group->parent_group_tags[1] : (unsigned long)NONE;
 		if (instance->parent_group_tags[0] != parent_group_tags[0] ||
 			instance->parent_group_tags[1] != parent_group_tags[1])
 		{
