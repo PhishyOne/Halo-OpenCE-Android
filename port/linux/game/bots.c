@@ -1660,6 +1660,18 @@ static boolean bots_line_of_sight(long unit_index, real_point3d const *eye, real
 {
 	struct collision_result collision;
 	real_vector3d vector;
+	struct object_datum *shooter = object_try_and_get(unit_index);
+	long ignore_object_index = unit_index;
+
+	/* port: a gunner's head may sit inside its own tank/Warthog collision
+	 * hull. object_test_vector excludes only the supplied object subtree,
+	 * not the ignored Spartan's parent. Ignore the verified parent vehicle
+	 * instead, then still trace all walls and other vehicles normally.
+	 * Never accept a self-hull hit as visibility without a new ray. */
+	if (shooter && shooter->object.parent_object_index != NONE &&
+		object_try_and_get_and_verify_type(shooter->object.parent_object_index,
+			_object_mask_vehicle))
+		ignore_object_index = shooter->object.parent_object_index;
 
 	vector.i = point->x - eye->x;
 	vector.j = point->y - eye->y;
@@ -1671,7 +1683,7 @@ static boolean bots_line_of_sight(long unit_index, real_point3d const *eye, real
 		long parent = target_unit_index == NONE ? NONE :
 			object_get(target_unit_index)->object.parent_object_index;
 		boolean blocked = collision_test_vector(_collision_test_for_line_of_sight_flags,
-			eye, &vector, unit_index, &collision);
+			eye, &vector, ignore_object_index, &collision);
 		boolean visible = !blocked || (collision.type == _collision_result_object &&
 			(collision.object_index == target_unit_index ||
 			 (parent != NONE && collision.object_index == parent)));

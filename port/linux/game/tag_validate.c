@@ -26,6 +26,10 @@ walked once through its group's schema:
 A map is refused if any pointer is wrong; anything else is corrected and
 logged, and the map plays.
 
+Port: Custom Edition vehicle/weapon handles can alias an identical complete
+root of the same concrete group. Their canonical schema tree is checked
+once; partial root overlaps and arbitrary nested overlaps remain forbidden.
+
 The validator is the game's only reader of a map that is not the game's own
 data (a map made by other tools, downloaded, or converted from another
 format): it reads nothing but the tags it is given, so tools/map_validate.c
@@ -1309,7 +1313,6 @@ long tag_validate_custom_edition_infer_groups(
 	char instance_text[5];
 
 	validation_begin(&validation, tag_header, loaded_size, tag_cache_size, TRUE, map_name);
-	tag_validate_report(message);
 	if (!schemas_fit() || tag_cache_size > TAG_VALIDATE_MAXIMUM_TAG_CACHE_SIZE ||
 		loaded_size < (long)sizeof(*header) || (unsigned long)loaded_size > tag_cache_size ||
 		header->signature != TAG_HEADER_SIGNATURE ||
@@ -1322,6 +1325,8 @@ long tag_validate_custom_edition_infer_groups(
 	context.address = (unsigned long)tag_header;
 	context.size = (unsigned long)loaded_size;
 	memset(tag_validate_walked, 0, sizeof(tag_validate_walked));
+	/* port: per-map counters and formatted-only logging; never log stack bytes. */
+	memset(&tag_validate_inference, 0, sizeof(tag_validate_inference));
 	tag_validate_inference.budget = MAXIMUM_INFERENCE_ELEMENTS;
 	long pending_index;
 	long pending_applied = 0;
@@ -1345,9 +1350,7 @@ long tag_validate_custom_edition_infer_groups(
 		pending_applied++;
 	}
 	tag_validate_pending_groups.count = 0;
-	tag_validate_inference.regrouped += pending_applied;
-	tag_validate_report(message);
-	tag_validate_inference.regrouped = 0;
+	tag_validate_inference.regrouped = pending_applied;
 	do
 	{
 		walked_any = FALSE;
@@ -1400,7 +1403,6 @@ void tag_validate_custom_edition_note_structure_bsp(
 	struct tag_schema_group const *group;
 	unsigned long root_address;
 	byte *root;
-	char message[MAXIMUM_MESSAGE_LENGTH];
 
 	if (bsp_index == 0)
 		tag_validate_pending_groups.count = 0;
@@ -1432,7 +1434,6 @@ void tag_validate_custom_edition_note_structure_bsp(
 	tag_validate_inference_defer = TRUE;
 	infer_walk(&context, root, group->definition, 0);
 	tag_validate_inference_defer = FALSE;
-	tag_validate_report(message);
 
 	return;
 }
@@ -1448,6 +1449,33 @@ static boolean validate_tag_table(
 	long tag_count)
 {
 	long absolute_index;
+	long root_alias_count = 0;
+	long *root_owners = NULL;
+	byte *root_aliases = NULL;
+	unsigned long root_slots = 1;
+
+	/* port: some CE maps deliberately point several vehicle/weapon tag
+	 * handles at one complete definition (Beach Assault does both). Equal
+	 * starts and equal concrete groups mean the same schema, so validate
+	 * that entire tree once. Never accept a partial overlap, a different
+	 * schema at the same address, or shared arbitrary nested blocks.
+	 * The temporary index is bounded by the already-checked tag count. */
+	if (tag_validate_globals.custom_edition)
+	{
+		while (root_slots < (unsigned long)tag_count * 2)
+			root_slots <<= 1;
+		/* cseries malloc/free are a matched pair of the game's allocator.
+		 * One temporary allocation includes the alias flags (under 576 KiB
+		 * at the maximum 65535 tags); no permanent Android memory cost. */
+		root_owners = malloc(root_slots * sizeof(*root_owners) + (unsigned long)tag_count);
+		if (!root_owners)
+		{
+			tag_validate_refuse(validation, "cannot allocate the bounded tag root index");
+			return FALSE;
+		}
+		memset(root_owners, 0, root_slots * sizeof(*root_owners) + (unsigned long)tag_count);
+		root_aliases = (byte *)(root_owners + root_slots);
+	}
 
 	/* the tag table: each tag's index, name, groups and root */
 	for (absolute_index = 0; absolute_index < tag_count && !validation->refused; absolute_index++)
@@ -1495,21 +1523,57 @@ static boolean validate_tag_table(
 			tag_validate_correct(validation, "has no data");
 			continue;
 		}
-		if (group && group->definition &&
-			(!region_contains(validation, instance->base_address, group->definition->size) ||
-				!claim(instance->base_address, group->definition->size)))
+		if (group && group->definition)
 		{
-			tag_validate_refuse(validation, "has its data at %08lx, outside the tags or overlapping another's",
-				(unsigned long)instance->base_address);
-			break;
+			unsigned long owner_slot = 0;
+			if (!region_contains(validation, instance->base_address, group->definition->size))
+			{
+				tag_validate_refuse(validation, "has its data at %08lx, outside the tags",
+					(unsigned long)instance->base_address);
+				break;
+			}
+			if (root_owners)
+			{
+				/* Validated addresses are within the bounded tag-data region.
+				 * The table is at most half full; each probe has an empty slot. */
+				owner_slot = (((unsigned long)instance->base_address -
+					(unsigned long)validation->region) >> 2) & (root_slots - 1);
+				while (root_owners[owner_slot] &&
+					instances[root_owners[owner_slot] - 1].base_address != instance->base_address)
+					owner_slot = (owner_slot + 1) & (root_slots - 1);
+				if (root_owners[owner_slot])
+				{
+					struct tag_validate_instance *owner = &instances[root_owners[owner_slot] - 1];
+					if (owner->group_tag != instance->group_tag ||
+						(instance->group_tag != 'vehi' && instance->group_tag != 'weap'))
+					{
+						tag_validate_refuse(validation, "shares root %08lx with an incompatible tag",
+							(unsigned long)instance->base_address);
+						break;
+					}
+					root_aliases[absolute_index] = TRUE;
+					root_alias_count++;
+					continue;
+				}
+			}
+			if (!claim(instance->base_address, group->definition->size))
+			{
+				tag_validate_refuse(validation, "has its data at %08lx, outside the tags or overlapping another's",
+					(unsigned long)instance->base_address);
+				break;
+			}
+			if (root_owners)
+				root_owners[owner_slot] = absolute_index + 1;
 		}
 	}
 
 	/* every tag through its schema, then every tag's checks */
 	for (absolute_index = 0; absolute_index < tag_count && !validation->refused; absolute_index++)
-		validate_instance(validation, &instances[absolute_index], _pass_values);
+		if (!root_aliases || !root_aliases[absolute_index])
+			validate_instance(validation, &instances[absolute_index], _pass_values);
 	for (absolute_index = 0; absolute_index < tag_count && !validation->refused; absolute_index++)
-		validate_instance(validation, &instances[absolute_index], _pass_checks);
+		if (!root_aliases || !root_aliases[absolute_index])
+			validate_instance(validation, &instances[absolute_index], _pass_checks);
 
 	/* each tag's name, now that every root, block and data is claimed: a
 	name in any of their bytes could lose its terminator to what is written
@@ -1532,7 +1596,19 @@ static boolean validate_tag_table(
 		}
 	}
 
+	/* An alias is not a correction to stored data: repeated validation
+	 * must remain clean and idempotent. Report only a bounded summary. */
+	if (!validation->refused && root_alias_count)
+	{
+		char message[MAXIMUM_MESSAGE_LENGTH];
+		snprintf(message, sizeof(message),
+			"custom edition: '%s' has %ld complete same-group vehicle/weapon aliases; validated canonical trees once",
+			tag_validate_globals.map_name, root_alias_count);
+		tag_validate_report(message);
+	}
 	tag_validate_globals.corrections = validation->corrections;
+	if (root_owners)
+		free(root_owners);
 
 	return !validation->refused;
 }

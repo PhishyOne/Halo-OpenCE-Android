@@ -137,6 +137,8 @@ struct tag_validate_file_range
 };
 unsigned char tag_validate_custom_edition_tags(void *tag_header, long loaded_size, unsigned long tag_cache_size,
 	struct tag_validate_file_range const *file_ranges, short file_range_count, char const *map_name);
+long tag_validate_custom_edition_infer_groups(void *tag_header, long loaded_size,
+	unsigned long tag_cache_size, char const *map_name);
 
 static int quiet;
 /* (fuzzing: each bsp is checked twice, and whether a second check of one
@@ -194,6 +196,25 @@ char *csstrcat(char *s1, char const *s2)
 long csstrcmp(char const *s1, char const *s2)
 {
 	return strcmp(s1, s2);
+}
+
+/* port: standalone equivalents of the game's matched temporary allocator.
+ * The validator uses these for its bounded Custom Edition root index. */
+void *debug_malloc(unsigned int size, unsigned char clear, char const *file, long line)
+{
+	void *memory = malloc(size);
+	(void)file;
+	(void)line;
+	if (memory && clear)
+		memset(memory, 0, size);
+	return memory;
+}
+
+void debug_free(void *memory, char const *file, long line)
+{
+	(void)file;
+	(void)line;
+	free(memory);
 }
 
 /* ---------- code */
@@ -678,6 +699,9 @@ static int custom_edition_check(struct memory_file *map, struct custom_edition_r
 		return 1;
 	}
 	*loaded_bytes = report.tag_data_bytes + report.resource_tag_bytes;
+	/* port: match the game's protected-map group inference before conversion. */
+	tag_validate_custom_edition_infer_groups(tag_cache, (long)*loaded_bytes,
+		report.tag_cache_bytes, name);
 	custom_edition_cache_combine_resource_offsets(tag_cache, *loaded_bytes, CUSTOM_EDITION_BITMAPS_OFFSET,
 		CUSTOM_EDITION_SOUNDS_OFFSET);
 	status = custom_edition_cache_convert(tag_cache, *loaded_bytes, report.identity.name, &conversion);
