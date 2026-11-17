@@ -21,6 +21,7 @@ import java.util.zip.ZipInputStream;
  */
 final class CustomMapPack {
     static final int MAX_ENTRIES = 32;
+    static final int MAX_ZIP_ENTRIES = 64; // includes empty directory records
     static final long MAX_TOTAL_BYTES = 600L * 1024 * 1024;
 
     static final class Result {
@@ -95,15 +96,25 @@ final class CustomMapPack {
             throws IOException {
         if (input == null)
             throw new IOException("No ZIP map pack was supplied.");
-        int count = 0;
+        int count = 0, entries = 0;
         long total = 0;
         Set<String> names = new HashSet<>();
 
         try (ZipInputStream zip = new ZipInputStream(input)) {
             ZipEntry entry;
             while ((entry = zip.getNextEntry()) != null) {
+                if (++entries > MAX_ZIP_ENTRIES)
+                    throw new IOException("ZIP contains more than 64 entries.");
                 if (entry.isDirectory()) {
-                    zip.closeEntry();
+                    // A directory can carry compressed data. closeEntry()
+                    // drains it, so prove it is empty with at most one byte
+                    // of output first, even when the size is unknown.
+                    String folder = entry.getName();
+                    if (!folder.matches("[A-Za-z0-9][A-Za-z0-9_-]{0,63}/"))
+                        throw new IOException("Unsafe ZIP directory name.");
+                    if (entry.getSize() > 0 || zip.read() != -1)
+                        throw new IOException("ZIP directory contains data.");
+                    zip.closeEntry(); // EOF already checked, including CRC
                     continue;
                 }
                 if (count >= MAX_ENTRIES)

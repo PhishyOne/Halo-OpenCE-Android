@@ -43,8 +43,31 @@ static void *data_iterator_next(struct data_iterator *it) {
     it->datum_index=it->position;
     return &players[it->position++];
 }
-static long game_time_get(void) { return 600; }
-static long game_engine_did_player_win(long index) { return index == 0; }
+struct career_result {
+    struct game_statistics statistics;
+    long humans, bots, best_streak, won, end_tick;
+    int moment_count;
+    struct halo_highlight_event moments[3];
+};
+static struct career_result snapshot;
+static int frozen;
+static int network_game_distributed_client(void) { return 0; }
+static void career_results_finish(long mode) {
+    (void)mode;
+    if (frozen) return;
+    snapshot.statistics = players[0].statistics;
+    snapshot.won = 1; snapshot.end_tick = 600;
+    frozen = 1;
+}
+static struct career_result *career_results_get(long index, long mode) {
+    (void)mode; return index == 0 && frozen ? &snapshot : NULL;
+}
+static void observed_kill(short slot, int bot, long streak) {
+    (void)slot;
+    if (bot) snapshot.bots++; else snapshot.humans++;
+    if (streak > snapshot.best_streak) snapshot.best_streak = streak;
+}
+static void reset_snapshot(void) { memset(&snapshot, 0, sizeof(snapshot)); frozen = 0; }
 static char const *test_root;
 static char const *platform_data_root(void) { return test_root; }
 static void platform_log(char const *msg) { (void)msg; }
@@ -71,24 +94,24 @@ int main(int argc, char **argv) {
     players[0].statistics.kills[0]=3;
     players[0].statistics.assists[0]=1;
     players[0].statistics.deaths=2;
-    career_record_start();
-    career_record_kill(0,1,1);
-    career_record_kill(0,0,2);
-    career_record_kill(0,0,3);
+    reset_snapshot(); career_record_start();
+    observed_kill(0,1,1);
+    observed_kill(0,0,2);
+    observed_kill(0,0,3);
     career_record_postgame(game_engine_slayer,"levels\\test\\bloodgulch");
     assert(count_records()==1);
     career_record_postgame(game_engine_slayer,"levels\\test\\bloodgulch");
     assert(count_records()==1); /* exactly one per real postgame */
-    career_record_start(); /* next match */
+    reset_snapshot(); career_record_start(); /* next match */
     players[0].statistics.kills[0]=2;
     players[0].statistics.multiplayer_statistics.ctf_statistics.flag_grabs=3;
     players[0].statistics.multiplayer_statistics.ctf_statistics.flag_scores=2;
     players[0].statistics.multiplayer_statistics.ctf_statistics.flag_returns=1;
-    career_record_kill(0,1,1);
+    observed_kill(0,1,1);
     career_record_postgame(game_engine_ctf,"levels/test/sidewinder");
     assert(count_records()==2);
 
-    career_record_start();
+    reset_snapshot(); career_record_start();
     players[0].statistics.kills[0]=4;
     players[0].statistics.multiplayer_statistics.oddball_statistics.time_with_the_ball=75;
     players[0].statistics.multiplayer_statistics.oddball_statistics.ball_carrier_kills=2;
@@ -96,7 +119,7 @@ int main(int argc, char **argv) {
     career_record_postgame(game_engine_oddball,"levels/test/icefields");
     assert(count_records()==3);
 
-    career_record_start();
+    reset_snapshot(); career_record_start();
     players[0].statistics.kills[0]=1;
     players[0].statistics.multiplayer_statistics.race_statistics.laps=2;
     players[0].statistics.multiplayer_statistics.race_statistics.best_lap_time=300;
@@ -104,7 +127,7 @@ int main(int argc, char **argv) {
     career_record_postgame(game_engine_race,"levels/test/raceway");
     assert(count_records()==4);
 
-    career_record_start();
+    reset_snapshot(); career_record_start();
     players[0].quit_out_of_game=1;
     career_record_postgame(game_engine_slayer,"excluded");
     assert(count_records()==4);

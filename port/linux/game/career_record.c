@@ -11,6 +11,8 @@
 #include "game/players.h"
 #include "memory/data.h"
 #include "career_record.h"
+#include "career_results.h"
+#include "networking/network_game_globals.h"
 #include "highlight_moments.h"
 /* The guest game build does not expose the platform layer's private
  * platform.h include directory. These are its two narrow entry points. */
@@ -25,31 +27,10 @@ extern void platform_log(const char *format, ...);
 
 enum { CAREER_MAX_BYTES = 2 * 1024 * 1024 };
 static int recorded;
-static long human_kills[MAXIMUM_LOCAL_PLAYERS];
-static long bot_kills[MAXIMUM_LOCAL_PLAYERS];
-static long longest_streak[MAXIMUM_LOCAL_PLAYERS];
-
 void career_record_start(void)
 {
     halo_highlights_start();
-    memset(human_kills, 0, sizeof(human_kills));
-    memset(bot_kills, 0, sizeof(bot_kills));
-    memset(longest_streak, 0, sizeof(longest_streak));
     recorded = 0;
-}
-
-void career_record_kill(short local_slot, int bot_victim, long current_streak)
-{
-    if (local_slot < 0 || local_slot >= MAXIMUM_LOCAL_PLAYERS || recorded)
-        return;
-    if (bot_victim)
-        bot_kills[local_slot]++;
-    else
-        human_kills[local_slot]++;
-    if (local_slot == 0)
-        halo_highlights_kill(bot_victim, current_streak, game_time_get());
-    if (current_streak > longest_streak[local_slot])
-        longest_streak[local_slot] = current_streak;
 }
 
 /* A random 128-bit match ID prevents double counting on re-import.
@@ -110,6 +91,7 @@ void career_record_postgame(long game_type, const char *map_name)
 {
     struct data_iterator iterator;
     struct player_datum *player;
+    const struct career_result *result;
     const char *root;
     char path[1024], id[33], map[48], line[480];
     FILE *ledger;
@@ -122,14 +104,18 @@ void career_record_postgame(long game_type, const char *map_name)
     if (recorded || game_type < game_engine_ctf ||
         game_type > game_engine_race)
         return;
+    /* A local/host game may enter postgame directly. Guests must wait for
+     * the host's receipt; no amount of waiting makes a mutable scoreboard
+     * into an authoritative final result. */
+    if (!network_game_distributed_client()) career_results_finish(game_type);
     data_iterator_new(&iterator, player_data);
     while ((player = (struct player_datum *)data_iterator_next(&iterator)) != NULL)
     {
         local_slot = player->local_player_index;
         if (local_slot != 0 || player->quit_out_of_game)
             continue; /* Android has one local controller; never save bots/guests. */
-        if (game_time_get() < 30)
-            return; /* a loading/lobby error is not a completed match */
+        result = career_results_get(iterator.datum_index, game_type);
+        if (!result) return; /* missing final receipt: never invent a result */
         if (!career_match_id(id, sizeof(id)))
             return;
         root = platform_data_root();
@@ -137,33 +123,32 @@ void career_record_postgame(long game_type, const char *map_name)
             snprintf(path, sizeof(path), "%s/%s", root,
                 "career-matches-v1.log") >= (int)sizeof(path))
             return;
-        total = career_nonnegative(player->statistics.kills[0]);
-        humans = human_kills[local_slot];
-        bots = bot_kills[local_slot];
-        /* If the guest did not receive kill-credit events consistently,
-         * preserve the scoreboard total but do NOT invent opponent types. */
+        total = career_nonnegative(result->statistics.kills[0]);
+        humans = result->humans;
+        bots = result->bots;
+        /* Preserve the host's total if its classification is unknown. */
         if (humans + bots != total)
             humans = bots = -1;
         if (game_type == game_engine_ctf) {
-            caps = career_nonnegative(player->statistics.multiplayer_statistics.ctf_statistics.flag_scores);
-            returns = career_nonnegative(player->statistics.multiplayer_statistics.ctf_statistics.flag_returns);
-            grabs = career_nonnegative(player->statistics.multiplayer_statistics.ctf_statistics.flag_grabs);
+            caps = career_nonnegative(result->statistics.multiplayer_statistics.ctf_statistics.flag_scores);
+            returns = career_nonnegative(result->statistics.multiplayer_statistics.ctf_statistics.flag_returns);
+            grabs = career_nonnegative(result->statistics.multiplayer_statistics.ctf_statistics.flag_grabs);
         }
         if (game_type == game_engine_king)
-            hill = career_nonnegative(player->statistics.multiplayer_statistics.king_statistics.time_on_hill);
+            hill = career_nonnegative(result->statistics.multiplayer_statistics.king_statistics.time_on_hill);
         if (game_type == game_engine_oddball) {
-            oddball_ticks = career_nonnegative(player->statistics.multiplayer_statistics.oddball_statistics.time_with_the_ball);
-            carrier_kills = career_nonnegative(player->statistics.multiplayer_statistics.oddball_statistics.ball_carrier_kills);
-            kills_as_carrier = career_nonnegative(player->statistics.multiplayer_statistics.oddball_statistics.kills_as_ball_carrier);
+            oddball_ticks = career_nonnegative(result->statistics.multiplayer_statistics.oddball_statistics.time_with_the_ball);
+            carrier_kills = career_nonnegative(result->statistics.multiplayer_statistics.oddball_statistics.ball_carrier_kills);
+            kills_as_carrier = career_nonnegative(result->statistics.multiplayer_statistics.oddball_statistics.kills_as_ball_carrier);
         }
         if (game_type == game_engine_race) {
-            laps = career_nonnegative(player->statistics.multiplayer_statistics.race_statistics.laps);
-            best_lap_ticks = career_nonnegative(player->statistics.multiplayer_statistics.race_statistics.best_lap_time);
-            last_lap_ticks = career_nonnegative(player->statistics.multiplayer_statistics.race_statistics.last_lap_time);
+            laps = career_nonnegative(result->statistics.multiplayer_statistics.race_statistics.laps);
+            best_lap_ticks = career_nonnegative(result->statistics.multiplayer_statistics.race_statistics.best_lap_time);
+            last_lap_ticks = career_nonnegative(result->statistics.multiplayer_statistics.race_statistics.last_lap_time);
         }
         career_map_token(map_name, map, sizeof(map));
-        won = game_engine_did_player_win(iterator.datum_index) == TRUE ? 1 : 0;
-        seconds = career_nonnegative(game_time_get() / 30);
+        won = result->won;
+        seconds = career_nonnegative(result->end_tick / 30);
         timestamp = (long)time(NULL);
         if (timestamp < 0) timestamp = 0;
 
@@ -176,12 +161,12 @@ void career_record_postgame(long game_type, const char *map_name)
             "%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld\n",
             id, timestamp, game_type, map,
             total, humans, bots,
-            career_nonnegative(player->statistics.deaths),
-            career_nonnegative(player->statistics.assists[0]), won, seconds,
-            career_nonnegative(longest_streak[local_slot]),
+            career_nonnegative(result->statistics.deaths),
+            career_nonnegative(result->statistics.assists[0]), won, seconds,
+            career_nonnegative(result->best_streak),
             caps, returns, hill,
-            career_nonnegative(player->statistics.suicides),
-            career_nonnegative(player->statistics.friendly_fire_kills),
+            career_nonnegative(result->statistics.suicides),
+            career_nonnegative(result->statistics.friendly_fire_kills),
             grabs, oddball_ticks, carrier_kills, kills_as_carrier,
             laps, best_lap_ticks, last_lap_ticks);
         if (size <= 0 || size >= (int)sizeof(line))
@@ -228,8 +213,11 @@ void career_record_postgame(long game_type, const char *map_name)
             /* Even failed/partial appends must not be replayed by this
              * process. The Java reader rejects incomplete lines. */
             recorded = 1;
-            if (synced && closed)
-                halo_highlights_finish(root, id, map, game_time_get(), (int)won);
+            if (synced && closed) {
+                halo_highlights_import(result->moments, result->moment_count);
+                /* The host already included victory in its selection. */
+                halo_highlights_finish(root, id, map, result->end_tick, 0);
+            }
             platform_log(synced && closed ?
                 "career: saved local postgame record" :
                 "career: postgame storage failed (no completed record)");

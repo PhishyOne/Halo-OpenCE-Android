@@ -165,8 +165,7 @@ class CrewRegression(unittest.TestCase):
         # Ensure only the gunner predicate can authorize a vehicle shot.
         self.assertLess(function.index('vehicle->unit.gunner_object_index !='),
             function.index('tick->action->control_flags |='))
-        self.assertNotIn('HALO_PORT_NETWORK_VERSION 53',
-            (ROOT/"port/linux/include/halo_port_limits.h").read_text())
+        # The v43 career receipt adds protocol 53 independently of vehicle AI.
 
 if __name__=="__main__":
     unittest.main()

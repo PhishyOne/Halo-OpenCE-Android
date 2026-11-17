@@ -46,6 +46,9 @@ def items():
     """the wire format's items, name to value"""
     paths = sorted((ROOT / "port/linux/game").glob("network_*.[ch]"))
     paths += sorted((ROOT / "port/linux/game").glob("map_share*.[ch]"))
+    paths += [ROOT / "port/linux/game/career_results.c",
+              ROOT / "port/linux/game/career_results.h",
+              ROOT / "port/linux/game/highlight_moments.h"]
     paths += [ROOT / "source/networking/network_messages.c", ROOT / "source/networking/network_messages.h"]
     texts = [re.sub(r"/\*.*?\*/|//[^\n]*", " ", path.read_text(encoding="latin-1"), flags=re.S) for path in paths]
     everything = "\n".join(texts)
@@ -56,7 +59,7 @@ def items():
         result[name] = str(value)
 
     for text in texts:
-        for block in _blocks(text, r"^struct distributed_\w+\s*\{"):
+        for block in _blocks(text, r"^struct (?:distributed_\w+|career_result|halo_highlight_event)\s*\{"):
             structs[re.match(r"struct (\w+)", block).group(1)] = block
         for block in _blocks(text, r"^enum\b[^;{]*\{"):
             if "_distributed_" not in block and "network_game_message_type" not in block:
@@ -72,7 +75,7 @@ def items():
     sent = {name for name in structs if name.endswith("_message") or f"sizeof(struct {name})" in everything}
     while True:
         bodies = " ".join(structs[name].split("{", 1)[1] for name in sent)
-        held = structs.keys() & set(re.findall(r"\bstruct (distributed_\w+)", bodies))
+        held = structs.keys() & set(re.findall(r"\bstruct (distributed_\w+|career_result|halo_highlight_event)", bodies))
         if held <= sent:
             break
         sent |= held

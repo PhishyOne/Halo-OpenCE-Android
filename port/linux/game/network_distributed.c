@@ -76,6 +76,7 @@ machine (their datum identifiers need not be).
 #include "units/bipeds.h"
 #include "network_coop.h"
 #include "network_distributed.h"
+#include "career_results.h"
 #include "network_link.h"
 #include "network_voice.h"
 #include "network_chat.h"
@@ -4732,6 +4733,12 @@ void network_distributed_handle_message(
 	short index;
 	word entry_size;
 
+	/* Results belong only to the host's ordered connection, never a batch. */
+    if (career_results_handle(machine_index, message, size,
+        !distributed_handling_batch && machine_index == NONE &&
+        !network_connection_last_read_was_unreliable()))
+        return;
+
 	/* (voice chat's, in the lobby too: network_voice.c) */
 	if (network_aim_assist_handles_message(message, size))
 	{
@@ -5135,6 +5142,7 @@ void network_distributed_handle_message(
 
 		/* (its count 1: the client asks again, having failed to make one of
 		the host's objects) */
+		career_results_send_start(machine_index);
 		network_aim_assist_send_policy(machine_index);
 		network_shield_effects_send(machine_index);
 		commander_features_send_to_machine(machine_index);

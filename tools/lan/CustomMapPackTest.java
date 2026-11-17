@@ -88,6 +88,7 @@ public final class CustomMapPackTest {
         Path root = Files.createTempDirectory("halo-map-zip-test");
         try {
             LinkedHashMap<String,byte[]> files = new LinkedHashMap<>();
+            files.put("Halo-Custom-Maps/", new byte[0]);
             files.put("Halo-Custom-Maps/loc.map", resource());
             files.put("Halo-Custom-Maps/h2_warlock.map", map("h2_warlock"));
             files.put("municipality.map", map("municipality"));
@@ -112,6 +113,42 @@ public final class CustomMapPackTest {
             rejected(() -> CustomMapPack.install(
                 new ByteArrayInputStream(archive), root.toFile(), null),
                 "already installed");
+
+            // Directory data descriptors leave the size unknown at entry
+            // open. Reject after one output byte, without draining a bomb.
+            byte[] folderBomb = pack(Map.of("payload/", new byte[8 * 1024 * 1024]));
+            java.io.InputStream guarded = new java.io.FilterInputStream(
+                    new ByteArrayInputStream(folderBomb)) {
+                int consumed;
+                @Override public int read(byte[] b, int off, int len) throws IOException {
+                    int n = in.read(b, off, len);
+                    if (n > 0 && (consumed += n) > 2048)
+                        throw new AssertionError("Directory payload was drained");
+                    return n;
+                }
+            };
+            rejected(() -> CustomMapPack.install(guarded, root.toFile(), null),
+                "directory contains data");
+            // STORED entries declare their size before any payload is read.
+            ByteArrayOutputStream storedBytes = new ByteArrayOutputStream();
+            try (ZipOutputStream z = new ZipOutputStream(storedBytes)) {
+                ZipEntry e = new ZipEntry("stored/");
+                byte[] payload = {1, 2, 3};
+                java.util.zip.CRC32 crc = new java.util.zip.CRC32(); crc.update(payload);
+                e.setMethod(ZipEntry.STORED); e.setSize(3); e.setCompressedSize(3);
+                e.setCrc(crc.getValue()); z.putNextEntry(e); z.write(payload); z.closeEntry();
+            }
+            rejected(() -> CustomMapPack.install(new ByteArrayInputStream(
+                storedBytes.toByteArray()), root.toFile(), null), "directory contains data");
+            LinkedHashMap<String,byte[]> folders = new LinkedHashMap<>();
+            for (int i = 0; i <= CustomMapPack.MAX_ZIP_ENTRIES; i++)
+                folders.put("folder" + i + "/", new byte[0]);
+            rejected(() -> CustomMapPack.install(new ByteArrayInputStream(pack(folders)),
+                root.toFile(), null), "more than 64 entries");
+            rejected(() -> CustomMapPack.install(new ByteArrayInputStream(
+                pack(Map.of("../", new byte[0]))), root.toFile(), null), "unsafe");
+            rejected(() -> CustomMapPack.install(new ByteArrayInputStream(
+                pack(Map.of("a/b/", new byte[0]))), root.toFile(), null), "unsafe");
 
             // Escaping the ZIP hierarchy is never accepted.
             LinkedHashMap<String,byte[]> malicious = new LinkedHashMap<>();

@@ -30,7 +30,7 @@ class CareerV37Tests(unittest.TestCase):
         self.assertIn("if (humans + bots != total)", self.native)
         self.assertIn("humans = bots = -1;", self.native)
 
-    def test_no_cross_platform_or_network_protocol_change(self):
+    def test_android_only_journal_io(self):
         self.assertIn("#ifdef HALO_ANDROID", self.native)
         self.assertNotIn('#include "platform.h"', self.native)
         self.assertNotIn("struct stat", self.native)

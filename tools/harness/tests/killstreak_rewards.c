@@ -113,6 +113,9 @@ static void data_iterator_new(struct data_iterator *i, void *data) { (void)data;
 static void *data_iterator_next(struct data_iterator *i) { return i->next<4 ? &players[i->next++] : NULL; }
 void player_handle_powerup_minor(long, short, short);
 boolean object_double_charge_shield(long);
+/* Career receipt collection is tested by test_career_results.py. */
+#define career_results_start() ((void)0)
+#define career_results_kill(player, bot, streak) ((void)0)
 #include "production.inc"
 
 static void setup(void) {

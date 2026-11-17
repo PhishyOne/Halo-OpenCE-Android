@@ -1201,3 +1201,30 @@ changes or new network message types. The host's ten-second snapshot
 throttle still applies. A filtered diagnostic report can be saved via
 the Android launcher. Physical validation with the affected co-op
 peer remains necessary.
+
+## Career results (version 53)
+
+The host collects each human player's kill classification, best streak and
+bounded highlight candidates. Client death replays never contribute to these
+records. At the end of match cleanup, before the server switches to postgame,
+the host freezes the statistics, win, end tick and up to three selected
+moments, and sends each guest its own receipt on its reliable connection.
+The Android journal waits for that receipt; a missing receipt is not replaced
+with the client's possibly stale scoreboard. Local and host players use the
+same frozen snapshot. No live scoreboard is changed by this feature.
+
+Distributed messages 101 and 102 carry the match generation and final result.
+A generation is established over the host's stream at client-ready and repeated
+before the receipt. The receiver requires the current network-game seed, that
+same nonzero generation, current mode and exact local player datum; it rejects
+malformed sizes, counts, counter relationships, moment types/times, datagrams,
+batches and repeated results. A start cannot replace an already bound generation.
+The generation resets on every map load. The final result's kill split and
+highlight ticks are the host's, including a guest's flag captures. This is
+host-authoritative local progression, not a signed public ranking service.
+
+All peers need network version 53. Earlier versions cannot supply this result
+contract. Storage stays HC2 / HLM1, so existing valid career history remains
+readable. A crash or disconnect before receipt delivery produces no completed
+match award. There is no per-kill network traffic or disk I/O for career events;
+host event buffers use at most about 400 KiB across 128 player slots.

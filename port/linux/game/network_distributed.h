@@ -167,6 +167,10 @@ enum
 	_distributed_message_orbital_request = 99,
 	_distributed_message_orbital_incoming = 100,
 
+	/* Host match generation and frozen career result, reliable only. */
+	_distributed_message_career_start = 101,
+	_distributed_message_career_result = 102,
+
 	NUMBER_OF_DISTRIBUTED_MESSAGES
 };
 

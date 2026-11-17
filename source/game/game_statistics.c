@@ -25,9 +25,10 @@ symbols in this file:
 #include "memory/data.h"
 #include "units/units.h"
 #include "killstreak_rewards.h" /* port: port/linux/game/killstreak_rewards.c */
+#include "career_results.h" /* port: host-owned results and event markers */
+#include "bots.h" /* port: actual bot machine IDs */
 #ifdef HALO_ANDROID
-#include "career_record.h" /* Android-only career journal */
-#include "bots.h"          /* actual bot machine IDs, not player name guesses */
+#include "career_record.h" /* port: Android-only career journal */
 #endif
 
 /* ---------- constants */
@@ -49,6 +50,7 @@ void game_statistics_start(
 {
 	/* port: rewards are transient, independent of scoreboard statistics. */
 	killstreak_rewards_start();
+	career_results_start();
 #ifdef HALO_ANDROID
 	career_record_start();
 #endif
@@ -203,11 +205,10 @@ void game_statistics_record_kill(
 				{
 					credited_player->statistics.kills[statistic_index]++;
 					credited_player->statistics.kills_in_a_row++;
-#ifdef HALO_ANDROID
-					career_record_kill(credited_player->local_player_index,
+					/* port: only the authority records career kills. */
+					career_results_kill(credited_player_index,
 						bots_machine_is_bot(dead_player->network_player_data.machine_index),
 						credited_player->statistics.kills_in_a_row);
-#endif
 					/* port: use the resolved enemy credit, never assists, suicides
 					   or a team kill redirected to a previous attacker. */
 					if (!friendly_fire && killing_player_index != dead_player_index)

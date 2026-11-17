@@ -538,6 +538,7 @@ symbols in this file:
 
 #include "cseries.h"
 #include "game_modes.h" /* port: port/linux/game/game_modes.c */
+#include "career_results.h" /* port: immutable host results */
 #ifdef HALO_ANDROID
 #include "career_record.h"
 #endif
@@ -5026,6 +5027,8 @@ void game_engine_update(
 					}
 				}
 
+				/* port: freeze and send final results before the transition. */
+				career_results_finish(global_stage.variant.game_engine_index);
 				server = global_network_game_server_get();
 				if (server)
 					network_game_server_switch_to_postgame(

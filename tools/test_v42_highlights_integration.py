@@ -18,27 +18,23 @@ class V42SourceContractTest(unittest.TestCase):
 
     def test_postgame_highlights_linked_to_durable_existing_match_id(self):
         self.assertIn('halo_highlights_start();', self.career)
-        self.assertIn('halo_highlights_kill(bot_victim, current_streak, game_time_get());',
-                      self.career)
-        self.assertIn('halo_highlights_finish(root, id, map, game_time_get(), (int)won)',
-                      self.career)
+        self.assertIn('halo_highlights_import(result->moments, result->moment_count)', self.career)
+        self.assertIn('halo_highlights_finish(root, id, map, result->end_tick, 0)', self.career)
         self.assertIn('if (synced && closed)', self.career)
         self.assertIn('career-matches-v1.log', self.career)
         self.assertIn('career-highlights-v1.log', self.highlight)
         self.assertNotIn('sendto(', self.highlight)
 
-    def test_ctf_scores_recorded_only_for_local_actual_player(self):
+    def test_ctf_scores_recorded_for_actual_capturer_by_host(self):
         self.assertIn('player->statistics.multiplayer_statistics.ctf_statistics.flag_scores++;',
                       self.ctf)
-        self.assertIn('if (player->local_player_index == 0)', self.ctf)
-        self.assertIn('halo_highlights_ctf_capture(game_time_get());', self.ctf)
-        self.assertIn('#ifdef HALO_ANDROID', self.ctf)
+        self.assertIn('career_results_capture(player_index);', self.ctf)
 
     def test_bounded_and_read_only_in_game_event_sampling(self):
-        self.assertIn('HIGHLIGHT_EVENT_CAP = 256', self.highlight)
+        self.assertIn('HIGHLIGHT_EVENT_CAP = 256', (NATIVE / 'highlight_moments.h').read_text())
         self.assertIn('HIGHLIGHT_FILE_MAX = 4 * 1024 * 1024', self.highlight)
-        self.assertIn('candidate_count < HIGHLIGHT_EVENT_CAP', self.highlight)
-        self.assertIn('if (finalized)', self.highlight)
+        self.assertIn('buffer->count < HIGHLIGHT_EVENT_CAP', self.highlight)
+        self.assertIn('if (local.finalized)', self.highlight)
         self.assertIn('if (dt < 120)', self.highlight)
         self.assertIn('if (selected == 0) return;', self.highlight)
         self.assertIn('fsync(fileno(out))', self.highlight)

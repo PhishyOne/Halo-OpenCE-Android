@@ -1,4 +1,4 @@
-version 41
+version 53
 bound CHAT_TEXT_SIZE 64
 bound DISCORD_ID_SIZE 24
 bound DISCORD_NAME_SIZE 40
@@ -61,12 +61,15 @@ enum _distributed_message_actor_damage 73
 enum _distributed_message_actor_states 64
 enum _distributed_message_aim_assist_policy 90
 enum _distributed_message_batch 16
+enum _distributed_message_career_result 102
+enum _distributed_message_career_start 101
 enum _distributed_message_chat_config 89
 enum _distributed_message_chat_down 88
 enum _distributed_message_chat_up 87
 enum _distributed_message_client_build 92
 enum _distributed_message_client_identity 18
 enum _distributed_message_client_ready 9
+enum _distributed_message_commander_settings 96
 enum _distributed_message_coop_device_groups 68
 enum _distributed_message_coop_device_states 77
 enum _distributed_message_coop_events 71
@@ -83,6 +86,7 @@ enum _distributed_message_fire_origins 93
 enum _distributed_message_game_state 7
 enum _distributed_message_hit_reports 11
 enum _distributed_message_inventories 4
+enum _distributed_message_killstreak_recon 97
 enum _distributed_message_map_share_offer 84
 enum _distributed_message_map_share_progress 86
 enum _distributed_message_map_share_request 83
@@ -93,6 +97,9 @@ enum _distributed_message_notice 17
 enum _distributed_message_object_changes 5
 enum _distributed_message_object_states 6
 enum _distributed_message_objects_synchronized 8
+enum _distributed_message_orbital_award 98
+enum _distributed_message_orbital_incoming 100
+enum _distributed_message_orbital_request 99
 enum _distributed_message_pickups 13
 enum _distributed_message_pings 19
 enum _distributed_message_player_inputs 14
@@ -245,10 +252,13 @@ size message_server_pregame_countdown 0x02
 size message_server_pregame_keep_alive 0x04
 size message_server_remove_player_ingame 0x24
 size message_server_switch_to_pregame 0x04
+struct career_result 06560ff26e16
 struct distributed_actor_damage 96a57e13e2b8
 struct distributed_actor_damage_message f985e899a708
 struct distributed_actor_state 8bd5e771659d
 struct distributed_actor_state_message 51a56e04a536
+struct distributed_career_result_message c5a2a0f80fe9
+struct distributed_career_start_message 5e6ff6b814ef
 struct distributed_chat_config dfa4e32efe1e
 struct distributed_chat_line cdab1468ffe0
 struct distributed_client_build 503e4474b798
@@ -311,3 +321,4 @@ struct distributed_voice_up 3d74ee44e4cb
 struct distributed_votekick_request 7e29ffd54bd1
 struct distributed_votekick_status b94458cdc180
 struct game_variant_options 0e258e4cf85b
+struct halo_highlight_event 3512fa76ca3a

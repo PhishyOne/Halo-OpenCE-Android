@@ -216,6 +216,7 @@ jobs:
           python3 tools/test_lan_discovery_launcher.py -v
           python3 tools/test_career_records_v37.py -v
           python3 tools/test_career_native_v37.py -v
+          python3 -m unittest tools.test_career_results -v
           python3 tools/test_v38_launcher_phantom.py -v
           python3 tools/test_v39_visual_design.py -v
           python3 tools/test_v40_rank_and_icon.py -v
