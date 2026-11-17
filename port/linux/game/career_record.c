@@ -10,8 +10,11 @@
 #include "game/game_engine.h"
 #include "game/players.h"
 #include "memory/data.h"
-#include "platform.h"
 #include "career_record.h"
+/* The guest game build does not expose the platform layer's private
+ * platform.h include directory. These are its two narrow entry points. */
+extern const char *platform_data_root(void);
+extern void platform_log(const char *format, ...);
 
 #include <stdio.h>
 #include <stdlib.h>
