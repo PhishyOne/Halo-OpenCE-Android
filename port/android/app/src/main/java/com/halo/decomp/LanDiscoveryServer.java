@@ -15,7 +15,7 @@ import java.net.SocketTimeoutException;
 import java.util.Enumeration;
 
 /** Answers a tiny private-subnet UDP probe while the host is in Halo.
- * Only the :game process starts this service; it never serves APK bytes.
+ * The game host or an explicit launcher map-sharing session starts it; it serves no files.
  * Wildcard receive is needed for broadcasts, but outgoing replies are
  * restricted to the IP and prefix of an active Wi-Fi/hotspot interface. */
 final class LanDiscoveryServer {

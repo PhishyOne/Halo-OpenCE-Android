@@ -88,6 +88,7 @@ public class LauncherActivity extends Activity {
     private Button pick;
     private TextView repairStatus;
     private LinearLayout stockMapResults;
+    private LanMapRepair lanMapRepair;
     private ChoiceButton stockCampaignMapChoice;
     private Button stockCampaignAuditButton;
     private Button stockCampaignImportButton;
@@ -249,6 +250,10 @@ public class LauncherActivity extends Activity {
     }
 
     private void startGame(Intent intent) {
+        if (repairBusy) {
+            android.widget.Toast.makeText(this, "Stop map sharing or finish the repair before playing.", android.widget.Toast.LENGTH_LONG).show();
+            return;
+        }
         intent.putExtra(HaloActivity.NETWORK_SESSION, "lan".equals(
             getSharedPreferences("launcher_ui", MODE_PRIVATE).getString("play_mode", "standard")));
         startActivity(intent);
@@ -837,6 +842,24 @@ public class LauncherActivity extends Activity {
         stockCampaignAuditButton.setOnClickListener(view ->
             auditStockCampaignMaps());
         repairPanel.addView(stockCampaignAuditButton);
+
+        Button shareMaps = new Button(this);
+        shareMaps.setText("SHARE MY MAPS"); hudButton(shareMaps, false); repairPanel.addView(shareMaps);
+        Button repairFromHost = new Button(this);
+        repairFromHost.setText("REPAIR FROM HOST"); hudButton(repairFromHost, true); repairPanel.addView(repairFromHost);
+        Button pauseMaps = new Button(this);
+        pauseMaps.setText("STOP / PAUSE"); hudButton(pauseMaps, false); repairPanel.addView(pauseMaps);
+        TextView transferStatus = lanText("Repair over your hotspot. Keep this screen open on both phones; interrupted downloads can resume.", 13);
+        repairPanel.addView(transferStatus);
+        lanMapRepair = new LanMapRepair(this, dataRoot, shareMaps, repairFromHost, pauseMaps, transferStatus,
+            () -> !repairBusy && gameProcessStatus() == 0,
+            busy -> {
+                repairBusy = busy;
+                if (playButton != null) playButton.setEnabled(!busy);
+                if (stockCampaignAuditButton != null) stockCampaignAuditButton.setEnabled(!busy);
+                if (stockCampaignImportButton != null) stockCampaignImportButton.setEnabled(!busy);
+                if (stockCampaignExportButton != null) stockCampaignExportButton.setEnabled(!busy);
+            }, this::auditStockCampaignMaps);
 
         stockCampaignImportButton = new Button(this);
         stockCampaignImportButton.setText("IMPORT MAPS OR REPAIR ZIP");
@@ -1980,6 +2003,12 @@ public class LauncherActivity extends Activity {
 
         setContentView(layout);
         pick.requestFocus();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (lanMapRepair != null) lanMapRepair.destroy();
+        super.onDestroy();
     }
 
     @Override

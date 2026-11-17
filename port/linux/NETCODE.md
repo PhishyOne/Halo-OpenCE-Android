@@ -1239,3 +1239,27 @@ persists one checkpoint atomically, with a stable local match ID, and saves
 finals outside rendering. HC3 adds an incomplete/DNF flag; HC1/HC2 still read.
 Unfinished matches keep earned stats and count as DNF/loss, but receive no
 completion/win bonus. Abrupt exits retain only the last delivered checkpoint.
+
+
+## Launcher map repair (version 55)
+
+Network version 55 accompanies Android v46's opt-in original Xbox map repair.
+Gameplay payloads are unchanged; the new launcher-only TCP service has its own
+HMP1 framing on port 5164. Existing LAN discovery locates candidate hosts, then
+clients probe the map service to distinguish it from a game-only host. Host and
+receiver bind eligible private Wi-Fi/hotspot interfaces; the host checks the
+peer's subnet. There are no arbitrary peer paths, URLs, redirects or DNS lookups.
+
+The host validates the ten campaign maps and Sidewinder, then advertises only
+valid files with fixed IDs, lengths and SHA-256 digests. Requests are bounded to
+4 MiB ranges tied to an exact offered digest, with two serving workers, four
+queued clients and a 30-second connection deadline on both ends. A changed source is refused.
+The receiver keeps one persistent partial bound to ID, length and digest; an
+interruption resumes from its byte count. A changed offer discards only the old
+partial. Full SHA-256 and Xbox cache validation precede installation and backup.
+This is an explicitly chosen local host, not an authenticated public map store.
+
+Sharing/repairing holds launcher work exclusion and keeps the screen awake.
+Both phones should remain in the repair screen. Stop, cancellation and Activity
+destruction close sharing sockets and release leases; client reads have bounded
+timeouts and keep partial bytes. Existing Custom Edition sharing is separate.
