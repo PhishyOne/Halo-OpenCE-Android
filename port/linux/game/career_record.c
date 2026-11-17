@@ -21,7 +21,6 @@ extern void platform_log(const char *format, ...);
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include <sys/stat.h>
 
 enum { CAREER_MAX_BYTES = 2 * 1024 * 1024 };
 static int recorded;
@@ -110,7 +109,6 @@ void career_record_postgame(long game_type, const char *map_name)
     const char *root;
     char path[1024], id[33], map[48], line[320];
     FILE *ledger;
-    struct stat info;
     long timestamp, total, humans, bots, caps = 0, returns = 0, hill = 0;
     long local_slot, won, seconds, length;
     int size;
@@ -133,11 +131,6 @@ void career_record_postgame(long game_type, const char *map_name)
             snprintf(path, sizeof(path), "%s/%s", root,
                 "career-matches-v1.log") >= (int)sizeof(path))
             return;
-        if (stat(path, &info) == 0 &&
-            (info.st_size < 0 ||
-             info.st_size > CAREER_MAX_BYTES - (long)sizeof(line) - 1))
-            return; /* bounded storage; no automatic deletion of history */
-
         total = career_nonnegative(player->statistics.kills[0]);
         humans = human_kills[local_slot];
         bots = bot_kills[local_slot];
@@ -177,7 +170,16 @@ void career_record_postgame(long game_type, const char *map_name)
             int needs_newline = 0;
             FILE *previous = fopen(path, "rb");
             if (previous) {
-                if (fseek(previous, -1, SEEK_END) == 0) {
+                long old_size;
+                if (fseek(previous, 0, SEEK_END) != 0 ||
+                    (old_size = ftell(previous)) < 0 ||
+                    old_size > CAREER_MAX_BYTES - size - 1) {
+                    fclose(previous);
+                    recorded = 1; /* preserve full/corrupt history unchanged */
+                    platform_log("career: history at capacity or unreadable");
+                    return;
+                }
+                if (old_size > 0 && fseek(previous, -1, SEEK_END) == 0) {
                     int last = fgetc(previous);
                     needs_newline = last != '\n' && last != EOF;
                 }

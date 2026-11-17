@@ -33,6 +33,8 @@ class CareerV37Tests(unittest.TestCase):
     def test_no_cross_platform_or_network_protocol_change(self):
         self.assertIn("#ifdef HALO_ANDROID", self.native)
         self.assertNotIn('#include "platform.h"', self.native)
+        self.assertNotIn("struct stat", self.native)
+        self.assertIn("ftell(previous)", self.native)
         self.assertIn("extern const char *platform_data_root(void);", self.native)
         self.assertIn("#ifdef HALO_ANDROID", self.stats)
         self.assertIn("#ifdef HALO_ANDROID", self.engine)
