@@ -91,7 +91,8 @@ public class HaloActivity extends SDLActivity {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-            buttons.bottomMargin = (int)(65 * getResources().getDisplayMetrics().density + 0.5f);
+            // Lower than the old 65dp position but still above navigation.
+            buttons.bottomMargin = lobbyBotSafeBottomMargin(0);
             mLayout.addView(lobbyBotControls, buttons);
         }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -392,9 +393,32 @@ public class HaloActivity extends SDLActivity {
             @Override
             public WindowInsets onApplyWindowInsets(View view, WindowInsets insets) {
                 gestureInsets = readGestureInsets(insets);
+                updateLobbyBotPosition();
                 return view.onApplyWindowInsets(insets);
             }
         });
+    }
+
+    private int lobbyBotSafeBottomMargin(int gestureBottomPixels) {
+        float density = getResources().getDisplayMetrics().density;
+        int baseline = Math.round(34 * density);
+        int safe = Math.max(0, gestureBottomPixels) + Math.round(12 * density);
+        return Math.max(baseline, safe);
+    }
+
+    /** Keep our lobby-only +/- controls below the damaged upper edge while
+     * staying outside Android's lower gesture navigation region. Repositions
+     * on orientation, cutout and system-bar changes without moving SDL. */
+    private void updateLobbyBotPosition() {
+        if (lobbyBotControls == null) return;
+        ViewGroup.LayoutParams existing = lobbyBotControls.getLayoutParams();
+        if (!(existing instanceof FrameLayout.LayoutParams)) return;
+        FrameLayout.LayoutParams position = (FrameLayout.LayoutParams)existing;
+        int bottom = lobbyBotSafeBottomMargin(gestureInsets[3]);
+        if (position.bottomMargin != bottom) {
+            position.bottomMargin = bottom;
+            lobbyBotControls.setLayoutParams(position);
+        }
     }
 
     @SuppressWarnings("deprecation") // getSystemGestureInsets is the only call on Android 10

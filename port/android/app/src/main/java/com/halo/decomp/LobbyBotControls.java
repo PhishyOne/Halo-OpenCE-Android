@@ -51,7 +51,7 @@ public final class LobbyBotControls extends LinearLayout {
         GradientDrawable shape = new GradientDrawable();
         shape.setColor(color);
         shape.setCornerRadius(dp(6));
-        shape.setStroke(dp(1), Color.rgb(88, 128, 151));
+        shape.setStroke(dp(1), HaloTheme.BORDER);
         return shape;
     }
 
@@ -60,8 +60,9 @@ public final class LobbyBotControls extends LinearLayout {
         button.setText(symbol);
         button.setTextSize(22);
         button.setAllCaps(false);
-        button.setTextColor(Color.WHITE);
-        button.setBackground(surface(Color.rgb(32, 63, 77)));
+        button.setTextColor(HaloTheme.TEXT);
+        HaloTheme.font(button, true);
+        button.setBackground(surface(HaloTheme.CONTROL_TOP));
         button.setMinWidth(dp(49));
         button.setMinHeight(dp(48));
         button.setContentDescription(direction < 0 ?
@@ -78,14 +79,15 @@ public final class LobbyBotControls extends LinearLayout {
         setOrientation(HORIZONTAL);
         setGravity(Gravity.CENTER_VERTICAL);
         setPadding(dp(7), dp(4), dp(7), dp(4));
-        setBackground(surface(Color.rgb(13, 30, 42)));
+        setBackground(surface(HaloTheme.PANEL_BOTTOM));
 
         Button fewer = adjustButton("−", -1);
         addView(fewer, new LayoutParams(dp(50), dp(49)));
 
         count = new TextView(context);
         count.setText("BOTS");
-        count.setTextColor(Color.rgb(214, 239, 247));
+        count.setTextColor(HaloTheme.FOCUS_TEXT);
+        HaloTheme.font(count, true);
         count.setTextSize(15);
         count.setGravity(Gravity.CENTER);
         count.setSingleLine(true);

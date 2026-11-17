@@ -42,8 +42,8 @@ class CareerV37Tests(unittest.TestCase):
         self.assertNotIn("network_protocol", self.native)
 
     def test_ui_and_reader_have_limits(self):
-        self.assertIn("CareerProfile.show(this, dataRoot)", self.launcher)
-        self.assertIn('MY SPARTAN PROFILE & ACHIEVEMENTS', self.launcher)
+        self.assertIn("CareerProfile.dashboard(this, dataRoot, dashboardPanel)", self.launcher)
+        self.assertNotIn('MY SPARTAN PROFILE & ACHIEVEMENTS', self.launcher)
         self.assertIn("MAX_FILE_BYTES = 2 * 1024 * 1024", self.reader)
         self.assertIn("Set<String> seen = new HashSet<>()", self.reader)
         self.assertIn("if (content[i] == '\\n')", self.reader)

@@ -41,7 +41,7 @@ class LanApkUpdateTests(unittest.TestCase):
         self.assertIn("lanUpdateServer = LanUpdateServer.start(this);", game)
         self.assertIn("lanUpdateServer.stop();", game)
         self.assertIn("if (lanUpdateServer != null)", game)
-        self.assertIn('checkHostUpdate.setText("CHECK HOST UPDATE")', source)
+        self.assertIn('checkHostUpdate.setText("CHECK UPDATE")', source)
 
     def test_server_not_internet_or_arbitrary_files(self):
         source = HOST.read_text()
@@ -136,7 +136,7 @@ class LanApkUpdateTests(unittest.TestCase):
         self.assertIn('int attempts = manual ? 3 : 1', client)
         self.assertIn('instanceof java.net.ConnectException', client)
         self.assertIn('Thread.sleep(450L * (attempt + 1))', client)
-        self.assertIn('"CHECK HOST UPDATE"', launcher)
+        self.assertIn('"CHECK UPDATE"', launcher)
         self.assertIn('checkHostUpdate.setEnabled(false)', launcher)
         self.assertIn('checkHostUpdate.setEnabled(true)', launcher)
         self.assertIn('"lan-update-status.txt"', report)

@@ -27,10 +27,10 @@ import java.util.Locale;
 /** Local Spartan service record, available from launcher while game is closed.
  * No login, network fetch, tracking SDK or permissions. */
 final class CareerProfile {
-    private static final int TEXT = Color.rgb(225, 237, 227);
-    private static final int MUTED = Color.rgb(169, 193, 191);
-    private static final int GOLD = Color.rgb(190, 216, 164);
-    private static final int PANEL = Color.rgb(19, 35, 45);
+    private static final int TEXT = HaloTheme.TEXT;
+    private static final int MUTED = HaloTheme.MUTED;
+    private static final int GOLD = HaloTheme.FOCUS_TEXT;
+    private static final int PANEL = HaloTheme.PANEL_BOTTOM;
     private static final String PREFS = "career_profile_v1";
 
     private CareerProfile() { }
@@ -67,8 +67,8 @@ final class CareerProfile {
                     PREFS, Context.MODE_PRIVATE);
                 String name = pref.getString("name", "Spartan");
                 section(activity, target, "SPARTAN SERVICE RECORD");
-                target.addView(text(activity, name + "   •   " + result.rank(),
-                    22, GOLD, true));
+                target.addView(identity(activity, name, result.rankIndex(),
+                    result.rank(), 22));
                 target.addView(text(activity,
                     "Rank " + result.rankNumber() + "    " +
                     String.format(Locale.US, "%,d", result.xp) + " XP", 14, TEXT, true));
@@ -111,7 +111,8 @@ final class CareerProfile {
                 full.setText("VIEW FULL PROFILE & ACHIEVEMENTS");
                 full.setTextColor(TEXT);
                 full.setBackgroundTintList(ColorStateList.valueOf(
-                    Color.rgb(40, 68, 80)));
+                    HaloTheme.CONTROL_TOP));
+                HaloTheme.font(full, true);
                 full.setOnClickListener(view -> show(activity, appDirectory));
                 target.addView(full);
                 target.addView(text(activity,
@@ -152,8 +153,26 @@ final class CareerProfile {
         view.setTextColor(color);
         view.setTextSize(size);
         view.setPadding(0, dp(activity, 3), 0, dp(activity, 3));
-        if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        HaloTheme.font(view, bold);
         return view;
+    }
+
+    private static LinearLayout identity(Activity activity, String name,
+            int rankIndex, String rank, int nameSize) {
+        LinearLayout row = new LinearLayout(activity);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        RankInsignia emblem = new RankInsignia(activity, rankIndex);
+        row.addView(emblem, new LinearLayout.LayoutParams(
+            dp(activity, 70), dp(activity, 70)));
+        LinearLayout titles = new LinearLayout(activity);
+        titles.setOrientation(LinearLayout.VERTICAL);
+        titles.setPadding(dp(activity, 12), 0, 0, 0);
+        titles.addView(text(activity, name, nameSize, TEXT, true));
+        titles.addView(text(activity, rank, 15, GOLD, true));
+        row.addView(titles, new LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        return row;
     }
 
     private static void section(Activity activity, LinearLayout layout, String title) {
@@ -170,11 +189,12 @@ final class CareerProfile {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(activity, 14), dp(activity, 10),
             dp(activity, 14), dp(activity, 12));
-        panel.setBackgroundColor(PANEL);
+        panel.setBackground(HaloTheme.surface(HaloTheme.PANEL_TOP,
+            PANEL, HaloTheme.BORDER, 6,
+            activity.getResources().getDisplayMetrics().density));
 
-        TextView nameView = text(activity, name + "  •  " + career.rank(),
-            20, TEXT, true);
-        panel.addView(nameView);
+        panel.addView(identity(activity, name, career.rankIndex(),
+            career.rank(), 20));
         panel.addView(text(activity,
             "RANK " + career.rankNumber() + "     " +
             String.format(Locale.US, "%,d", career.xp) + " XP",
@@ -229,7 +249,7 @@ final class CareerProfile {
         if (career.matches.isEmpty()) {
             panel.addView(text(activity,
                 "No completed multiplayer matches recorded yet. Finish a match " +
-                "in v37, then reopen Service Record.", 12, MUTED, false));
+                "then reopen Service Record.", 12, MUTED, false));
         } else {
             DateFormat dates = DateFormat.getDateTimeInstance(
                 DateFormat.SHORT, DateFormat.SHORT);

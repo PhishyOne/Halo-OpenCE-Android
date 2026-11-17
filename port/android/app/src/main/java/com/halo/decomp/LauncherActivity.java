@@ -25,7 +25,6 @@ import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
@@ -34,7 +33,6 @@ import android.widget.ProgressBar;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.ScrollView;
-import android.widget.Spinner;
 import android.widget.TextView;
 
 import java.net.Inet4Address;
@@ -76,11 +74,11 @@ public class LauncherActivity extends Activity {
     private static final String STATE_STOCK_MAP_TRANSFER = "stock-map-transfer";
     // Halo-style HUD colours. Native Android widgets remain accessible,
     // including the system file picker and LAN diagnostics.
-    private static final int HUD_TEXT = Color.rgb(226, 237, 231);
-    private static final int HUD_MUTED = Color.rgb(164, 185, 185);
-    private static final int HUD_ACCENT = Color.rgb(172, 205, 157);
-    private static final int HUD_BORDER = Color.rgb(74, 104, 119);
-    private static final int HUD_WARNING = Color.rgb(255, 186, 128);
+    private static final int HUD_TEXT = HaloTheme.TEXT;
+    private static final int HUD_MUTED = HaloTheme.MUTED;
+    private static final int HUD_ACCENT = HaloTheme.FOCUS_TEXT;
+    private static final int HUD_BORDER = HaloTheme.BORDER;
+    private static final int HUD_WARNING = HaloTheme.WARNING;
 
 
     private File dataRoot;
@@ -88,7 +86,7 @@ public class LauncherActivity extends Activity {
     private ProgressBar progress;
     private Button pick;
     private TextView repairStatus;
-    private Spinner stockCampaignMapChoice;
+    private ChoiceButton stockCampaignMapChoice;
     private Button stockCampaignAuditButton;
     private Button stockCampaignImportButton;
     private Button stockCampaignExportButton;
@@ -337,29 +335,29 @@ public class LauncherActivity extends Activity {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(14), dp(10), dp(14), dp(12));
-        panel.setBackground(hudSurface(Color.rgb(23, 36, 47),
-            Color.rgb(10, 19, 29), HUD_BORDER));
+        panel.setBackground(hudSurface(HaloTheme.PANEL_TOP,
+            HaloTheme.PANEL_BOTTOM, HUD_BORDER));
         return panel;
     }
 
     private void hudButton(Button button, boolean primary) {
-        button.setTextColor(primary ? Color.rgb(17, 30, 32) : HUD_TEXT);
+        button.setTextColor(primary ? HaloTheme.HIGHLIGHT_TEXT : HUD_TEXT);
         button.setTextSize(TypedValue.COMPLEX_UNIT_SP, primary ? 19 : 13);
         button.setAllCaps(true);
-        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        HaloTheme.font(button, true);
         button.setMinHeight(dp(primary ? 48 : 38));
         button.setPadding(dp(12), dp(6), dp(12), dp(6));
         button.setBackground(primary
-            ? hudSurface(Color.rgb(190, 214, 180), Color.rgb(118, 159, 135),
-                Color.rgb(218, 235, 210))
-            : hudSurface(Color.rgb(43, 63, 77), Color.rgb(22, 39, 51),
+            ? hudSurface(HaloTheme.FOCUS, HaloTheme.FOCUS,
+                HaloTheme.FOCUS_TEXT)
+            : hudSurface(HaloTheme.CONTROL_TOP, HaloTheme.CONTROL_BOTTOM,
                 HUD_BORDER));
     }
 
     private void hudCheck(CheckBox check) {
         check.setTextColor(HUD_TEXT);
         check.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        check.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        HaloTheme.font(check, false);
         check.setButtonTintList(ColorStateList.valueOf(HUD_ACCENT));
         check.setGravity(Gravity.CENTER_VERTICAL);
         check.setPadding(dp(6), dp(3), dp(6), dp(3));
@@ -370,14 +368,15 @@ public class LauncherActivity extends Activity {
         input.setHintTextColor(HUD_MUTED);
         input.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         input.setPadding(dp(10), dp(7), dp(10), dp(7));
-        input.setBackground(hudSurface(Color.rgb(13, 24, 32),
-            Color.rgb(14, 25, 33), HUD_BORDER));
+        input.setBackground(hudSurface(HaloTheme.PANEL_BOTTOM,
+            HaloTheme.PANEL_BOTTOM, HUD_BORDER));
     }
 
     private TextView lanText(String message, int size) {
         TextView text = new TextView(this);
         text.setText(message);
         text.setTextColor(HUD_TEXT);
+        HaloTheme.font(text, false);
         text.setTextSize(TypedValue.COMPLEX_UNIT_SP, size);
         text.setPadding(0, dp(2), 0, dp(5));
         return text;
@@ -386,56 +385,84 @@ public class LauncherActivity extends Activity {
     private TextView hudSection(String message) {
         TextView label = lanText(message, 13);
         label.setTextColor(HUD_ACCENT);
-        label.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        HaloTheme.font(label, true);
         label.setLetterSpacing(0.16f);
         return label;
     }
 
-    private Spinner botChoice(LinearLayout layout, String label, String[] choices, int selection) {
-        TextView title = lanText(label, 13);
-        title.setTextColor(HUD_MUTED);
-        layout.addView(title);
-        Spinner spinner = new Spinner(this);
-        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this,
-            android.R.layout.simple_spinner_item, choices) {
-            @Override
-            public View getView(int position, View convertView, ViewGroup parent) {
-                TextView view = (TextView) super.getView(position, convertView, parent);
-                view.setTextColor(HUD_TEXT);
-                view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-                view.setPadding(dp(10), dp(6), dp(10), dp(6));
-                return view;
-            }
-            @Override
-            public View getDropDownView(int position, View convertView, ViewGroup parent) {
-                TextView view = (TextView) super.getDropDownView(position, convertView, parent);
-                view.setTextColor(HUD_TEXT);
-                view.setBackgroundColor(Color.rgb(25, 41, 53));
-                return view;
-            }
-        };
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinner.setAdapter(adapter);
-        spinner.setSelection(Math.max(0, Math.min(selection, choices.length - 1)));
-        // Preserve Android's native drop-down indicator instead of covering
-        // it with a custom background; the list still uses the HUD palette.
-        spinner.setBackgroundTintList(ColorStateList.valueOf(HUD_BORDER));
-        layout.addView(spinner);
-        return spinner;
+    /** Compact two-column row. Selection opens only on a deliberate tap;
+     * vertical swipes on the page no longer open an Android Spinner menu. */
+    private final class ChoiceButton extends Button {
+        private final String[] choices;
+        private final String prompt;
+        private int selection;
+
+        ChoiceButton(String prompt, String[] choices, int selected) {
+            super(LauncherActivity.this);
+            this.prompt = prompt;
+            this.choices = choices.clone();
+            this.selection = Math.max(0, Math.min(selected, choices.length - 1));
+            setAllCaps(false);
+            setTextColor(HUD_TEXT);
+            HaloTheme.font(this, true);
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+            setSingleLine(true);
+            setEllipsize(android.text.TextUtils.TruncateAt.END);
+            setPadding(dp(9), dp(4), dp(9), dp(4));
+            setBackground(hudSurface(HaloTheme.CONTROL_TOP,
+                HaloTheme.CONTROL_BOTTOM, HUD_BORDER));
+            refresh();
+            setOnClickListener(view -> new AlertDialog.Builder(
+                    LauncherActivity.this)
+                .setTitle(prompt)
+                .setSingleChoiceItems(this.choices, selection,
+                    (dialog, which) -> {
+                        selection = which;
+                        refresh();
+                        dialog.dismiss();
+                    })
+                .setNegativeButton("CANCEL", null)
+                .show());
+        }
+
+        private void refresh() {
+            setText(choices[selection] + "  ▾");
+            setContentDescription(prompt + ": " + choices[selection] +
+                ". Tap to change.");
+        }
+
+        int getSelectedItemPosition() { return selection; }
     }
 
-    /** Compact selection for Campaign, offline bots, Host, Join and Tools. */
+    private ChoiceButton botChoice(LinearLayout layout, String label,
+            String[] choices, int selection) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(4), 0, dp(4));
+        TextView title = lanText(label, 13);
+        title.setTextColor(HUD_MUTED);
+        title.setGravity(Gravity.CENTER_VERTICAL);
+        row.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        ChoiceButton choice = new ChoiceButton(label, choices, selection);
+        row.addView(choice, new LinearLayout.LayoutParams(dp(174), dp(44)));
+        layout.addView(row);
+        return choice;
+    }
+
+    /** Native OpenCE-style tabs for Profile, Offline Match, Campaign,
+     * Host, Join and Tools. */
     private void hudTab(Button button, boolean selected) {
         button.setAllCaps(false);
-        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        HaloTheme.font(button, true);
         button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        button.setTextColor(selected ? Color.rgb(15, 29, 31) : HUD_TEXT);
+        button.setTextColor(selected ? HaloTheme.HIGHLIGHT_TEXT : HUD_TEXT);
         button.setMinHeight(dp(39));
         button.setPadding(dp(2), dp(3), dp(2), dp(3));
         button.setBackground(selected ?
-            hudSurface(Color.rgb(190, 214, 180), Color.rgb(118, 159, 135),
-                Color.rgb(218, 235, 210)) :
-            hudSurface(Color.rgb(35, 53, 67), Color.rgb(15, 29, 40),
+            hudSurface(HaloTheme.FOCUS, HaloTheme.FOCUS,
+                HaloTheme.FOCUS_TEXT) :
+            hudSurface(HaloTheme.CONTROL_TOP, HaloTheme.CONTROL_BOTTOM,
                 HUD_BORDER));
     }
 
@@ -462,17 +489,17 @@ public class LauncherActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-            new int[] { Color.rgb(10, 18, 27), Color.rgb(20, 34, 45),
-                Color.rgb(7, 13, 20) }));
+            new int[] { HaloTheme.BACKGROUND_TOP, HaloTheme.BACKGROUND_CENTER,
+                HaloTheme.BACKGROUND_BOTTOM }));
 
         LinearLayout masthead = new LinearLayout(this);
         masthead.setOrientation(LinearLayout.HORIZONTAL);
         masthead.setGravity(Gravity.CENTER_VERTICAL);
         masthead.setPadding(dp(18), dp(5), dp(18), dp(3));
         TextView halo = lanText("HALO", 28);
-        halo.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        HaloTheme.font(halo, true);
         halo.setLetterSpacing(0.18f);
-        halo.setTextColor(HUD_TEXT);
+        halo.setTextColor(HaloTheme.FOCUS_TEXT);
         masthead.addView(halo);
         TextView subtitle = lanText("COMBAT EVOLVED  /  GAME SETUP", 11);
         subtitle.setTextColor(HUD_MUTED);
@@ -525,13 +552,6 @@ public class LauncherActivity extends Activity {
         dashboardPanel.setVisibility(View.GONE);
         content.addView(dashboardPanel);
         CareerProfile.dashboard(this, dataRoot, dashboardPanel);
-        Button toolsServiceRecord = new Button(this);
-        toolsServiceRecord.setText("MY SPARTAN PROFILE & ACHIEVEMENTS");
-        hudButton(toolsServiceRecord, false);
-        toolsServiceRecord.setOnClickListener(view ->
-            CareerProfile.show(this, dataRoot));
-        toolsPage.addView(toolsServiceRecord);
-
         // System Link panel. Host, guest and advanced controls are retained.
         LinearLayout lanPanel = hudPanel();
         content.addView(lanPanel);
@@ -563,16 +583,14 @@ public class LauncherActivity extends Activity {
 
         LinearLayout hostPanel = new LinearLayout(this);
         hostPanel.setOrientation(LinearLayout.VERTICAL);
-        hostPanel.addView(lanText(
-            "Friends on this Wi-Fi or hotspot can find your hosted game automatically.", 12));
         TextView hostAddress = lanText(ips.isEmpty()
             ? "HOST IP: NOT DETECTED"
             : "HOST IP: " + android.text.TextUtils.join("   /   ", ips), 19);
         hostAddress.setTextColor(HUD_ACCENT);
-        hostAddress.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        HaloTheme.font(hostAddress, true);
         hostAddress.setPadding(dp(12), dp(7), dp(12), dp(8));
         hostAddress.setBackground(hudSurface(
-            Color.rgb(35, 53, 66), Color.rgb(16, 31, 41), HUD_BORDER));
+            HaloTheme.PANEL_TOP, HaloTheme.PANEL_BOTTOM, HUD_BORDER));
         hostPanel.addView(hostAddress);
         if (ips.size() > 1)
             hostPanel.addView(lanText(
@@ -585,9 +603,6 @@ public class LauncherActivity extends Activity {
             .getBoolean("lan_update_share", true));
         hudCheck(shareUpdates);
         hostPanel.addView(shareUpdates);
-        hostPanel.addView(lanText("Host discovery runs during the game. "
-            + "Sharing updates is optional; Android always asks guests "
-            + "before installing an APK.", 11));
 
         final int[] lanBotCounts = LanConfig.choicesIncluding(
             settings.systemLinkBotCount);
@@ -595,16 +610,9 @@ public class LauncherActivity extends Activity {
         for (int index = 0; index < lanBotCounts.length; index++)
             lanBotChoices[index] = lanBotCounts[index] == 0 ?
                 "None" : Integer.toString(lanBotCounts[index]);
-        Spinner lanBots = botChoice(hostPanel, "BOT COUNT",
+        ChoiceButton lanBots = botChoice(hostPanel, "BOT COUNT",
             lanBotChoices, LanConfig.choiceIndex(lanBotCounts,
                 settings.systemLinkBotCount));
-        LinearLayout hostHints = new LinearLayout(this);
-        hostHints.setOrientation(LinearLayout.VERTICAL);
-        hostHints.addView(lanText(
-            "Large maps: try 16, 24, 32, 48 or 64 bots. 32+ is an "
-            + "experimental high-load mode over hotspot LAN. Bigger teams "
-            + "use more CPU and network bandwidth; if players stutter "
-            + "or disconnect, lower the count in the pregame lobby.", 11));
         String[] lanSkillChoices = { "Recruit", "Easy", "Normal", "Heroic", "Veteran", "Legendary" };
         int lanSkillSelection = 2;
         for (int index = 0; index < LanConfig.BOT_SKILLS.length; index++) {
@@ -613,46 +621,29 @@ public class LauncherActivity extends Activity {
                 break;
             }
         }
-        Spinner lanSkill = botChoice(hostPanel, "DIFFICULTY",
+        ChoiceButton lanSkill = botChoice(hostPanel, "DIFFICULTY",
             lanSkillChoices, lanSkillSelection);
         CheckBox driverBots = new CheckBox(this);
         driverBots.setText("BOTS DRIVE GROUND VEHICLES (EXPERIMENTAL)");
         driverBots.setChecked(settings.vehicleDriving);
         hudCheck(driverBots);
         hostPanel.addView(driverBots);
-        hostHints.addView(lanText(
-            "Optional: up to 6 bots can drive empty Warthogs, Ghosts or "
-            + "Scorpions. They steer through Halo's normal vehicle physics, "
-            + "slow on bends and reverse if stuck. Not Banshees yet. "
-            + "Turn this off for ordinary infantry games.", 11));
-        hostHints.addView(lanText("Want Banshees or other map vehicles "
-            + "on Blood Gulch? In Halo's GAME TYPE settings choose "
-            + "VEHICLES → PC (not Default). This allows vehicles the "
-            + "map actually contains; it won't create absent ones.", 11));
-        hostHints.addView(lanText("Vehicle crews are automatic. "
-            + "Bots pursue flags in CTF, hills in King, and balls in Oddball. "
-            + "Race bots follow checkpoints; vehicle-driving AI is "
-            + "optional. Slayer behavior is unchanged.", 12));
-        Button hostHintsToggle = new Button(this);
-        hostHintsToggle.setText("HOST TIPS");
-        hudButton(hostHintsToggle, false);
-        hostPanel.addView(hostHintsToggle);
-        hostHints.setVisibility(View.GONE);
-        hostHintsToggle.setOnClickListener(view ->
-            toggleSection(hostHintsToggle, hostHints));
-        hostPanel.addView(hostHints);
         lanPanel.addView(hostPanel);
 
         LinearLayout joinPanel = new LinearLayout(this);
         joinPanel.setOrientation(LinearLayout.VERTICAL);
-        joinPanel.addView(lanText("Connect to the host's hotspot or Wi-Fi.", 12));
-        TextView discoveryStatus = lanText("Searching for Halo games is automatic.", 12);
+        TextView discoveryStatus = lanText("Searching for LAN games...", 12);
         discoveryStatus.setTextColor(HUD_ACCENT);
         joinPanel.addView(discoveryStatus);
+        LinearLayout joinActions = new LinearLayout(this);
+        joinActions.setOrientation(LinearLayout.HORIZONTAL);
+        joinActions.setPadding(0, dp(4), 0, dp(4));
+        joinPanel.addView(joinActions);
         Button findHosts = new Button(this);
-        findHosts.setText("FIND LAN HOSTS");
+        findHosts.setText("FIND HOSTS");
         hudButton(findHosts, false);
-        joinPanel.addView(findHosts);
+        joinActions.addView(findHosts,
+            new LinearLayout.LayoutParams(0, dp(46), 1f));
         LinearLayout manualHostPanel = new LinearLayout(this);
         manualHostPanel.setOrientation(LinearLayout.VERTICAL);
         /* Auto-discovery remains primary; the direct-IP field is a single
@@ -673,7 +664,7 @@ public class LauncherActivity extends Activity {
             this, hostIp, discoveryStatus, findHosts, manualHostPanel);
         findHosts.setOnClickListener(view -> hostPicker.search(false, null));
         Button checkHostUpdate = new Button(this);
-        checkHostUpdate.setText("CHECK HOST UPDATE");
+        checkHostUpdate.setText("CHECK UPDATE");
         hudButton(checkHostUpdate, false);
         checkHostUpdate.setOnClickListener(view -> {
             if (gameProcessStatus() != 0) {
@@ -694,10 +685,10 @@ public class LauncherActivity extends Activity {
             LanUpdateClient.check(this, hostIp.getText().toString().trim(),
                 true, null, () -> checkHostUpdate.setEnabled(true));
         });
-        joinPanel.addView(checkHostUpdate);
-        joinPanel.addView(lanText(
-            "To download an update, the host must enable sharing and be in Halo. "
-            + "Older hosts without discovery still support Manual IP.", 11));
+        LinearLayout.LayoutParams updateButtonParams =
+            new LinearLayout.LayoutParams(0, dp(46), 1f);
+        updateButtonParams.leftMargin = dp(8);
+        joinActions.addView(checkHostUpdate, updateButtonParams);
         lanPanel.addView(joinPanel);
 
         Runnable updateRole = () -> {
@@ -759,18 +750,14 @@ public class LauncherActivity extends Activity {
         String[] offlineCounts = new String[127];
         for (int i = 0; i < offlineCounts.length; i++)
             offlineCounts[i] = Integer.toString(i + 1);
-        Spinner offlineCount = botChoice(offlinePanel, "BOT COUNT",
+        ChoiceButton offlineCount = botChoice(offlinePanel, "BOT COUNT",
             offlineCounts, offlinePreferences.getInt("count", 3) - 1);
         String[] offlineSkills = { "Recruit", "Easy", "Normal", "Heroic", "Veteran", "Legendary" };
-        Spinner offlineSkill = botChoice(offlinePanel, "DIFFICULTY",
+        ChoiceButton offlineSkill = botChoice(offlinePanel, "DIFFICULTY",
             offlineSkills, offlinePreferences.getInt("skill", 2));
         String[] offlineTeams = { "Balanced teams", "Bots against players" };
-        Spinner offlineTeam = botChoice(offlinePanel, "TEAM ASSIGNMENT",
+        ChoiceButton offlineTeam = botChoice(offlinePanel, "TEAM ASSIGNMENT",
             offlineTeams, offlinePreferences.getInt("team", 0));
-        offlinePanel.addView(lanText("Vehicle crews are automatic. "
-            + "Bots play goals in CTF, King, Oddball and Race; Race bots "
-            + "follow checkpoints on foot. Slayer combat stays the same. "
-            + "Choose the game type inside Halo.", 12));
 
         /* The inactive 2142 commander experiment is retired. Keep only
          * individual host-authorized killstreak rewards in this launcher. */
@@ -789,10 +776,7 @@ public class LauncherActivity extends Activity {
                 killstreakChoices.get(key)));
         killstreakPanel.addView(hudSection("INDIVIDUAL KILLSTREAK REWARDS"));
         killstreakPanel.addView(lanText(
-            "OFF by default. The host can enable rewards for human players "
-            + "in offline or LAN matches. 10 kills activates the Phantom: "
-            + "60 seconds of invisibility and damage immunity, with an "
-            + "all-map warning.", 12));
+            "3 kills: enhancements   •   5: recon   •   10: God Mode (60s)", 12));
         String[] killstreakLabels = {
             "ENABLE KILLSTREAK REWARDS",
             "RETIRED ORBITAL (DISABLED)",
@@ -841,10 +825,6 @@ public class LauncherActivity extends Activity {
         mapsToggle.setOnClickListener(view ->
             toggleSection(mapsToggle, repairPanel));
         repairPanel.addView(hudSection("ORIGINAL CAMPAIGN MAPS"));
-        repairPanel.addView(lanText(
-            "Find which campaign maps are missing or damaged before creating "
-            + "a co-op lobby. The check fully decompresses each file on a worker "
-            + "thread. It never writes to maps or saves.", 12));
         String[] mapNames = new String[SidewinderRepair.CAMPAIGN_MAP_FILES.length + 1];
         for (int i = 0; i < SidewinderRepair.CAMPAIGN_MAP_FILES.length; i++)
             mapNames[i] = SidewinderRepair.CAMPAIGN_MAP_TITLES[i]
@@ -860,13 +840,12 @@ public class LauncherActivity extends Activity {
         repairPanel.addView(stockCampaignAuditButton);
 
         repairPanel.addView(lanText(
-            "To send a repaired original campaign map to a friend, export "
-            + "your selected mission to Downloads, share that file privately, "
-            + "and have them import the SAME Xbox map on their Halo launcher. "
-            + "Each player must have legitimate Halo game data. Campaign "
-            + "progress is separate and never transferred by this feature.", 11));
+            "Only verified Xbox map data is accepted; your original is backed up.", 12));
+        LinearLayout mapTransferActions = new LinearLayout(this);
+        mapTransferActions.setOrientation(LinearLayout.HORIZONTAL);
+        repairPanel.addView(mapTransferActions);
         stockCampaignExportButton = new Button(this);
-        stockCampaignExportButton.setText("EXPORT SELECTED XBOX MAP");
+        stockCampaignExportButton.setText("EXPORT MAP");
         hudButton(stockCampaignExportButton, false);
         stockCampaignExportButton.setOnClickListener(view -> {
             if (repairBusy) return;
@@ -882,10 +861,12 @@ public class LauncherActivity extends Activity {
             save.putExtra(Intent.EXTRA_TITLE, pendingStockMapTransfer);
             startActivityForResult(save, PICK_STOCK_MAP_EXPORT);
         });
-        repairPanel.addView(stockCampaignExportButton);
+        stockCampaignExportButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        mapTransferActions.addView(stockCampaignExportButton,
+            new LinearLayout.LayoutParams(0, dp(48), 1f));
 
         stockCampaignImportButton = new Button(this);
-        stockCampaignImportButton.setText("IMPORT VERIFIED XBOX MAP");
+        stockCampaignImportButton.setText("IMPORT MAP");
         hudButton(stockCampaignImportButton, false);
         stockCampaignImportButton.setOnClickListener(view -> {
             if (repairBusy) return;
@@ -900,10 +881,14 @@ public class LauncherActivity extends Activity {
             picker.setType("*/*");
             startActivityForResult(picker, PICK_STOCK_MAP_IMPORT);
         });
-        repairPanel.addView(stockCampaignImportButton);
+        stockCampaignImportButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        LinearLayout.LayoutParams importMapParams =
+            new LinearLayout.LayoutParams(0, dp(48), 1f);
+        importMapParams.leftMargin = dp(8);
+        mapTransferActions.addView(stockCampaignImportButton, importMapParams);
 
         Button restoreVerifiedMap = new Button(this);
-        restoreVerifiedMap.setText("RESTORE SELECTED PREVIOUS MAP");
+        restoreVerifiedMap.setText("RESTORE BACKUP");
         hudButton(restoreVerifiedMap, false);
         restoreVerifiedMap.setOnClickListener(view -> {
             if (repairBusy) return;
@@ -947,9 +932,8 @@ public class LauncherActivity extends Activity {
         customMapsToggle.setOnClickListener(view ->
             toggleSection(customMapsToggle, customMapsPanel));
         customMapsPanel.addView(hudSection("HALO CUSTOM EDITION"));
-        customMapsPanel.addView(lanText("Import .map files and shared resources. "
-            + "Choose multiple files from Downloads/Halo-Custom-Maps. "
-            + "Imported arenas appear in CUSTOM MULTIPLAYER.", 12));
+        customMapsPanel.addView(lanText(
+            "Custom Edition maps and resource packs.", 12));
         customMapImportButton = new Button(this);
         customMapImportButton.setText("IMPORT CUSTOM MAP FILES");
         hudButton(customMapImportButton, false);
@@ -1125,8 +1109,8 @@ public class LauncherActivity extends Activity {
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.VERTICAL);
         footer.setPadding(dp(14), dp(5), dp(14), dp(10));
-        footer.setBackground(hudSurface(Color.rgb(20, 35, 45),
-            Color.rgb(9, 18, 27), HUD_BORDER));
+        footer.setBackground(hudSurface(HaloTheme.PANEL_TOP,
+            HaloTheme.PANEL_BOTTOM, HUD_BORDER));
 
         LinearLayout choices = new LinearLayout(this);
         choices.setOrientation(LinearLayout.HORIZONTAL);
@@ -1613,7 +1597,7 @@ public class LauncherActivity extends Activity {
                     result.bytes / 1048576 + " MiB, SHA-256 " +
                     result.sha256.substring(0, 12) + "...). Send this file " +
                     "privately to the other phone and use its matching " +
-                    "IMPORT VERIFIED XBOX MAP option. No saves were copied.";
+                    "IMPORT MAP option. No saves were copied.";
             }
         });
     }
@@ -1822,13 +1806,13 @@ public class LauncherActivity extends Activity {
         layout.setGravity(Gravity.CENTER);
         layout.setPadding(dp(36), dp(20), dp(36), dp(20));
         layout.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-            new int[] { Color.rgb(10, 18, 27), Color.rgb(20, 34, 45),
-                Color.rgb(7, 13, 20) }));
+            new int[] { HaloTheme.BACKGROUND_TOP, HaloTheme.BACKGROUND_CENTER,
+                HaloTheme.BACKGROUND_BOTTOM }));
 
         TextView title = new TextView(this);
         title.setText("HALO  /  GAME DATA");
         title.setTextColor(HUD_TEXT);
-        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        HaloTheme.font(title, true);
         title.setLetterSpacing(0.12f);
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 24);
         title.setGravity(Gravity.CENTER);

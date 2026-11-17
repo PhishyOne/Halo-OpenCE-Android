@@ -905,12 +905,16 @@ public final class TouchControls extends View implements SensorEventListener, In
     private TextView text(String value) {
         TextView view = new TextView(getContext());
         view.setText(value);
+        view.setTextColor(HaloTheme.TEXT);
+        HaloTheme.font(view, false);
         return view;
     }
 
     private Button button(String label, View.OnClickListener listener) {
         Button button = new Button(getContext());
         button.setText(label);
+        button.setTextColor(HaloTheme.TEXT);
+        HaloTheme.font(button, false);
         button.setOnClickListener(listener);
         return button;
     }
@@ -1022,7 +1026,7 @@ public final class TouchControls extends View implements SensorEventListener, In
         LinearLayout row = new LinearLayout(getContext());
         row.setPadding(16, 4, 16, 4);
         TextView name = text(rowName(control, withHidden));
-        name.setTextColor(Color.WHITE);
+        name.setTextColor(HaloTheme.TEXT);
         row.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         return row;
     }
@@ -1034,7 +1038,7 @@ public final class TouchControls extends View implements SensorEventListener, In
             final int control = i;
             LinearLayout row = row(control, true);
             TextView value = text("");
-            value.setTextColor(Color.WHITE);
+            value.setTextColor(HaloTheme.TEXT);
             Button smaller = new Button(getContext());
             Button larger = new Button(getContext());
             Runnable refresh = () -> {
@@ -1268,15 +1272,16 @@ public final class TouchControls extends View implements SensorEventListener, In
     private void circle(Canvas canvas, float x, float y, float radius, String label, boolean active,
             float textSize, float opacity) {
         paint.setStyle(Paint.Style.FILL);
-        paint.setColor(alpha(active ? 0x9983d9ff : 0x55304050, opacity));
+        paint.setColor(alpha(active ? 0x992896ff : 0x55203f64, opacity));
         canvas.drawCircle(x, y, radius, paint);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(2);
-        paint.setColor(alpha(active ? 0xffaee7ff : 0xffffffff, opacity));
+        paint.setColor(alpha(active ? 0xff89c7ff : 0xffffffff, opacity));
         canvas.drawCircle(x, y, radius, paint);
         paint.setStyle(Paint.Style.FILL);
-        paint.setColor(alpha(Color.WHITE, Math.max(opacity, 0.5f)));
+        paint.setColor(alpha(HaloTheme.TEXT, Math.max(opacity, 0.5f)));
         paint.setTextAlign(Paint.Align.CENTER);
+        paint.setTypeface(HaloTheme.face(getContext(), false));
         paint.setTextSize(textSize);
         // (a long name, "Y / Weapon", is made smaller to fit inside the circle)
         float width = paint.measureText(label);
@@ -1299,7 +1304,7 @@ public final class TouchControls extends View implements SensorEventListener, In
             toolbarItem(canvas, middle - EDITOR_SPACING, editorY(), OPTIONS_RADIUS, "Export", false);
             toolbarItem(canvas, middle, editorY(), OPTIONS_RADIUS, "Import", false);
             toolbarItem(canvas, middle + EDITOR_SPACING, editorY(), OPTIONS_RADIUS, "Save", false);
-            paint.setColor(Color.WHITE);
+            paint.setColor(HaloTheme.TEXT);
             paint.setTextSize(14);
             canvas.drawText("Drag the controls and Options, then push Save", middle,
                 editorY() + toolbarRadius(OPTIONS_RADIUS) + 24, paint);

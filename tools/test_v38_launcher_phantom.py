@@ -48,7 +48,8 @@ class V38Tests(unittest.TestCase):
 
     def test_expanded_sections_are_highlighted(self):
         self.assertIn("hudButton(button, open);", self.launcher)
-        for control in ("hostHintsToggle, hostHints", "advancedToggle, advanced",
+        self.assertNotIn("hostHintsToggle", self.launcher)
+        for control in ("advancedToggle, advanced",
                         "killstreakToggle, killstreakPanel", "mapsToggle, repairPanel",
                         "customMapsToggle, customMapsPanel",
                         "savesToggle, campaignSavesPanel"):
