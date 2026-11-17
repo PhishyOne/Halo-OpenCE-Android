@@ -66,7 +66,7 @@ final class CareerProfile {
                 SharedPreferences pref = activity.getSharedPreferences(
                     PREFS, Context.MODE_PRIVATE);
                 String name = pref.getString("name", "Spartan");
-                section(activity, target, "SPARTAN SERVICE RECORD");
+                section(activity, target, CareerRecords.SERVICE_RANK_TITLE);
                 target.addView(identity(activity, name, result.rankIndex(),
                     result.rank(), 22));
                 target.addView(text(activity,
@@ -103,22 +103,41 @@ final class CareerProfile {
                     if (medal.earned) earned++;
                 target.addView(text(activity, "Achievements unlocked: " + earned +
                     " / " + result.achievements().size(), 13, GOLD, true));
+                section(activity, target, "SPARTAN RATING");
+                target.addView(text(activity, "UNRATED", 17, GOLD, true));
+                target.addView(text(activity,
+                    "Verified human matches are required for a skill rating.",
+                    12, MUTED, false));
                 if (warning != null)
                     target.addView(text(activity, "Career data: " + warning,
                         12, Color.rgb(255, 184, 136), false));
+                LinearLayout actions = new LinearLayout(activity);
+                actions.setOrientation(LinearLayout.HORIZONTAL);
+                actions.setGravity(Gravity.CENTER_VERTICAL);
                 Button full = new Button(activity);
                 full.setAllCaps(false);
-                full.setText("VIEW FULL PROFILE & ACHIEVEMENTS");
+                full.setText("FULL SERVICE RECORD");
                 full.setTextColor(TEXT);
                 full.setBackgroundTintList(ColorStateList.valueOf(
                     HaloTheme.CONTROL_TOP));
                 HaloTheme.font(full, true);
                 full.setOnClickListener(view -> show(activity, appDirectory));
-                target.addView(full);
-                target.addView(text(activity,
-                    "Offline career history, stored only on this phone. " +
-                    "Ranked multiplayer leaderboards are a separate future feature.",
-                    11, MUTED, false));
+                actions.addView(full, new LinearLayout.LayoutParams(0,
+                    dp(activity, 44), 1f));
+                Button ranks = new Button(activity);
+                ranks.setAllCaps(false);
+                ranks.setText("VIEW ALL RANKS");
+                ranks.setTextColor(TEXT);
+                ranks.setBackgroundTintList(ColorStateList.valueOf(
+                    HaloTheme.CONTROL_TOP));
+                HaloTheme.font(ranks, true);
+                ranks.setOnClickListener(view ->
+                    RankGallery.show(activity, result.rankIndex()));
+                LinearLayout.LayoutParams rankButton = new LinearLayout.LayoutParams(
+                    0, dp(activity, 44), 1f);
+                rankButton.leftMargin = dp(activity, 8);
+                actions.addView(ranks, rankButton);
+                target.addView(actions);
             });
         }, "Halo-career-dashboard-read").start();
     }
@@ -193,6 +212,7 @@ final class CareerProfile {
             PANEL, HaloTheme.BORDER, 6,
             activity.getResources().getDisplayMetrics().density));
 
+        section(activity, panel, CareerRecords.SERVICE_RANK_TITLE);
         panel.addView(identity(activity, name, career.rankIndex(),
             career.rank(), 20));
         panel.addView(text(activity,
@@ -209,6 +229,13 @@ final class CareerProfile {
             panel.addView(text(activity, "Maximum career rank reached",
                 12, GOLD, true));
         }
+
+        section(activity, panel, "SPARTAN RATING");
+        panel.addView(text(activity, "UNRATED", 16, GOLD, true));
+        panel.addView(text(activity,
+            "Competitive rating requires verified human matches. "
+            + "Bot kills and career XP do not affect skill rating.",
+            12, MUTED, false));
 
         section(activity, panel, "CAREER STATISTICS");
         panel.addView(text(activity,
@@ -268,9 +295,15 @@ final class CareerProfile {
         if (error != null)
             panel.addView(text(activity, "Storage: " + error,
                 12, Color.rgb(255, 184, 136), false));
-        panel.addView(text(activity,
-            "Local career progression only. Competitive skill ratings and " +
-            "cross-phone leaderboards are not active yet.", 11, MUTED, false));
+        Button gallery = new Button(activity);
+        gallery.setText("VIEW ALL 12 UNSC RANK INSIGNIAS");
+        gallery.setAllCaps(false);
+        HaloTheme.font(gallery, true);
+        gallery.setTextColor(TEXT);
+        gallery.setBackgroundTintList(ColorStateList.valueOf(HaloTheme.CONTROL_TOP));
+        gallery.setOnClickListener(view -> RankGallery.show(activity,
+            career.rankIndex()));
+        panel.addView(gallery);
 
         ScrollView scroll = new ScrollView(activity);
         scroll.setFillViewport(true);

@@ -14,6 +14,7 @@ import java.util.Set;
  * independently certified proof of competitive rank. */
 final class CareerRecords {
     static final String LOG_NAME = "career-matches-v1.log";
+    static final String SERVICE_RANK_TITLE = "UNSC SERVICE RANK";
     private static final int MAX_FILE_BYTES = 2 * 1024 * 1024;
     private static final String[] RANKS = {
         "Recruit", "Private", "Corporal", "Sergeant", "Staff Sergeant",
@@ -199,6 +200,22 @@ final class CareerRecords {
                 + 15L * Math.min(4, match.returns)
                 + Math.min(20, match.seconds / 60);
         }
+    }
+
+    /** The exact twelve-rank progression shared by the service-record
+     * dashboard, insignia gallery, and standalone local match journal. */
+    static int rankCount() { return RANKS.length; }
+
+    static String rankName(int index) {
+        if (index < 0 || index >= RANKS.length)
+            throw new IllegalArgumentException("Invalid UNSC Service Rank");
+        return RANKS[index];
+    }
+
+    static long rankThreshold(int index) {
+        if (index < 0 || index >= THRESHOLDS.length)
+            throw new IllegalArgumentException("Invalid UNSC Service Rank");
+        return THRESHOLDS[index];
     }
 
     private CareerRecords() { }
