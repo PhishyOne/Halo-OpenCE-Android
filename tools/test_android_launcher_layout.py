@@ -15,22 +15,36 @@ class HaloLauncherLayoutTests(unittest.TestCase):
     def setUpClass(cls):
         cls.source = LAUNCHER.read_text()
 
-    def test_two_modes_above_one_play(self):
+    def test_compact_mode_navigation_above_one_play(self):
         s = self.source
+        self.assertIn('String[] modeNames = { "Campaign", "Bots", "Host", "Join", "Tools" };', s)
+        self.assertIn('Button[] modeTabs = new Button[modeNames.length];', s)
         self.assertIn('offlineMode.setText("OFFLINE BOTS");', s)
         self.assertIn('lanMode.setText("LAN / SYSTEM LINK");', s)
         self.assertIn('play.setText("PLAY");', s)
-        self.assertLess(s.index('footer.addView(choices);'), s.index('footer.addView(play, playParams);'))
+        self.assertLess(s.index('root.addView(modeBar);'), s.index('footer.addView(play, playParams);'))
         self.assertEqual(s.count('play.setText("PLAY");'), 1)
+        self.assertNotIn('footer.addView(choices);', s)
         self.assertNotIn('Save settings & Open Halo', s)
 
     def test_modes_do_not_overlap_and_standard_remains_available(self):
         s = self.source
         self.assertIn('if (selected)\n                lanMode.setChecked(false);', s)
         self.assertIn('if (selected)\n                offlineMode.setChecked(false);', s)
-        self.assertIn('offlinePanel.setVisibility(offlineMode.isChecked()', s)
-        self.assertIn('lanPanel.setVisibility(lanMode.isChecked()', s)
+        self.assertIn('offlinePanel.setVisibility(playing && offlineMode.isChecked()', s)
+        self.assertIn('lanPanel.setVisibility(playing && lanMode.isChecked()', s)
+        self.assertIn('toolsPage.setVisibility(playing ? View.GONE : View.VISIBLE);', s)
         self.assertIn('launcherPreferences.edit().putString("play_mode", "standard")', s)
+
+    def test_auto_discovery_keeps_manual_fallback(self):
+        s = self.source
+        self.assertIn('LanHostPicker hostPicker = new LanHostPicker(', s)
+        self.assertIn('hostPicker.search(true, () -> play.performClick());', s)
+        self.assertIn('hostPicker.search(false, null);', s)
+        self.assertIn('manualHostPanel.setVisibility(View.GONE);', s)
+        self.assertIn('game.putExtra(HaloActivity.LAN_DISCOVERY_HOST, true);', s)
+        self.assertIn('toolsPage.addView(mapsToggle);', s)
+        self.assertIn('toolsPage.addView(diagnostics);', s)
 
     def test_offline_uses_original_native_arguments(self):
         s = self.source

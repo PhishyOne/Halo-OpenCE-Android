@@ -213,6 +213,7 @@ jobs:
           python3 tools/test_bot_automatic_modes.py -v
           python3 tools/test_coop_unit_resync.py -v
           python3 tools/test_android_launcher_layout.py -v
+          python3 tools/test_lan_discovery_launcher.py -v
           python3 tools/test_android_experiment_package.py -v
           python3 tools/test_lan_apk_update.py -v
           python3 tools/test_campaign_save_backup.py -v
@@ -230,6 +231,10 @@ jobs:
             port/android/app/src/main/java/com/halo/decomp/LanUpdateSocket.java \
             tools/lan/LanUpdateProtocolTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LanUpdateProtocolTest
+          javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" \
+            port/android/app/src/main/java/com/halo/decomp/LanDiscoveryProtocol.java \
+            tools/lan/LanDiscoveryProtocolTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LanDiscoveryProtocolTest
           javac -d "$RUNNER_TEMP/halo-test-classes" \
             port/android/app/src/main/java/com/halo/decomp/LanConfig.java \
             tools/lan/LanConfigSmokeTest.java

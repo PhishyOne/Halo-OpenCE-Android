@@ -35,7 +35,9 @@ import org.libsdl.app.SDLActivity;
 public class HaloActivity extends SDLActivity {
     static final String OFFLINE_BOT_ARGUMENTS = "com.halo.decomp.OFFLINE_BOT_ARGUMENTS";
     static final String LAN_UPDATE_HOST = "com.halo.decomp.LAN_UPDATE_HOST";
+    static final String LAN_DISCOVERY_HOST = "com.halo.decomp.LAN_DISCOVERY_HOST";
     private LanUpdateServer lanUpdateServer;
+    private LanDiscoveryServer lanDiscoveryServer;
     /** lets system link's broadcasts in over Wi-Fi while the game runs */
     private WifiManager.MulticastLock multicastLock;
     /**
@@ -124,12 +126,25 @@ public class HaloActivity extends SDLActivity {
             lanUpdateServer.stop();
             lanUpdateServer = null;
         }
+        if (lanDiscoveryServer != null) {
+            lanDiscoveryServer.stop();
+            lanDiscoveryServer = null;
+        }
         updateLanShare(intent);
     }
 
     private void updateLanShare(Intent intent) {
+        boolean shouldAdvertise = intent != null &&
+            intent.getBooleanExtra(LAN_DISCOVERY_HOST, false);
         boolean shouldShare = intent != null &&
             intent.getBooleanExtra(LAN_UPDATE_HOST, false);
+        // LAN host discovery is independent of opt-in APK sharing.
+        if (shouldAdvertise && lanDiscoveryServer == null)
+            lanDiscoveryServer = LanDiscoveryServer.start();
+        else if (!shouldAdvertise && lanDiscoveryServer != null) {
+            lanDiscoveryServer.stop();
+            lanDiscoveryServer = null;
+        }
         if (shouldShare && lanUpdateServer == null) {
             lanUpdateServer = LanUpdateServer.start(this);
         } else if (!shouldShare && lanUpdateServer != null) {
@@ -365,6 +380,10 @@ public class HaloActivity extends SDLActivity {
 
     @Override
     protected void onDestroy() {
+        if (lanDiscoveryServer != null) {
+            lanDiscoveryServer.stop();
+            lanDiscoveryServer = null;
+        }
         if (lanUpdateServer != null) {
             lanUpdateServer.stop();
             lanUpdateServer = null;

@@ -430,9 +430,21 @@ public class LauncherActivity extends Activity {
         return spinner;
     }
 
-    /** Game-styled launcher: one Play action and two mutually exclusive mode
-     * checkboxes. Both off opens Halo normally. The selected mode alone
-     * reveals its options; LAN and offline bot settings remain independent. */
+    /** Compact selection for Campaign, offline bots, Host, Join and Tools. */
+    private void hudTab(Button button, boolean selected) {
+        button.setAllCaps(false);
+        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        button.setTextColor(selected ? Color.rgb(15, 29, 31) : HUD_TEXT);
+        button.setMinHeight(dp(39));
+        button.setPadding(dp(2), dp(3), dp(2), dp(3));
+        button.setBackground(selected ?
+            hudSurface(Color.rgb(190, 214, 180), Color.rgb(118, 159, 135),
+                Color.rgb(218, 235, 210)) :
+            hudSurface(Color.rgb(35, 53, 67), Color.rgb(15, 29, 40),
+                HUD_BORDER));
+    }
+
     private void buildLanInterface() {
         LanConfig.Settings settings = new LanConfig.Settings();
         String warning = "";
@@ -474,6 +486,24 @@ public class LauncherActivity extends Activity {
         root.addView(accent, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, dp(1)));
 
+        // One row of choices replaces two checkboxes plus the Host/Join radios.
+        LinearLayout modeBar = new LinearLayout(this);
+        modeBar.setOrientation(LinearLayout.HORIZONTAL);
+        modeBar.setPadding(dp(8), dp(5), dp(8), dp(5));
+        String[] modeNames = { "Campaign", "Bots", "Host", "Join", "Tools" };
+        Button[] modeTabs = new Button[modeNames.length];
+        for (int i = 0; i < modeNames.length; i++) {
+            Button tab = new Button(this);
+            tab.setText(modeNames[i]);
+            hudTab(tab, false);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                0, dp(39), 1.0f);
+            if (i > 0) params.leftMargin = dp(5);
+            modeBar.addView(tab, params);
+            modeTabs[i] = tab;
+        }
+        root.addView(modeBar);
+
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.setVerticalScrollBarEnabled(false);
@@ -484,14 +514,15 @@ public class LauncherActivity extends Activity {
         root.addView(scroll, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.0f));
 
+        LinearLayout toolsPage = new LinearLayout(this);
+        toolsPage.setOrientation(LinearLayout.VERTICAL);
+        toolsPage.setVisibility(View.GONE);
+        content.addView(toolsPage);
+
         // System Link panel. Host, guest and advanced controls are retained.
         LinearLayout lanPanel = hudPanel();
         content.addView(lanPanel);
         lanPanel.addView(hudSection("SYSTEM LINK"));
-        lanPanel.addView(lanText("LOCAL IP  " + (ips.isEmpty()
-            ? "Not detected"
-            : android.text.TextUtils.join("   /   ", ips)), 12));
-
         RadioGroup roles = new RadioGroup(this);
         roles.setOrientation(LinearLayout.HORIZONTAL);
         RadioButton hostRole = new RadioButton(this);
@@ -506,7 +537,11 @@ public class LauncherActivity extends Activity {
         joinRole.setButtonTintList(ColorStateList.valueOf(HUD_ACCENT));
         roles.addView(hostRole);
         roles.addView(joinRole);
-        roles.check(settings.peer.isEmpty() ? hostRole.getId() : joinRole.getId());
+        String rememberedRole = getSharedPreferences("launcher_ui", MODE_PRIVATE)
+            .getString("lan_role", settings.peer.isEmpty() ? "host" : "join");
+        roles.check("join".equals(rememberedRole) ?
+            joinRole.getId() : hostRole.getId());
+        roles.setVisibility(View.GONE); // Host/Join are the main tabs.
         lanPanel.addView(roles);
 
         TextView feedback = lanText(inviteError == null
@@ -515,8 +550,21 @@ public class LauncherActivity extends Activity {
 
         LinearLayout hostPanel = new LinearLayout(this);
         hostPanel.setOrientation(LinearLayout.VERTICAL);
-        hostPanel.addView(lanText("Give your address to players joining this match.", 12));
-        hostPanel.addView(lanText("HOST ADDRESS", 12));
+        hostPanel.addView(lanText(
+            "Friends on this Wi-Fi or hotspot can find your hosted game automatically.", 12));
+        Button hostManualToggle = new Button(this);
+        hostManualToggle.setText("SHOW HOST IP / SHARE INVITE");
+        hudButton(hostManualToggle, false);
+        hostPanel.addView(hostManualToggle);
+        LinearLayout hostManualPanel = new LinearLayout(this);
+        hostManualPanel.setOrientation(LinearLayout.VERTICAL);
+        hostManualPanel.setVisibility(View.GONE);
+        hostManualPanel.addView(lanText("LOCAL IP  " + (ips.isEmpty()
+            ? "Not detected"
+            : android.text.TextUtils.join("   /   ", ips)), 12));
+        hostManualToggle.setOnClickListener(view -> hostManualPanel.setVisibility(
+            hostManualPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+        hostManualPanel.addView(lanText("HOST ADDRESS", 12));
         EditText shareIp = new EditText(this);
         shareIp.setSingleLine(true);
         shareIp.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
@@ -524,9 +572,9 @@ public class LauncherActivity extends Activity {
         shareIp.setText(suggestedAddress);
         shareIp.setSelectAllOnFocus(true);
         hudInput(shareIp);
-        hostPanel.addView(shareIp);
+        hostManualPanel.addView(shareIp);
         if (ips.size() > 1)
-            hostPanel.addView(lanText("Confirm the active Wi-Fi address before sharing.", 12));
+            hostManualPanel.addView(lanText("Confirm the active Wi-Fi address before sharing.", 12));
 
         LinearLayout shareActions = new LinearLayout(this);
         shareActions.setOrientation(LinearLayout.HORIZONTAL);
@@ -569,7 +617,8 @@ public class LauncherActivity extends Activity {
                 + "same Wi-Fi/hotspot, choose LAN > Join, and enter: " + value);
             startActivity(Intent.createChooser(message, "Share Halo host IP"));
         });
-        hostPanel.addView(shareActions);
+        hostManualPanel.addView(shareActions);
+        hostPanel.addView(hostManualPanel);
         // Serving is explicitly scoped to a LAN host's game process. This
         // preference never enables a socket for standard, offline or joins.
         CheckBox shareUpdates = new CheckBox(this);
@@ -578,10 +627,9 @@ public class LauncherActivity extends Activity {
             .getBoolean("lan_update_share", true));
         hudCheck(shareUpdates);
         hostPanel.addView(shareUpdates);
-        hostPanel.addView(lanText("The LAN updater starts after you press PLAY "
-            + "as Host. Leave Halo running in the lobby or match. Friends with "
-            + "v23+ can enter this phone's hotspot HOST IP and choose "
-            + "CHECK HOST UPDATE; Android asks before installing.", 11));
+        hostPanel.addView(lanText("Host discovery runs during the game. "
+            + "Sharing updates is optional; Android always asks guests "
+            + "before installing an APK.", 11));
 
         final int[] lanBotCounts = LanConfig.choicesIncluding(
             settings.systemLinkBotCount);
@@ -592,7 +640,9 @@ public class LauncherActivity extends Activity {
         Spinner lanBots = botChoice(hostPanel, "BOT COUNT",
             lanBotChoices, LanConfig.choiceIndex(lanBotCounts,
                 settings.systemLinkBotCount));
-        hostPanel.addView(lanText(
+        LinearLayout hostHints = new LinearLayout(this);
+        hostHints.setOrientation(LinearLayout.VERTICAL);
+        hostHints.addView(lanText(
             "Large maps: try 16, 24, 32, 48 or 64 bots. 32+ is an "
             + "experimental high-load mode over hotspot LAN. Bigger teams "
             + "use more CPU and network bandwidth; if players stutter "
@@ -612,33 +662,63 @@ public class LauncherActivity extends Activity {
         driverBots.setChecked(settings.vehicleDriving);
         hudCheck(driverBots);
         hostPanel.addView(driverBots);
-        hostPanel.addView(lanText(
+        hostHints.addView(lanText(
             "Optional: up to 6 bots can drive empty Warthogs, Ghosts or "
             + "Scorpions. They steer through Halo's normal vehicle physics, "
             + "slow on bends and reverse if stuck. Not Banshees yet. "
             + "Turn this off for ordinary infantry games.", 11));
-        hostPanel.addView(lanText("Want Banshees or other map vehicles "
+        hostHints.addView(lanText("Want Banshees or other map vehicles "
             + "on Blood Gulch? In Halo's GAME TYPE settings choose "
             + "VEHICLES → PC (not Default). This allows vehicles the "
             + "map actually contains; it won't create absent ones.", 11));
-        hostPanel.addView(lanText("Vehicle crews are automatic. "
+        hostHints.addView(lanText("Vehicle crews are automatic. "
             + "Bots pursue flags in CTF, hills in King, and balls in Oddball. "
             + "Race bots follow checkpoints; vehicle-driving AI is "
             + "optional. Slayer behavior is unchanged.", 12));
+        Button hostHintsToggle = new Button(this);
+        hostHintsToggle.setText("HOST TIPS");
+        hudButton(hostHintsToggle, false);
+        hostPanel.addView(hostHintsToggle);
+        hostHints.setVisibility(View.GONE);
+        hostHintsToggle.setOnClickListener(view -> hostHints.setVisibility(
+            hostHints.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+        hostPanel.addView(hostHints);
         lanPanel.addView(hostPanel);
 
         LinearLayout joinPanel = new LinearLayout(this);
         joinPanel.setOrientation(LinearLayout.VERTICAL);
-        joinPanel.addView(lanText("Join the host on the same Wi-Fi or hotspot.", 12));
-        joinPanel.addView(lanText("HOST IP", 12));
+        joinPanel.addView(lanText("Connect to the host's hotspot or Wi-Fi.", 12));
+        TextView discoveryStatus = lanText("Searching for Halo games is automatic.", 12);
+        discoveryStatus.setTextColor(HUD_ACCENT);
+        joinPanel.addView(discoveryStatus);
+        Button findHosts = new Button(this);
+        findHosts.setText("FIND LAN HOSTS");
+        hudButton(findHosts, false);
+        joinPanel.addView(findHosts);
+        Button manualHostToggle = new Button(this);
+        manualHostToggle.setText("MANUAL IP / FALLBACK");
+        hudButton(manualHostToggle, false);
+        joinPanel.addView(manualHostToggle);
+        LinearLayout manualHostPanel = new LinearLayout(this);
+        manualHostPanel.setOrientation(LinearLayout.VERTICAL);
+        manualHostPanel.setVisibility(View.GONE);
+        manualHostToggle.setOnClickListener(view -> manualHostPanel.setVisibility(
+            manualHostPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+        manualHostPanel.addView(lanText("HOST IP", 12));
         EditText hostIp = new EditText(this);
         hostIp.setSingleLine(true);
         hostIp.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         hostIp.setHint("Example: 10.28.111.42");
-        hostIp.setText(settings.peer);
+        String previousHost = getSharedPreferences("launcher_ui", MODE_PRIVATE)
+            .getString("last_host", "");
+        hostIp.setText(settings.peer.isEmpty() ? previousHost : settings.peer);
         hostIp.setSelectAllOnFocus(true);
         hudInput(hostIp);
-        joinPanel.addView(hostIp);
+        manualHostPanel.addView(hostIp);
+        joinPanel.addView(manualHostPanel);
+        LanHostPicker hostPicker = new LanHostPicker(
+            this, hostIp, discoveryStatus, findHosts, manualHostPanel);
+        findHosts.setOnClickListener(view -> hostPicker.search(false, null));
         Button checkHostUpdate = new Button(this);
         checkHostUpdate.setText("CHECK HOST UPDATE");
         hudButton(checkHostUpdate, false);
@@ -647,23 +727,30 @@ public class LauncherActivity extends Activity {
                 feedback.setText("Close Halo before checking for an update.");
                 return;
             }
+            if (hostPicker.isSearching() ||
+                LanUpdateProtocol.privateAddress(hostIp.getText().toString().trim()) == null) {
+                hostPicker.search(true, () -> checkHostUpdate.performClick());
+                return;
+            }
+            getSharedPreferences("launcher_ui", MODE_PRIVATE).edit()
+                .putString("play_mode", "lan").putString("lan_role", "join")
+                .putString("last_host", hostIp.getText().toString().trim())
+                .apply();
             checkHostUpdate.setEnabled(false);
             feedback.setText("Checking the host update service on TCP 5162...");
             LanUpdateClient.check(this, hostIp.getText().toString().trim(),
                 true, null, () -> checkHostUpdate.setEnabled(true));
         });
         joinPanel.addView(checkHostUpdate);
-        joinPanel.addView(lanText("Wait until the host has pressed PLAY in "
-            + "LAN → Host with sharing enabled. Joining the Wi-Fi alone "
-            + "does not start the updater. Halo also checks before joining. "
-            + "The first v23 update requires manual installation once.", 11));
+        joinPanel.addView(lanText(
+            "To download an update, the host must enable sharing and be in Halo. "
+            + "Older hosts without discovery still support Manual IP.", 11));
         lanPanel.addView(joinPanel);
 
         Runnable updateRole = () -> {
             hostPanel.setVisibility(hostRole.isChecked() ? View.VISIBLE : View.GONE);
             joinPanel.setVisibility(hostRole.isChecked() ? View.GONE : View.VISIBLE);
         };
-        roles.setOnCheckedChangeListener((group, checkedId) -> updateRole.run());
         updateRole.run();
 
         Button advancedToggle = new Button(this);
@@ -731,6 +818,17 @@ public class LauncherActivity extends Activity {
             + "follow checkpoints on foot. Slayer combat stays the same. "
             + "Choose the game type inside Halo.", 12));
 
+        Button optionsToggle = new Button(this);
+        optionsToggle.setText("ADVANCED GAME OPTIONS");
+        hudButton(optionsToggle, false);
+        content.addView(optionsToggle);
+        LinearLayout gameOptions = new LinearLayout(this);
+        gameOptions.setOrientation(LinearLayout.VERTICAL);
+        gameOptions.setVisibility(View.GONE);
+        content.addView(gameOptions);
+        optionsToggle.setOnClickListener(view -> gameOptions.setVisibility(
+            gameOptions.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+
         // Host-only, opt-in commander support. All saved choices stay
         // independent from the network and bot preferences. The native
         // host alone decides which features every client is allowed.
@@ -742,10 +840,10 @@ public class LauncherActivity extends Activity {
                 commanderChoices.get(key)));
         Button commanderToggle = new Button(this);
         hudButton(commanderToggle, false);
-        content.addView(commanderToggle);
+        gameOptions.addView(commanderToggle);
         LinearLayout commanderPanel = hudPanel();
         commanderPanel.setVisibility(View.GONE);
-        content.addView(commanderPanel);
+        gameOptions.addView(commanderPanel);
         commanderPanel.addView(hudSection("2142-STYLE COMMANDER MODE"));
         commanderPanel.addView(lanText("OFF by default. Host-controlled in "
             + "team multiplayer. Disabling the master switch disables all "
@@ -798,10 +896,10 @@ public class LauncherActivity extends Activity {
                 killstreakChoices.get(key)));
         Button killstreakToggle = new Button(this);
         hudButton(killstreakToggle, false);
-        content.addView(killstreakToggle);
+        gameOptions.addView(killstreakToggle);
         LinearLayout killstreakPanel = hudPanel();
         killstreakPanel.setVisibility(View.GONE);
-        content.addView(killstreakPanel);
+        gameOptions.addView(killstreakPanel);
         killstreakPanel.addView(hudSection("INDIVIDUAL KILLSTREAK REWARDS"));
         killstreakPanel.addView(lanText("OFF by default. Separate from 2142 "
             + "Commander Mode; a host enables rewards for all human players, "
@@ -845,10 +943,10 @@ public class LauncherActivity extends Activity {
         Button mapsToggle = new Button(this);
         mapsToggle.setText("MAP REPAIR");
         hudButton(mapsToggle, false);
-        content.addView(mapsToggle);
+        toolsPage.addView(mapsToggle);
         LinearLayout repairPanel = hudPanel();
         repairPanel.setVisibility(View.GONE);
-        content.addView(repairPanel);
+        toolsPage.addView(repairPanel);
         mapsToggle.setOnClickListener(view -> repairPanel.setVisibility(
             repairPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
         repairPanel.addView(hudSection("SIDEWINDER"));
@@ -989,10 +1087,10 @@ public class LauncherActivity extends Activity {
         Button customMapsToggle = new Button(this);
         customMapsToggle.setText("CUSTOM MAPS");
         hudButton(customMapsToggle, false);
-        content.addView(customMapsToggle);
+        toolsPage.addView(customMapsToggle);
         LinearLayout customMapsPanel = hudPanel();
         customMapsPanel.setVisibility(View.GONE);
-        content.addView(customMapsPanel);
+        toolsPage.addView(customMapsPanel);
         customMapsToggle.setOnClickListener(view -> customMapsPanel.setVisibility(
             customMapsPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
         customMapsPanel.addView(hudSection("HALO CUSTOM EDITION"));
@@ -1082,10 +1180,10 @@ public class LauncherActivity extends Activity {
         Button savesToggle = new Button(this);
         savesToggle.setText("CAMPAIGN SAVES");
         hudButton(savesToggle, false);
-        content.addView(savesToggle);
+        toolsPage.addView(savesToggle);
         LinearLayout campaignSavesPanel = hudPanel();
         campaignSavesPanel.setVisibility(View.GONE);
-        content.addView(campaignSavesPanel);
+        toolsPage.addView(campaignSavesPanel);
         savesToggle.setOnClickListener(view ->
             campaignSavesPanel.setVisibility(campaignSavesPanel.getVisibility()
                 == View.VISIBLE ? View.GONE : View.VISIBLE));
@@ -1166,10 +1264,10 @@ public class LauncherActivity extends Activity {
             picker.putExtra(Intent.EXTRA_TITLE, "Halo-diagnostics.txt");
             startActivityForResult(picker, SAVE_DIAGNOSTICS);
         });
-        content.addView(diagnostics);
+        toolsPage.addView(diagnostics);
         diagnosticStatus = lanText("Saves recent co-op/network errors and "
             + "map names, not credentials. Review the report before sharing.", 12);
-        content.addView(diagnosticStatus);
+        toolsPage.addView(diagnosticStatus);
 
         // Fixed footer stays on screen even when the host options are long.
         LinearLayout footer = new LinearLayout(this);
@@ -1197,8 +1295,8 @@ public class LauncherActivity extends Activity {
             0, dp(39), 1.0f);
         lanModeParams.leftMargin = dp(8);
         choices.addView(lanMode, lanModeParams);
-        footer.addView(choices);
-
+        // Legacy checkbox state is kept for the stable config/launch logic,
+        // but the new mode bar selects it without displaying two controls.
         SharedPreferences launcherPreferences = getSharedPreferences("launcher_ui", MODE_PRIVATE);
         String savedMode = invitePending ? "lan" :
             launcherPreferences.getString("play_mode", "lan");
@@ -1208,6 +1306,7 @@ public class LauncherActivity extends Activity {
             boolean available = offlineMode.isChecked() ||
                 (lanMode.isChecked() && hostRole.isChecked() &&
                     lanOnly.isChecked() && !invitePending);
+            optionsToggle.setVisibility(available ? View.VISIBLE : View.GONE);
             commanderToggle.setVisibility(available ? View.VISIBLE : View.GONE);
             killstreakToggle.setVisibility(available ? View.VISIBLE : View.GONE);
             commanderPanel.setVisibility(View.GONE);
@@ -1219,10 +1318,23 @@ public class LauncherActivity extends Activity {
         });
         lanOnly.setOnCheckedChangeListener((button, checked) ->
             updateCommanderVisibility.run());
+        final boolean[] toolsVisible = { false };
         Runnable updateMode = () -> {
-            offlinePanel.setVisibility(offlineMode.isChecked() ? View.VISIBLE : View.GONE);
-            lanPanel.setVisibility(lanMode.isChecked() ? View.VISIBLE : View.GONE);
+            boolean playing = !toolsVisible[0];
+            offlinePanel.setVisibility(playing && offlineMode.isChecked() ?
+                View.VISIBLE : View.GONE);
+            lanPanel.setVisibility(playing && lanMode.isChecked() ?
+                View.VISIBLE : View.GONE);
+            toolsPage.setVisibility(playing ? View.GONE : View.VISIBLE);
             updateCommanderVisibility.run();
+            if (!playing) optionsToggle.setVisibility(View.GONE);
+            gameOptions.setVisibility(View.GONE);
+            if (playButton != null)
+                playButton.setVisibility(playing ? View.VISIBLE : View.GONE);
+            int chosen = !playing ? 4 : offlineMode.isChecked() ? 1 :
+                lanMode.isChecked() ? (hostRole.isChecked() ? 2 : 3) : 0;
+            for (int i = 0; i < modeTabs.length; i++)
+                hudTab(modeTabs[i], i == chosen);
             scroll.scrollTo(0, 0);
         };
         offlineMode.setOnCheckedChangeListener((button, selected) -> {
@@ -1236,6 +1348,39 @@ public class LauncherActivity extends Activity {
             updateMode.run();
         });
         updateMode.run();
+        // Keep the existing mode/configuration machinery, but use one
+        // compact navigation row for all normal player decisions.
+        modeTabs[0].setOnClickListener(view -> {
+            toolsVisible[0] = false;
+            offlineMode.setChecked(false);
+            lanMode.setChecked(false);
+            updateMode.run();
+        });
+        modeTabs[1].setOnClickListener(view -> {
+            toolsVisible[0] = false;
+            offlineMode.setChecked(true);
+            updateMode.run();
+        });
+        modeTabs[2].setOnClickListener(view -> {
+            toolsVisible[0] = false;
+            roles.check(hostRole.getId());
+            lanMode.setChecked(true);
+            updateMode.run();
+        });
+        modeTabs[3].setOnClickListener(view -> {
+            toolsVisible[0] = false;
+            roles.check(joinRole.getId());
+            lanMode.setChecked(true);
+            launcherPreferences.edit().putString("play_mode", "lan")
+                .putString("lan_role", "join").apply();
+            updateMode.run();
+            if (lanOnly.isChecked() && !invitePending)
+                hostPicker.search(false, null);
+        });
+        modeTabs[4].setOnClickListener(view -> {
+            toolsVisible[0] = true;
+            updateMode.run();
+        });
 
         footer.addView(feedback);
         Button appSettings = new Button(this);
@@ -1266,6 +1411,16 @@ public class LauncherActivity extends Activity {
             }
             if (!canStartGame(feedback, appSettings))
                 return;
+            if (lanMode.isChecked() && joinRole.isChecked() &&
+                lanOnly.isChecked() && !invitePending &&
+                (hostPicker.isSearching() ||
+                 LanUpdateProtocol.privateAddress(
+                     hostIp.getText().toString().trim()) == null)) {
+                // Discovery is asynchronous: do not save an empty host or
+                // launch gameplay until the user chooses a real LAN host.
+                hostPicker.search(true, () -> play.performClick());
+                return;
+            }
             if (offlineMode.isChecked()) {
                 int count = offlineCount.getSelectedItemPosition() + 1;
                 int skill = offlineSkill.getSelectedItemPosition();
@@ -1329,7 +1484,12 @@ public class LauncherActivity extends Activity {
                     feedback.setText("Couldn't apply game settings: " + e.getMessage());
                     return;
                 }
-                launcherPreferences.edit().putString("play_mode", "lan").apply();
+                SharedPreferences.Editor roleState = launcherPreferences.edit()
+                    .putString("play_mode", "lan")
+                    .putString("lan_role", hostRole.isChecked() ? "host" : "join");
+                if (!hostRole.isChecked())
+                    roleState.putString("last_host", hostIp.getText().toString().trim());
+                roleState.apply();
             } else {
                 // No box checked: launch ordinary Halo with no synthetic
                 // offline bots, while preserving network setup and saves.
@@ -1358,6 +1518,7 @@ public class LauncherActivity extends Activity {
                 launcherPreferences.edit().putBoolean("lan_update_share",
                     shareUpdates.isChecked()).apply();
                 Intent game = new Intent(this, HaloActivity.class);
+                game.putExtra(HaloActivity.LAN_DISCOVERY_HOST, true);
                 if (shareUpdates.isChecked())
                     game.putExtra(HaloActivity.LAN_UPDATE_HOST, true);
                 startGame(game);
@@ -1371,6 +1532,11 @@ public class LauncherActivity extends Activity {
         footer.addView(play, playParams);
         root.addView(footer);
         setContentView(root);
+        // Reentering Join after an in-place APK update should find a host
+        // still playing without asking the host to leave the match.
+        if (lanMode.isChecked() && joinRole.isChecked() &&
+            lanOnly.isChecked() && !invitePending)
+            hostPicker.search(false, null);
     }
 
     private void saveCommanderChoices(File file, CheckBox[] checks,
