@@ -73,6 +73,9 @@ public class LauncherActivity extends Activity {
     private static final int SAVE_DIAGNOSTICS = 7;
     private static final int PICK_CAMPAIGN_BACKUP = 8;
     private static final int PICK_CAMPAIGN_RESTORE = 9;
+    private static final int PICK_STOCK_MAP_IMPORT = 10;
+    private static final int PICK_STOCK_MAP_EXPORT = 11;
+    private static final String STATE_STOCK_MAP_TRANSFER = "stock-map-transfer";
     // Halo-style HUD colours. Native Android widgets remain accessible,
     // including the system file picker and LAN diagnostics.
     private static final int HUD_TEXT = Color.rgb(226, 237, 231);
@@ -91,6 +94,11 @@ public class LauncherActivity extends Activity {
     private Button repairChooseButton;
     private Button repairCartographerChooseButton;
     private Button repairCartographerRestoreButton;
+    private Spinner stockCampaignMapChoice;
+    private Button stockCampaignAuditButton;
+    private Button stockCampaignImportButton;
+    private Button stockCampaignExportButton;
+    private String pendingStockMapTransfer;
     private Button customMapImportButton;
     private Button customMapFolderButton;
     private Button customMapZipButton;
@@ -106,6 +114,9 @@ public class LauncherActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (savedInstanceState != null)
+            pendingStockMapTransfer =
+                savedInstanceState.getString(STATE_STOCK_MAP_TRANSFER);
         dataRoot = getExternalFilesDir(null);
         // created by the app, so that files pushed into it with adb stay
         // readable (a directory adb creates there belongs to the shell user)
@@ -118,6 +129,12 @@ public class LauncherActivity extends Activity {
             return;
         }
         buildInterface();
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle state) {
+        state.putString(STATE_STOCK_MAP_TRANSFER, pendingStockMapTransfer);
+        super.onSaveInstanceState(state);
     }
 
     /**
@@ -903,6 +920,68 @@ public class LauncherActivity extends Activity {
                 .setPositiveButton("RESTORE", (dialog, choice) -> restoreCartographer())
                 .show());
         repairPanel.addView(repairCartographerRestoreButton);
+
+        repairPanel.addView(hudSection("ORIGINAL CAMPAIGN MAPS"));
+        repairPanel.addView(lanText(
+            "Find which campaign maps are missing or damaged before creating "
+            + "a co-op lobby. The check fully decompresses each file on a worker "
+            + "thread. It never writes to maps or saves.", 12));
+        String[] mapNames = new String[SidewinderRepair.CAMPAIGN_MAP_FILES.length];
+        for (int i = 0; i < mapNames.length; i++)
+            mapNames[i] = SidewinderRepair.CAMPAIGN_MAP_TITLES[i]
+                + "  (" + SidewinderRepair.CAMPAIGN_MAP_FILES[i] + ")";
+        stockCampaignMapChoice = botChoice(
+            repairPanel, "MISSION", mapNames, 3);
+        stockCampaignAuditButton = new Button(this);
+        stockCampaignAuditButton.setText("CHECK ALL CAMPAIGN MAPS");
+        hudButton(stockCampaignAuditButton, false);
+        stockCampaignAuditButton.setOnClickListener(view ->
+            auditStockCampaignMaps());
+        repairPanel.addView(stockCampaignAuditButton);
+
+        repairPanel.addView(lanText(
+            "To send a repaired original campaign map to a friend, export "
+            + "your selected mission to Downloads, share that file privately, "
+            + "and have them import the SAME mission on their Halo launcher. "
+            + "Each player must have legitimate Halo game data. Campaign "
+            + "progress is separate and never transferred by this feature.", 11));
+        stockCampaignExportButton = new Button(this);
+        stockCampaignExportButton.setText("EXPORT SELECTED CAMPAIGN MAP");
+        hudButton(stockCampaignExportButton, false);
+        stockCampaignExportButton.setOnClickListener(view -> {
+            if (repairBusy) return;
+            if (gameProcessStatus() != 0) {
+                if (repairStatus != null)
+                    repairStatus.setText("Close Halo before exporting its maps.");
+                return;
+            }
+            pendingStockMapTransfer = selectedStockCampaignMap();
+            Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            save.addCategory(Intent.CATEGORY_OPENABLE);
+            save.setType("application/octet-stream");
+            save.putExtra(Intent.EXTRA_TITLE, pendingStockMapTransfer);
+            startActivityForResult(save, PICK_STOCK_MAP_EXPORT);
+        });
+        repairPanel.addView(stockCampaignExportButton);
+
+        stockCampaignImportButton = new Button(this);
+        stockCampaignImportButton.setText("IMPORT VERIFIED CAMPAIGN MAP");
+        hudButton(stockCampaignImportButton, false);
+        stockCampaignImportButton.setOnClickListener(view -> {
+            if (repairBusy) return;
+            if (gameProcessStatus() != 0) {
+                if (repairStatus != null)
+                    repairStatus.setText("Close Halo before importing a campaign map.");
+                return;
+            }
+            pendingStockMapTransfer = selectedStockCampaignMap();
+            Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            picker.addCategory(Intent.CATEGORY_OPENABLE);
+            picker.setType("*/*");
+            startActivityForResult(picker, PICK_STOCK_MAP_IMPORT);
+        });
+        repairPanel.addView(stockCampaignImportButton);
+
         repairStatus = lanText("", 12);
         repairStatus.setTextColor(HUD_WARNING);
         repairPanel.addView(repairStatus);
@@ -1447,6 +1526,12 @@ public class LauncherActivity extends Activity {
             customMapFolderButton.setEnabled(false);
         if (customMapZipButton != null)
             customMapZipButton.setEnabled(false);
+        if (stockCampaignAuditButton != null)
+            stockCampaignAuditButton.setEnabled(false);
+        if (stockCampaignImportButton != null)
+            stockCampaignImportButton.setEnabled(false);
+        if (stockCampaignExportButton != null)
+            stockCampaignExportButton.setEnabled(false);
 
         new Thread(() -> {
             String result;
@@ -1471,6 +1556,12 @@ public class LauncherActivity extends Activity {
                     customMapFolderButton.setEnabled(true);
                 if (customMapZipButton != null)
                     customMapZipButton.setEnabled(true);
+                if (stockCampaignAuditButton != null)
+                    stockCampaignAuditButton.setEnabled(true);
+                if (stockCampaignImportButton != null)
+                    stockCampaignImportButton.setEnabled(true);
+                if (stockCampaignExportButton != null)
+                    stockCampaignExportButton.setEnabled(true);
                 if (playButton != null)
                     playButton.setEnabled(true);
                 if (repairChooseButton != null)
@@ -1490,6 +1581,55 @@ public class LauncherActivity extends Activity {
                 }
             });
         }, "Halo-Sidewinder-Repair").start();
+    }
+
+    private String selectedStockCampaignMap() {
+        int selected = stockCampaignMapChoice == null ? 3 :
+            stockCampaignMapChoice.getSelectedItemPosition();
+        String[] names = SidewinderRepair.CAMPAIGN_MAP_FILES;
+        return names[Math.max(0, Math.min(selected, names.length - 1))];
+    }
+
+    private void auditStockCampaignMaps() {
+        runMapRepair("Checking the ten original campaign maps...", () ->
+            CampaignMapTransfer.audit(dataRoot, (filename, index, total) ->
+                handler.post(() -> {
+                    if (repairStatus != null)
+                        repairStatus.setText("Checking campaign map " +
+                            index + "/" + total + ": " + filename);
+                })));
+    }
+
+    private void importSelectedStockCampaignMap(Uri document, String filename) {
+        runMapRepair("Validating " + filename + " and preserving its old copy...", () -> {
+            try (InputStream input = getContentResolver().openInputStream(document)) {
+                if (input == null)
+                    throw new java.io.IOException("Android could not read the map file.");
+                SidewinderRepair.Result installed =
+                    SidewinderRepair.install(input, dataRoot, filename);
+                return filename + " installed after full Xbox-map validation (SHA-256 " +
+                    installed.sha256.substring(0, 12) + "...). " +
+                    (installed.backedUpOriginal
+                        ? "Your old map was preserved as .previous for rollback."
+                        : "There was no previous copy.");
+            }
+        });
+    }
+
+    private void exportSelectedStockCampaignMap(Uri document, String filename) {
+        runMapRepair("Exporting verified " + filename + " to your chosen document...", () -> {
+            try (OutputStream out = getContentResolver().openOutputStream(document, "w")) {
+                if (out == null)
+                    throw new java.io.IOException("Android could not create the map export.");
+                CampaignMapTransfer.Export result =
+                    CampaignMapTransfer.export(dataRoot, filename, out);
+                return "Exported " + result.filename + " (" +
+                    result.bytes / 1048576 + " MiB, SHA-256 " +
+                    result.sha256.substring(0, 12) + "...). Send this file " +
+                    "privately to the other phone and use its matching " +
+                    "IMPORT VERIFIED CAMPAIGN MAP option. No saves were copied.";
+            }
+        });
     }
 
     private void importSidewinder(Uri document) {
@@ -1818,6 +1958,19 @@ public class LauncherActivity extends Activity {
         if (requestCode == PICK_CARTOGRAPHER) {
             if (resultCode == RESULT_OK && data != null && data.getData() != null)
                 importCartographer(data.getData());
+            return;
+        }
+        if (requestCode == PICK_STOCK_MAP_IMPORT ||
+            requestCode == PICK_STOCK_MAP_EXPORT) {
+            String filename = pendingStockMapTransfer;
+            pendingStockMapTransfer = null;
+            if (resultCode == RESULT_OK && data != null &&
+                data.getData() != null && filename != null) {
+                if (requestCode == PICK_STOCK_MAP_IMPORT)
+                    importSelectedStockCampaignMap(data.getData(), filename);
+                else
+                    exportSelectedStockCampaignMap(data.getData(), filename);
+            }
             return;
         }
         if (requestCode == PICK_CUSTOM_MAPS) {

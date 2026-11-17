@@ -32,7 +32,9 @@ public final class HaloDiagnosticsTest {
                 "bots: perf objects 374 active 300 dead_bipeds 158 contiguous_pool_pressure 48.1%\n"
                 + "bots: bot 12 seeking vehicle 33 seat 1\n"
                 + "bots: bot 12 entered vehicle 33 seat 1\n"
-                + "bots: ground gunner 17 engaging enemy 41 (range 25.0)\n");
+                + "bots: ground gunner 17 engaging enemy 41 (range 25.0)\n"
+                + "couldn't find map 'b40' on the DVD\n"
+                + "starting precaching of map 'c10'\n");
             Files.writeString(root.resolve("debug_previous.txt"),
                 "co-op: missing object on client at 192.168.1.22\n" +
                 "user password=PASSWORD_DONT_EXPORT co-op: secret\n" +

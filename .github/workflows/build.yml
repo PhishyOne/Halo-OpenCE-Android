@@ -216,6 +216,7 @@ jobs:
           python3 tools/test_android_experiment_package.py -v
           python3 tools/test_lan_apk_update.py -v
           python3 tools/test_campaign_save_backup.py -v
+          python3 tools/test_campaign_map_transfer.py -v
           mkdir -p "$RUNNER_TEMP/halo-test-classes"
           # Pure JDK checks: portable Xbox save backup/restore, rollback,
           # safe ZIP paths, duplicate entries, truncated and oversized files.
@@ -235,6 +236,13 @@ jobs:
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LanConfigSmokeTest
           javac -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/SidewinderRepair.java tools/lan/SidewinderRepairTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.SidewinderRepairTest
+          # Original Xbox campaign maps are not Custom Edition map shares.
+          # Validate fixed-ID repair, private document export, rollback and
+          # corrupted/missing missions on a pure-JDK fixture before release.
+          javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" \
+            port/android/app/src/main/java/com/halo/decomp/CampaignMapTransfer.java \
+            tools/lan/CampaignMapTransferTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.CampaignMapTransferTest
           javac -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/CustomMapImporter.java tools/lan/CustomMapImporterTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.CustomMapImporterTest
           javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/CustomMapPack.java tools/lan/CustomMapPackTest.java

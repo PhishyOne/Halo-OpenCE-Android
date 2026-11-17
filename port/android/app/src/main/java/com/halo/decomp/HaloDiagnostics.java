@@ -30,7 +30,11 @@ final class HaloDiagnostics {
         + "resource map|structure bsp|bsp:|bitmap:|texture:|"
         + "shader:|gl error|rasterizer:|"
         + "bots: ground gunner|bots: driver |"
-        + "bots: bot [0-9]+ (seeking|entered) vehicle)");
+        + "bots: bot [0-9]+ (seeking|entered) vehicle|"
+        + "starting precaching of map|precaching map|couldn.t find map|"
+        + "no cache file can hold map|map .* names itself|"
+        + "checksum failed on persistent storage|"
+        + "failed to load.*map|damaged media)");
     private static final Pattern PRIVATE_LINE = Pattern.compile(
         "(?i)(password|authorization|bearer|secret|token|credential|"
         + "hardware.id|session.key|invitation.key)");
@@ -123,6 +127,11 @@ final class HaloDiagnostics {
                 report.append("  ... more maps omitted\n");
         }
 
+        report.append("\n## Original campaign-map guidance\n");
+        report.append("Use MAP REPAIR -> CHECK ALL CAMPAIGN MAPS for the verified ")
+            .append("ten-mission inventory. The deep scan is intentionally not ")
+            .append("run during this export. It checks compressed cache integrity ")
+            .append("separately from saved profile checks.\n");
         report.append("\n## Beach Assault installed resource compatibility\n");
         report.append(CeResourceAudit.beachReport(root)).append('\n');
         report.append("\n## Relevant recent game log lines\n");

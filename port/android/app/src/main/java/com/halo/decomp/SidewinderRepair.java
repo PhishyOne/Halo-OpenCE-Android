@@ -17,8 +17,9 @@ import java.util.zip.Inflater;
 
 /**
  * Import selected Xbox Halo map caches into the app's own Android maps
- * directory. The allowlist is limited to Sidewinder and Silent Cartographer
- * (b30), with separate backup and rollback paths. No root, ADB, full ISO,
+ * directory. The allowlist is fixed to Sidewinder and the ten original
+ * stock campaign maps, with separate backup and rollback paths. No root,
+ * ADB, full ISO,
  * ZIP extraction, or arbitrary filesystem access is required.
  *
  * Verify the entire zlib stream, declared size and internal tags signature
@@ -40,18 +41,36 @@ final class SidewinderRepair {
     static final String SIDEWINDER_MAP = "sidewinder.map";
     static final String CARTOGRAPHER_MAP = "b30.map";
 
-    /** Never use a filename from the document picker for an install path.
-     * Only these two hardcoded map IDs may become paths under maps/. */
+    /* Original Xbox campaign level IDs in the same order as the native
+     * Halo campaign menu (custom_edition_maps.c). Never use an arbitrary
+     * document display name as a game map destination. */
+    static final String[] CAMPAIGN_MAP_FILES = {
+        "a10.map", "a30.map", "a50.map", "b30.map", "b40.map",
+        "c10.map", "c20.map", "c40.map", "d20.map", "d40.map"
+    };
+    static final String[] CAMPAIGN_MAP_TITLES = {
+        "The Pillar of Autumn", "Halo", "The Truth and Reconciliation",
+        "The Silent Cartographer", "Assault on the Control Room",
+        "343 Guilty Spark", "The Library", "Two Betrayals",
+        "Keyes", "The Maw"
+    };
+
+    /** Fixed allowlist protects map destinations; no arbitrary file names
+     * or app-private paths come from user-selected Android documents. */
     private static String scenarioFor(String targetMap) throws IOException {
         if (SIDEWINDER_MAP.equals(targetMap))
             return "sidewinder";
-        if (CARTOGRAPHER_MAP.equals(targetMap))
-            return "b30";
+        for (String scenario : CAMPAIGN_MAP_FILES)
+            if (scenario.equals(targetMap))
+                return scenario.substring(0, scenario.length() - 4);
         throw new IOException("This map cannot be repaired by the launcher.");
     }
 
     private static String titleFor(String targetMap) {
-        return CARTOGRAPHER_MAP.equals(targetMap) ? "The Silent Cartographer" : "Sidewinder";
+        for (int i = 0; i < CAMPAIGN_MAP_FILES.length; i++)
+            if (CAMPAIGN_MAP_FILES[i].equals(targetMap))
+                return CAMPAIGN_MAP_TITLES[i];
+        return "Sidewinder";
     }
 
     static final class Result {
