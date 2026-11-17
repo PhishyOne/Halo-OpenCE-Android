@@ -15,7 +15,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 /**
- * Import Halo Custom Edition cache and shared resource maps into the app's
+ * Import Halo Custom Edition caches, resource maps and BMP previews into the app's
  * own custom_maps folder, through Android's document picker.
  *
  * The user's supplied display name is never trusted as a path; it is checked
@@ -32,6 +32,7 @@ final class CustomMapImporter {
     private static final int CACHE_HEADER_BYTES = 0x800;
     private static final int RESOURCE_HEADER_BYTES = 0x10;
     private static final int CHUNK = 64 * 1024;
+    private static final long MAX_PREVIEW_BYTES = 16L * 1024 * 1024;
     private static final int MAX_RESOURCE_ITEMS = 100000;
     private static final int MAX_NAMES_BYTES = 16 * 1024 * 1024;
     private static final long MAX_FILE_BYTES = 256L * 1024 * 1024;
@@ -67,6 +68,36 @@ final class CustomMapImporter {
             !name.equalsIgnoreCase("nul.map") &&
             !name.equalsIgnoreCase("prn.map") &&
             !name.equalsIgnoreCase("aux.map");
+    }
+
+    /** Pictures use the same safe basename as maps; they never replace maps. */
+    static boolean isImportName(String name) {
+        return isValidName(name) || (name != null && name.endsWith(".bmp") &&
+            isValidName(name.substring(0, name.length() - 4) + ".map"));
+    }
+
+    private static void validatePreview(File file) throws IOException {
+        // Deliberately accept only plain Windows RGB, a bounded subset of
+        // the native BMP reader. No compressed pixels or embedded profiles.
+        if (file.length() < 54 || file.length() > MAX_PREVIEW_BYTES)
+            throw new IOException("Preview BMP has an invalid size.");
+        byte[] h = new byte[54];
+        try (RandomAccessFile input = new RandomAccessFile(file, "r")) {
+            input.readFully(h);
+        }
+        long offset = u32(h, 10), dib = u32(h, 14);
+        int width = (int)u32(h, 18), height = (int)u32(h, 22);
+        int bits = (h[28] & 255) | ((h[29] & 255) << 8);
+        if (h[0] != 'B' || h[1] != 'M' || dib != 40 ||
+            h[26] != 1 || h[27] != 0 || (bits != 24 && bits != 32) ||
+            u32(h, 30) != 0 || width < 1 || width > 2048 ||
+            height == 0 || height < -2048 || height > 2048 ||
+            offset < 54 || offset > file.length() ||
+            u32(h, 2) != file.length())
+            throw new IOException("Preview must be an uncompressed 24/32-bit BMP, up to 2048 pixels per side.");
+        long stride = (((long)width * bits + 31) / 32) * 4;
+        if (stride * Math.abs(height) > file.length() - offset)
+            throw new IOException("Preview BMP pixels are truncated.");
     }
 
     private static boolean resource(String name) {
@@ -182,8 +213,8 @@ final class CustomMapImporter {
 
     static synchronized Result install(InputStream source, File dataRoot, String name)
             throws IOException {
-        if (!isValidName(name) || source == null)
-            throw new IOException("Only standalone Halo Custom Edition .map files are allowed.");
+        if (!isImportName(name) || source == null)
+            throw new IOException("Only standalone Halo Custom Edition .map files or matching .bmp previews are allowed.");
         if (dataRoot == null || !dataRoot.isDirectory())
             throw new IOException("Halo's app storage is unavailable.");
 
@@ -193,8 +224,10 @@ final class CustomMapImporter {
         if (Files.isSymbolicLink(custom.toPath()) || !custom.isDirectory())
             throw new IOException("The custom_maps folder is not safe to use.");
 
+        boolean preview = name.endsWith(".bmp");
+        long limit = preview ? MAX_PREVIEW_BYTES : MAX_FILE_BYTES;
         Path target = new File(custom, name).toPath();
-        if (Files.exists(target))
+        if (Files.exists(target, java.nio.file.LinkOption.NOFOLLOW_LINKS))
             throw new IOException(name + " is already installed. No files were overwritten.");
 
         Path temporary = Files.createTempFile(custom.toPath(), "ce-import-", ".pending");
@@ -212,7 +245,7 @@ final class CustomMapImporter {
                 while ((n = source.read(bytes)) != -1) {
                     if (n == 0)
                         continue;
-                    if (written > MAX_FILE_BYTES - n)
+                    if (written > limit - n)
                         throw new IOException(name + " exceeds the safe import size limit.");
                     output.write(bytes, 0, n);
                     sha.update(bytes, 0, n);
@@ -220,7 +253,8 @@ final class CustomMapImporter {
                 }
                 output.getFD().sync();
             }
-            validate(temporary.toFile(), name);
+            if (preview) validatePreview(temporary.toFile());
+            else validate(temporary.toFile(), name);
             try {
                 Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
             } catch (AtomicMoveNotSupportedException e) {

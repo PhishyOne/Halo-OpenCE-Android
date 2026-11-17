@@ -66,3 +66,32 @@ until it is redrawn.
 
 The PC version's `ui\gamespy` and `ui\ticker` fonts are drawn with `ui\small_ui`, which
 the Xbox's map has.
+
+## Optional v47 custom-map preview pack (separate user data)
+
+Genuine gameplay screenshots from the map archive are converted to plain
+BMP files for the existing custom-map picture reader. They are not bundled
+into the application or claimed as original art. Map imagery belongs to its
+respective creators and Halo rights holders. Archive: Halo Maps, Mostly
+Harmless Productions. Filename-to-page attribution:
+
+- urban_warfare_beta: https://www.halomaps.org/hce/detail.cfm?fid=974
+- municipality (Wave of Lag): https://www.halomaps.org/hce/detail.cfm?fid=1700
+- the_narrows (Peter Sakievich): https://www.halomaps.org/hce/detail.cfm?fid=1053
+- h2_warlock (H2CE Team): https://www.halomaps.org/hce/detail.cfm?fid=1152
+- h2_zanzibar (H2CE Team): https://www.halomaps.org/hce/detail.cfm?fid=1153
+- h2-foundation (Xe-Bec): https://www.halomaps.org/hce/detail.cfm?fid=1240
+- h2_headlong: https://www.halomaps.org/hce/detail.cfm?fid=1225
+- h2-lockout_final (Nathan555): https://www.halomaps.org/hce/detail.cfm?fid=1740
+- camtrack-arena-fx (HILancer): https://www.halomaps.org/hce/detail.cfm?fid=1624
+- immure (Mothergoat / Neuro ko neza): https://www.halomaps.org/hce/detail.cfm?fid=1278
+- yoyorast_island (Yoyorast): https://www.halomaps.org/hce/detail.cfm?fid=1144
+- beach_assault (FalseProphetNemesis modification): https://www.halomaps.org/hce/detail.cfm?fid=382
+- deathisland (Bungie/Gearbox), screenshot: https://www.halopedia.org/Death_Island
+- icefields (Bungie/Gearbox), screenshot: https://www.halopedia.org/Ice_Fields
+- gephyrophobia (Bungie/Gearbox), screenshot uploaded by Hides-His-Tail:
+  https://www.halopedia.org/File:Halo_Combat_Evolved-Gephyrophobia.jpg
+
+The pack guide records the exact selected image URLs and SHA-256 hashes.
+Screenshots identify the downloaded map versions by filenames and archive
+listings, not a proof of each installed map's byte identity or playability.

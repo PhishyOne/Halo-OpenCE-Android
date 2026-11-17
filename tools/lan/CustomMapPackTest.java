@@ -49,6 +49,17 @@ public final class CustomMapPackTest {
         return data;
     }
 
+    private static byte[] bmp(int bits, int height) {
+        int stride = ((3 * bits + 31) / 32) * 4;
+        byte[] b = new byte[54 + stride * Math.abs(height)];
+        b[0]='B'; b[1]='M'; write32(b, 2, b.length);
+        write32(b, 10, 54); write32(b, 14, 40);
+        write32(b, 18, 3); write32(b, 22, height);
+        b[26]=1; b[28]=(byte)bits;
+        Arrays.fill(b, 54, b.length, (byte)125);
+        return b;
+    }
+
     private static byte[] resource() {
         byte[] r = new byte[36];
         write32(r, 0, 3);
@@ -192,6 +203,47 @@ public final class CustomMapPackTest {
                 "more than 32");
             ok(!Files.exists(extra.resolve("custom_maps/m32.map")),
                 "33rd map was installed");
+
+            // A preview-only pack can be imported after the map without
+            // touching its bytes. Both BMP orientations/bit depths work.
+            byte[] originalMap = Files.readAllBytes(root.resolve("custom_maps/municipality.map"));
+            byte[] picture = bmp(24, 2);
+            CustomMapPack.Result pictures = CustomMapPack.install(
+                new ByteArrayInputStream(pack(Map.of("municipality.bmp", picture,
+                    "h2_warlock.bmp", bmp(32, -2)))), root.toFile(), null);
+            ok(pictures.files == 2, "Preview-only pack not imported");
+            ok(Arrays.equals(picture, Files.readAllBytes(root.resolve("custom_maps/municipality.bmp"))),
+                "Preview changed in transit");
+            ok(Arrays.equals(originalMap, Files.readAllBytes(root.resolve("custom_maps/municipality.map"))),
+                "Preview import changed the map");
+            rejected(() -> CustomMapImporter.install(new ByteArrayInputStream(picture),
+                root.toFile(), "municipality.bmp"), "already installed");
+            ok(!CustomMapImporter.isValidName("municipality.bmp"),
+                "Network/cache validation now accepts pictures as maps");
+            for (String unsafe : new String[]{"../x.bmp", "/x.bmp", "x/evil.bmp", "x\\evil.bmp", "con.bmp", "a..b.bmp", "x.png", "x.bmp.map.bmp.exe"})
+                ok(!CustomMapImporter.isImportName(unsafe), "Unsafe picture name accepted: " + unsafe);
+            int[][] corruptions = {{0,0}, {2,54}, {10,53}, {10,9999}, {14,124},
+                {18,0}, {18,-1}, {18,2049}, {22,0}, {22,Integer.MIN_VALUE},
+                {22,2049}, {26,2}, {28,8}, {30,1}};
+            for (int j=0; j<corruptions.length; j++) {
+                byte[] corrupt = picture.clone();
+                write32(corrupt, corruptions[j][0], corruptions[j][1]);
+                final String name = "bad" + j + ".bmp";
+                rejected(() -> CustomMapImporter.install(new ByteArrayInputStream(corrupt),
+                    root.toFile(), name), "preview");
+                ok(!Files.exists(root.resolve("custom_maps/" + name)), "Bad preview installed");
+            }
+            byte[] truncated = Arrays.copyOf(picture, picture.length - 1);
+            write32(truncated, 2, truncated.length);
+            rejected(() -> CustomMapImporter.install(new ByteArrayInputStream(truncated),
+                root.toFile(), "truncated.bmp"), "truncated");
+            rejected(() -> CustomMapPack.install(new ByteArrayInputStream(
+                pack(Map.of("../escaped.bmp", picture))), root.toFile(), null), "unsafe");
+            Path link = root.resolve("custom_maps/link.bmp");
+            Files.createSymbolicLink(link, root.resolve("missing.bmp"));
+            rejected(() -> CustomMapImporter.install(new ByteArrayInputStream(picture),
+                root.toFile(), "link.bmp"), "already installed");
+            Files.delete(link);
 
             try (java.util.stream.Stream<Path> paths = Files.walk(root)) {
                 ok(paths.noneMatch(p -> p.toString().endsWith(".pending")),

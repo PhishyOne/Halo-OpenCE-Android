@@ -97,7 +97,7 @@ class HaloLauncherLayoutTests(unittest.TestCase):
     def test_custom_edition_import_via_document_picker(self):
         s = self.source
         self.assertIn('customMapsToggle.setText("CUSTOM MAPS");', s)
-        self.assertIn('customMapImportButton.setText("IMPORT CUSTOM MAP FILES");', s)
+        self.assertIn('customMapImportButton.setText("IMPORT MAPS OR PREVIEW FILES");', s)
         self.assertIn('picker.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);', s)
         self.assertIn('startActivityForResult(picker, PICK_CUSTOM_MAPS);', s)
         self.assertIn('if (requestCode == PICK_CUSTOM_MAPS)', s)
@@ -118,7 +118,7 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         self.assertIn('DocumentsContract.buildChildDocumentsUriUsingTree(tree, root)', s)
         self.assertIn('DocumentsContract.buildDocumentUriUsingTree(tree, documentId)', s)
         self.assertIn('input, dataRoot, document.filename)', s)
-        self.assertIn('customMapZipButton.setText("IMPORT A MAP PACK ZIP");', s)
+        self.assertIn('customMapZipButton.setText("IMPORT MAP / PREVIEW ZIP");', s)
         self.assertIn('CustomMapPack.install(', s)
         self.assertIn('PICK_CUSTOM_ZIP', s)
         self.assertIn('if (gameProcessStatus() != 0)', s)

@@ -983,9 +983,9 @@ public class LauncherActivity extends Activity {
             toggleSection(customMapsToggle, customMapsPanel));
         customMapsPanel.addView(hudSection("HALO CUSTOM EDITION"));
         customMapsPanel.addView(lanText(
-            "Custom Edition maps and resource packs.", 12));
+            "Custom Edition maps, resources and preview pictures. Import a preview ZIP once; pictures appear in Halo's map menu.", 12));
         customMapImportButton = new Button(this);
-        customMapImportButton.setText("IMPORT CUSTOM MAP FILES");
+        customMapImportButton.setText("IMPORT MAPS OR PREVIEW FILES");
         hudButton(customMapImportButton, false);
         customMapImportButton.setOnClickListener(view -> {
             if (repairBusy)
@@ -1023,7 +1023,7 @@ public class LauncherActivity extends Activity {
             + "won't grant access to the folder.", 12));
 
         customMapZipButton = new Button(this);
-        customMapZipButton.setText("IMPORT A MAP PACK ZIP");
+        customMapZipButton.setText("IMPORT MAP / PREVIEW ZIP");
         hudButton(customMapZipButton, false);
         customMapZipButton.setOnClickListener(view -> {
             if (repairBusy)
@@ -1783,7 +1783,7 @@ public class LauncherActivity extends Activity {
             documents.add(single);
         if (documents.isEmpty() || documents.size() > 32) {
             if (customMapStatus != null)
-                customMapStatus.setText("Choose between 1 and 32 custom .map files.");
+                customMapStatus.setText("Choose 1 to 32 .map files or .bmp previews.");
             return;
         }
 
@@ -1792,7 +1792,7 @@ public class LauncherActivity extends Activity {
             long bytes = 0;
             for (Uri document : documents) {
                 String name = customMapDisplayName(document);
-                if (!CustomMapImporter.isValidName(name))
+                if (!CustomMapImporter.isImportName(name))
                     throw new java.io.IOException("Unsupported map filename: " + name);
                 final int fileIndex = installed + 1;
                 handler.post(() -> {
@@ -1849,12 +1849,13 @@ public class LauncherActivity extends Activity {
                     String mime = cursor.getString(2);
                     if (name == null || documentId == null ||
                         DocumentsContract.Document.MIME_TYPE_DIR.equals(mime) ||
-                        !name.toLowerCase(Locale.ROOT).endsWith(".map"))
+                        (!name.toLowerCase(Locale.ROOT).endsWith(".map") &&
+                         !name.toLowerCase(Locale.ROOT).endsWith(".bmp")))
                         continue;
-                    if (!CustomMapImporter.isValidName(name))
+                    if (!CustomMapImporter.isImportName(name))
                         throw new java.io.IOException("Unsafe map name in the folder: " + name);
                     if (selected.size() >= 32)
-                        throw new java.io.IOException("Select a folder with at most 32 maps.");
+                        throw new java.io.IOException("Select a folder with at most 32 map/preview files.");
                     if (!names.add(name.toLowerCase(Locale.ROOT)))
                         throw new java.io.IOException("The folder contains duplicate map names.");
                     selected.add(new MapDocument(
@@ -1865,7 +1866,7 @@ public class LauncherActivity extends Activity {
                     "Android could not read this folder. Try a ZIP map pack instead.", error);
             }
             if (selected.isEmpty())
-                throw new java.io.IOException("No .map files were exposed by Android. "
+                throw new java.io.IOException("No .map or .bmp files were exposed by Android. "
                     + "Try importing a ZIP map pack instead.");
 
             // Sorting ensures the three shared resource maps install first,
@@ -1902,7 +1903,7 @@ public class LauncherActivity extends Activity {
                         + document.filename + " failed: " + error.getMessage(), error);
                 }
             }
-            return count + " Custom Edition maps/resources imported ("
+            return count + " Custom Edition maps/resources/previews imported ("
                 + (bytes / 1048576) + " MiB). Open CUSTOM MULTIPLAYER.";
         });
     }

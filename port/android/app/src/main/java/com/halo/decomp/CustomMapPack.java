@@ -55,7 +55,7 @@ final class CustomMapPack {
                 throw new IOException("Unsafe ZIP directory name.");
             name = full.substring(slash + 1);
         }
-        if (!CustomMapImporter.isValidName(name))
+        if (!CustomMapImporter.isImportName(name))
             throw new IOException("ZIP contains a non-Halo or unsafe map filename: " + name);
         return name;
     }
@@ -118,7 +118,7 @@ final class CustomMapPack {
                     continue;
                 }
                 if (count >= MAX_ENTRIES)
-                    throw new IOException("ZIP contains more than 32 map files.");
+                    throw new IOException("ZIP contains more than 32 map/preview files.");
                 String name = safeEntryName(entry.getName());
                 if (!names.add(name.toLowerCase(Locale.ROOT)))
                     throw new IOException("ZIP contains duplicate map name " + name);
@@ -135,7 +135,7 @@ final class CustomMapPack {
             }
         }
         if (count == 0)
-            throw new IOException("ZIP contains no Custom Edition .map files.");
+            throw new IOException("ZIP contains no Custom Edition maps or BMP previews.");
         return new Result(count, total);
     }
 }
