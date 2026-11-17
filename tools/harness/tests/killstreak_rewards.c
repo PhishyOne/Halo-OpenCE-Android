@@ -18,6 +18,15 @@
 typedef int boolean;
 typedef float real;
 static int recon_awards, recon_last_award, recon_revokes, orbital_awards;
+static int public_warnings, local_warnings;
+static void distributed_send_notice(char const *text) {
+    assert(strstr(text,"60 SECONDS") != NULL);
+    public_warnings++;
+}
+static void network_chat_host_notice(char const *text) {
+    assert(strstr(text,"60 SECONDS") != NULL);
+    local_warnings++;
+}
 void killstreak_orbital_start(void) { orbital_awards = 0; }
 void killstreak_orbital_stop(void) { }
 void killstreak_orbital_update(void) { }
@@ -31,7 +40,8 @@ void killstreak_recon_update(void) { }
 void killstreak_recon_award(long id, long unit, unsigned short award) {
     (void)id; (void)unit; recon_awards++; recon_last_award = award;
 }
-enum { _object_dead_bit, _object_shield_over_charging_bit };
+enum { _object_dead_bit, _object_shield_over_charging_bit,
+       _object_cannot_take_damage_bit };
 enum { _unit_active_camouflaged_bit, _unit_super_camouflaged_bit };
 #include "constants.inc"
 #include "commander_feature_policy.h"
@@ -59,7 +69,7 @@ struct unit_datum {
 static struct player_datum players[4];
 static struct unit_datum units[4];
 static long ids[4], unit_ids[4];
-static int connection, multiplayer, coop, enabled, now, lookups, in_play;
+static int connection, multiplayer, coop, enabled, announcements, now, lookups, in_play;
 static int cause_for_camo_regrowth_default;
 static unsigned int commander_client_mask;
 static struct game_variant variant;
@@ -90,7 +100,11 @@ static int network_coop_active(void) { return coop; }
 static int network_game_is_splitscreen_local(void) { return connection == _game_connection_local; }
 static struct game_variant *game_engine_get_variant(void) { return &variant; }
 static int game_team_is_enemy(long a, short b) { return a != b; }
-static int config_boolean(char const *name) { return !strcmp(name,"killstreak.enabled") && enabled; }
+static int config_boolean(char const *name) {
+    if (!strcmp(name,"killstreak.enabled")) return enabled;
+    if (!strcmp(name,"killstreak.announcements")) return announcements;
+    return 0;
+}
 static int game_time_get(void) { return now; }
 static void game_engine_player_killed(long a,long b,long c,int d) { (void)a; (void)b; (void)c; (void)d; }
 static void *player_data;
@@ -104,7 +118,9 @@ boolean object_double_charge_shield(long);
 static void setup(void) {
     int i,j;
     memset(players,0,sizeof(players)); memset(units,0,sizeof(units));
-    connection=_game_connection_local; multiplayer=enabled=in_play=1; coop=0; now=300;
+    connection=_game_connection_local; multiplayer=enabled=in_play=announcements=1;
+    coop=0; now=300;
+    local_warnings = public_warnings = 0;
     variant.game_engine_index=game_engine_slayer; variant.universal_variant.teams=1;
     for(i=0;i<4;i++) {
         ids[i]=0x10000+i; unit_ids[i]=0x20000+i;
@@ -138,12 +154,52 @@ int main(int argc,char **argv) {
         tick(300); kill(0,1); CHECK(camo()==600);
         kill(0,1); CHECK(camo()==900);
         CHECK(recon_awards==2 && recon_last_award==5);
-        tick(100); kills(260); CHECK(camo()==800 && streak()==10 && orbital_awards==1);
-        CHECK(recon_awards==2 && orbital_awards==1);
+        tick(100); kills(260); CHECK(camo()==1800 && streak()==10 && orbital_awards==0);
+        CHECK(recon_awards==2 && local_warnings==1);
+        CHECK(TEST_FLAG(units[0].object.damage_flags,_object_cannot_take_damage_bit));
         CHECK(players[0].statistics.kills_in_a_row==265);
         units[0].object.shield_vitality=2.2f; shield=units[0].object.shield_vitality;
-        tick(800); CHECK(camo()==0 && !TEST_FLAG(units[0].unit.flags,_unit_active_camouflaged_bit));
+        tick(800); CHECK(camo()==1000 && TEST_FLAG(units[0].object.damage_flags,_object_cannot_take_damage_bit));
+        tick(1000); CHECK(camo()==0 && !TEST_FLAG(units[0].unit.flags,_unit_active_camouflaged_bit));
+        CHECK(!TEST_FLAG(units[0].object.damage_flags,_object_cannot_take_damage_bit));
         CHECK(units[0].object.shield_vitality==shield);
+    } else if(!strcmp(argv[1],"phantom-60-seconds")) {
+        kills(10);
+        CHECK(streak()==10 && camo()==1800 && local_warnings==1);
+        CHECK(TEST_FLAG(units[0].object.damage_flags,_object_cannot_take_damage_bit));
+        /* Even extra kills cannot stack another minute or warning. */
+        kill(0,1);
+        CHECK(local_warnings==1 && camo()==1800);
+        tick(1797);
+        CHECK(TEST_FLAG(units[0].object.damage_flags,_object_cannot_take_damage_bit));
+        tick(1);
+        CHECK(!TEST_FLAG(units[0].object.damage_flags,_object_cannot_take_damage_bit));
+        /* The fixture advances kill time without decrementing native powerup
+         * ticks; two simulation ticks remain until camo naturally expires. */
+        CHECK(camo()==2);
+        tick(2); CHECK(camo()==0);
+        setup();
+        connection=_game_connection_network_server;
+        players[1].network_player_data.machine_index=1;
+        kills(10);
+        CHECK(public_warnings==1 && local_warnings==0);
+        /* Game ending and the player's death always strip owned immunity. */
+        game_statistics_stop(0);
+        CHECK(!TEST_FLAG(units[0].object.damage_flags,_object_cannot_take_damage_bit));
+        setup(); kills(10);
+        killstreak_rewards_reset_player(ids[0]);
+        CHECK(!TEST_FLAG(units[0].object.damage_flags,_object_cannot_take_damage_bit));
+        setup();
+        SET_FLAG(units[0].object.damage_flags,_object_cannot_take_damage_bit,TRUE);
+        kills(10);
+        enabled=0; killstreak_rewards_update();
+        CHECK(TEST_FLAG(units[0].object.damage_flags,_object_cannot_take_damage_bit));
+        setup(); kills(10);
+        enabled=0; killstreak_rewards_update();
+        CHECK(!TEST_FLAG(units[0].object.damage_flags,_object_cannot_take_damage_bit));
+        setup(); announcements=0; kills(10);
+        CHECK(local_warnings==0 && public_warnings==0);
+        CHECK(TEST_FLAG(units[0].object.damage_flags,_object_cannot_take_damage_bit));
     } else if(!strcmp(argv[1],"life-streak-not-multikill")) {
         /* Three kills many minutes apart still constitute a life streak.
          * Only dying resets it; multikill timing never enters the reward. */

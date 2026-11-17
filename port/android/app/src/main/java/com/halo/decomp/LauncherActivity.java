@@ -65,8 +65,6 @@ import java.nio.channels.FileChannel;
  */
 public class LauncherActivity extends Activity {
     private static final int PICK_IMAGE = 1;
-    private static final int PICK_SIDEWINDER = 2;
-    private static final int PICK_CARTOGRAPHER = 3;
     private static final int PICK_CUSTOM_MAPS = 4;
     private static final int PICK_CUSTOM_FOLDER = 5;
     private static final int PICK_CUSTOM_ZIP = 6;
@@ -90,10 +88,6 @@ public class LauncherActivity extends Activity {
     private ProgressBar progress;
     private Button pick;
     private TextView repairStatus;
-    private Button repairRestoreButton;
-    private Button repairChooseButton;
-    private Button repairCartographerChooseButton;
-    private Button repairCartographerRestoreButton;
     private Spinner stockCampaignMapChoice;
     private Button stockCampaignAuditButton;
     private Button stockCampaignImportButton;
@@ -445,6 +439,13 @@ public class LauncherActivity extends Activity {
                 HUD_BORDER));
     }
 
+    /** A disclosure control stays visually selected while its section is open. */
+    private void toggleSection(Button button, View section) {
+        boolean open = section.getVisibility() != View.VISIBLE;
+        section.setVisibility(open ? View.VISIBLE : View.GONE);
+        hudButton(button, open);
+    }
+
     private void buildLanInterface() {
         LanConfig.Settings settings = new LanConfig.Settings();
         String warning = "";
@@ -456,7 +457,7 @@ public class LauncherActivity extends Activity {
 
         final boolean invitePending = hasInternetInvite();
         java.util.List<String> ips = lanIPv4Addresses();
-        String suggestedAddress = ips.size() == 1 ? ips.get(0) : "";
+
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -480,16 +481,6 @@ public class LauncherActivity extends Activity {
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         subtitleLayout.leftMargin = dp(14);
         masthead.addView(subtitle, subtitleLayout);
-        View flexibleSpace = new View(this);
-        masthead.addView(flexibleSpace, new LinearLayout.LayoutParams(
-            0, dp(1), 1f));
-        Button serviceRecord = new Button(this);
-        serviceRecord.setText("SERVICE RECORD");
-        hudButton(serviceRecord, false);
-        serviceRecord.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
-        serviceRecord.setOnClickListener(view -> CareerProfile.show(this, dataRoot));
-        masthead.addView(serviceRecord, new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, dp(37)));
         root.addView(masthead);
         View accent = new View(this);
         accent.setBackgroundColor(HUD_ACCENT);
@@ -500,7 +491,9 @@ public class LauncherActivity extends Activity {
         LinearLayout modeBar = new LinearLayout(this);
         modeBar.setOrientation(LinearLayout.HORIZONTAL);
         modeBar.setPadding(dp(8), dp(5), dp(8), dp(5));
-        String[] modeNames = { "Campaign", "Bots", "Host", "Join", "Tools" };
+        String[] modeNames = {
+            "Profile", "Offline Match", "Campaign", "Host", "Join", "Tools"
+        };
         Button[] modeTabs = new Button[modeNames.length];
         for (int i = 0; i < modeNames.length; i++) {
             Button tab = new Button(this);
@@ -528,6 +521,10 @@ public class LauncherActivity extends Activity {
         toolsPage.setOrientation(LinearLayout.VERTICAL);
         toolsPage.setVisibility(View.GONE);
         content.addView(toolsPage);
+        LinearLayout dashboardPanel = hudPanel();
+        dashboardPanel.setVisibility(View.GONE);
+        content.addView(dashboardPanel);
+        CareerProfile.dashboard(this, dataRoot, dashboardPanel);
         Button toolsServiceRecord = new Button(this);
         toolsServiceRecord.setText("MY SPARTAN PROFILE & ACHIEVEMENTS");
         hudButton(toolsServiceRecord, false);
@@ -568,73 +565,18 @@ public class LauncherActivity extends Activity {
         hostPanel.setOrientation(LinearLayout.VERTICAL);
         hostPanel.addView(lanText(
             "Friends on this Wi-Fi or hotspot can find your hosted game automatically.", 12));
-        Button hostManualToggle = new Button(this);
-        hostManualToggle.setText("SHOW HOST IP / SHARE INVITE");
-        hudButton(hostManualToggle, false);
-        hostPanel.addView(hostManualToggle);
-        LinearLayout hostManualPanel = new LinearLayout(this);
-        hostManualPanel.setOrientation(LinearLayout.VERTICAL);
-        hostManualPanel.setVisibility(View.GONE);
-        hostManualPanel.addView(lanText("LOCAL IP  " + (ips.isEmpty()
-            ? "Not detected"
-            : android.text.TextUtils.join("   /   ", ips)), 12));
-        hostManualToggle.setOnClickListener(view -> hostManualPanel.setVisibility(
-            hostManualPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
-        hostManualPanel.addView(lanText("HOST ADDRESS", 12));
-        EditText shareIp = new EditText(this);
-        shareIp.setSingleLine(true);
-        shareIp.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        shareIp.setHint("Your Wi-Fi / hotspot IP");
-        shareIp.setText(suggestedAddress);
-        shareIp.setSelectAllOnFocus(true);
-        hudInput(shareIp);
-        hostManualPanel.addView(shareIp);
+        TextView hostAddress = lanText(ips.isEmpty()
+            ? "HOST IP: NOT DETECTED"
+            : "HOST IP: " + android.text.TextUtils.join("   /   ", ips), 19);
+        hostAddress.setTextColor(HUD_ACCENT);
+        hostAddress.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        hostAddress.setPadding(dp(12), dp(7), dp(12), dp(8));
+        hostAddress.setBackground(hudSurface(
+            Color.rgb(35, 53, 66), Color.rgb(16, 31, 41), HUD_BORDER));
+        hostPanel.addView(hostAddress);
         if (ips.size() > 1)
-            hostManualPanel.addView(lanText("Confirm the active Wi-Fi address before sharing.", 12));
-
-        LinearLayout shareActions = new LinearLayout(this);
-        shareActions.setOrientation(LinearLayout.HORIZONTAL);
-        Button copy = new Button(this);
-        copy.setText("COPY IP");
-        hudButton(copy, false);
-        copy.setOnClickListener(view -> {
-            String value = shareIp.getText().toString().trim();
-            if (!LanConfig.validAddress(value) || value.isEmpty()) {
-                feedback.setText("Enter a valid host address to copy.");
-                return;
-            }
-            android.content.ClipboardManager clipboard =
-                (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-            if (clipboard == null) {
-                feedback.setText("Android clipboard is unavailable.");
-                return;
-            }
-            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Halo host IP", value));
-            feedback.setText("Copied " + value);
-        });
-        shareActions.addView(copy, new LinearLayout.LayoutParams(
-            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f));
-        Button share = new Button(this);
-        share.setText("SHARE INVITE");
-        hudButton(share, false);
-        LinearLayout.LayoutParams shareParams = new LinearLayout.LayoutParams(
-            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f);
-        shareParams.leftMargin = dp(8);
-        shareActions.addView(share, shareParams);
-        share.setOnClickListener(view -> {
-            String value = shareIp.getText().toString().trim();
-            if (!LanConfig.validAddress(value) || value.isEmpty()) {
-                feedback.setText("Enter a valid host address to share.");
-                return;
-            }
-            Intent message = new Intent(Intent.ACTION_SEND);
-            message.setType("text/plain");
-            message.putExtra(Intent.EXTRA_TEXT, "Join my Halo LAN game. Connect to the "
-                + "same Wi-Fi/hotspot, choose LAN > Join, and enter: " + value);
-            startActivity(Intent.createChooser(message, "Share Halo host IP"));
-        });
-        hostManualPanel.addView(shareActions);
-        hostPanel.addView(hostManualPanel);
+            hostPanel.addView(lanText(
+                "Use the IP belonging to the active Wi-Fi hotspot.", 12));
         // Serving is explicitly scoped to a LAN host's game process. This
         // preference never enables a socket for standard, offline or joins.
         CheckBox shareUpdates = new CheckBox(this);
@@ -696,8 +638,8 @@ public class LauncherActivity extends Activity {
         hudButton(hostHintsToggle, false);
         hostPanel.addView(hostHintsToggle);
         hostHints.setVisibility(View.GONE);
-        hostHintsToggle.setOnClickListener(view -> hostHints.setVisibility(
-            hostHints.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+        hostHintsToggle.setOnClickListener(view ->
+            toggleSection(hostHintsToggle, hostHints));
         hostPanel.addView(hostHints);
         lanPanel.addView(hostPanel);
 
@@ -711,15 +653,10 @@ public class LauncherActivity extends Activity {
         findHosts.setText("FIND LAN HOSTS");
         hudButton(findHosts, false);
         joinPanel.addView(findHosts);
-        Button manualHostToggle = new Button(this);
-        manualHostToggle.setText("MANUAL IP / FALLBACK");
-        hudButton(manualHostToggle, false);
-        joinPanel.addView(manualHostToggle);
         LinearLayout manualHostPanel = new LinearLayout(this);
         manualHostPanel.setOrientation(LinearLayout.VERTICAL);
-        manualHostPanel.setVisibility(View.GONE);
-        manualHostToggle.setOnClickListener(view -> manualHostPanel.setVisibility(
-            manualHostPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+        /* Auto-discovery remains primary; the direct-IP field is a single
+         * visible fallback, without an extra disclosure button. */
         manualHostPanel.addView(lanText("HOST IP", 12));
         EditText hostIp = new EditText(this);
         hostIp.setSingleLine(true);
@@ -791,8 +728,9 @@ public class LauncherActivity extends Activity {
         advanced.addView(lanText("Host port 5150. Joining client 5151.", 11));
         advanced.setVisibility(invitePending || !settings.lanOnly
             ? View.VISIBLE : View.GONE);
-        advancedToggle.setOnClickListener(view -> advanced.setVisibility(
-            advanced.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+        hudButton(advancedToggle, advanced.getVisibility() == View.VISIBLE);
+        advancedToggle.setOnClickListener(view ->
+            toggleSection(advancedToggle, advanced));
         lanPanel.addView(advanced);
 
         if (invitePending) {
@@ -834,104 +772,42 @@ public class LauncherActivity extends Activity {
             + "follow checkpoints on foot. Slayer combat stays the same. "
             + "Choose the game type inside Halo.", 12));
 
-        Button optionsToggle = new Button(this);
-        optionsToggle.setText("ADVANCED GAME OPTIONS");
-        hudButton(optionsToggle, false);
-        content.addView(optionsToggle);
-        LinearLayout gameOptions = new LinearLayout(this);
-        gameOptions.setOrientation(LinearLayout.VERTICAL);
-        gameOptions.setVisibility(View.GONE);
-        content.addView(gameOptions);
-        optionsToggle.setOnClickListener(view -> gameOptions.setVisibility(
-            gameOptions.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
-
-        // Host-only, opt-in commander support. All saved choices stay
-        // independent from the network and bot preferences. The native
-        // host alone decides which features every client is allowed.
-        SharedPreferences commanderPrefs =
-            getSharedPreferences("commander_controls", MODE_PRIVATE);
-        CommanderConfig.Options commanderChoices = new CommanderConfig.Options();
-        for (String key : CommanderConfig.KEYS)
-            commanderChoices.set(key, commanderPrefs.getBoolean(key,
-                commanderChoices.get(key)));
-        Button commanderToggle = new Button(this);
-        hudButton(commanderToggle, false);
-        gameOptions.addView(commanderToggle);
-        LinearLayout commanderPanel = hudPanel();
-        commanderPanel.setVisibility(View.GONE);
-        gameOptions.addView(commanderPanel);
-        commanderPanel.addView(hudSection("2142-STYLE COMMANDER MODE"));
-        commanderPanel.addView(lanText("OFF by default. Host-controlled in "
-            + "team multiplayer. Disabling the master switch disables all "
-            + "commander abilities without touching ordinary Halo.", 12));
-        String[] commanderLabels = {
-            "ENABLE COMMANDER MODE",
-            "SATELLITE TRACK (COMMANDER ONLY)",
-            "UAV RECON (SHARE WITH TEAM)",
-            "ENEMY SPOTTING",
-            "ATTACK / DEFEND ORDERS",
-            "COMMAND RADIO ANNOUNCEMENTS"
-        };
-        CheckBox[] commanderChecks = new CheckBox[CommanderConfig.KEYS.length];
-        for (int i = 0; i < CommanderConfig.KEYS.length; i++) {
-            CheckBox check = new CheckBox(this);
-            check.setText(commanderLabels[i]);
-            check.setChecked(commanderChoices.get(CommanderConfig.KEYS[i]));
-            hudCheck(check);
-            commanderPanel.addView(check);
-            commanderChecks[i] = check;
-        }
-        Runnable updateCommanderChecks = () -> {
-            boolean enabled = commanderChecks[0].isChecked();
-            commanderToggle.setText("2142 COMMANDER: "
-                + (enabled ? "ON" : "OFF") + " / OPTIONS");
-            for (int i = 1; i < commanderChecks.length; i++)
-                commanderChecks[i].setEnabled(enabled);
-        };
-        for (CheckBox check : commanderChecks)
-            check.setOnCheckedChangeListener((button, checked) ->
-                updateCommanderChecks.run());
-        updateCommanderChecks.run();
-        commanderToggle.setOnClickListener(view ->
-            commanderPanel.setVisibility(commanderPanel.getVisibility()
-                == View.VISIBLE ? View.GONE : View.VISIBLE));
-        commanderPanel.addView(lanText(
-            "Tactical laptop, satellite, UAV, spotting, and team orders. "
-            + "Independent of individual killstreak rewards. "
-            + "v22 preview: host picks the Commander with Assign, then that player's in-game Map button opens an allied overview. "
-            + "UAV, enemy intel, and orders aren't active yet.", 11));
-
-        // Killstreak Rewards is a separate multiplayer feature, not a
-        // permission that requires a commander or a team. The host grants
-        // access to EVERY human player, each earning their own streak.
+        /* The inactive 2142 commander experiment is retired. Keep only
+         * individual host-authorized killstreak rewards in this launcher. */
+        Button killstreakToggle = new Button(this);
+        killstreakToggle.setText("KILLSTREAK REWARDS");
+        hudButton(killstreakToggle, false);
+        content.addView(killstreakToggle);
+        LinearLayout killstreakPanel = hudPanel();
+        killstreakPanel.setVisibility(View.GONE);
+        content.addView(killstreakPanel);
         SharedPreferences killstreakPrefs =
             getSharedPreferences("killstreak_controls", MODE_PRIVATE);
         KillstreakConfig.Options killstreakChoices = new KillstreakConfig.Options();
         for (String key : KillstreakConfig.KEYS)
             killstreakChoices.set(key, killstreakPrefs.getBoolean(key,
                 killstreakChoices.get(key)));
-        Button killstreakToggle = new Button(this);
-        hudButton(killstreakToggle, false);
-        gameOptions.addView(killstreakToggle);
-        LinearLayout killstreakPanel = hudPanel();
-        killstreakPanel.setVisibility(View.GONE);
-        gameOptions.addView(killstreakPanel);
         killstreakPanel.addView(hudSection("INDIVIDUAL KILLSTREAK REWARDS"));
-        killstreakPanel.addView(lanText("OFF by default. Separate from 2142 "
-            + "Commander Mode; a host enables rewards for all human players, "
-            + "including free-for-all matches.", 12));
+        killstreakPanel.addView(lanText(
+            "OFF by default. The host can enable rewards for human players "
+            + "in offline or LAN matches. 10 kills activates the Phantom: "
+            + "60 seconds of invisibility and damage immunity, with an "
+            + "all-map warning.", 12));
         String[] killstreakLabels = {
             "ENABLE KILLSTREAK REWARDS",
-            "10-KILL ORBITAL BOMBARDMENT",
+            "RETIRED ORBITAL (DISABLED)",
             "KILLSTREAK RADIO ANNOUNCEMENTS"
         };
         CheckBox[] killstreakChecks = new CheckBox[KillstreakConfig.KEYS.length];
         for (int i = 0; i < KillstreakConfig.KEYS.length; i++) {
             CheckBox check = new CheckBox(this);
             check.setText(killstreakLabels[i]);
-            check.setChecked(killstreakChoices.get(KillstreakConfig.KEYS[i]));
+            check.setChecked(i == 1 ? false :
+                killstreakChoices.get(KillstreakConfig.KEYS[i]));
             hudCheck(check);
-            killstreakPanel.addView(check);
+            /* Leave the old key serialized as OFF for old installations,
+             * but never expose or re-enable the retired orbital mode. */
+            if (i != 1) killstreakPanel.addView(check);
             killstreakChecks[i] = check;
         }
         Runnable updateKillstreakChecks = () -> {
@@ -946,12 +822,11 @@ public class LauncherActivity extends Activity {
                 updateKillstreakChecks.run());
         updateKillstreakChecks.run();
         killstreakToggle.setOnClickListener(view ->
-            killstreakPanel.setVisibility(killstreakPanel.getVisibility()
-                == View.VISIBLE ? View.GONE : View.VISIBLE));
+            toggleSection(killstreakToggle, killstreakPanel));
         killstreakPanel.addView(lanText(
-            "3 kills: camo + overshield, 5: refresh + enemy tracking, "
-            + "10: targeted orbital strike. Reward gameplay and the tactical "
-            + "HUD are still in development. Switches only for now.", 11));
+            "3 kills: camo + overshield. 5 kills: refresh + recon. "
+            + "10 kills: 60 seconds as an invisible, invulnerable Phantom. "
+            + "Deaths, match end and expiry revoke the protection.", 11));
 
         // Collapsed utility, out of the way of normal Play. Android's picker
         // grants this app read access to a selected .map; this app alone
@@ -963,89 +838,20 @@ public class LauncherActivity extends Activity {
         LinearLayout repairPanel = hudPanel();
         repairPanel.setVisibility(View.GONE);
         toolsPage.addView(repairPanel);
-        mapsToggle.setOnClickListener(view -> repairPanel.setVisibility(
-            repairPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
-        repairPanel.addView(hudSection("SIDEWINDER"));
-        repairPanel.addView(lanText("Choose a standalone Sidewinder .map file. "
-            + "Halo verifies its contents before replacing the old map.", 12));
-        repairChooseButton = new Button(this);
-        repairChooseButton.setText("SELECT SIDEWINDER.MAP");
-        hudButton(repairChooseButton, false);
-        repairChooseButton.setOnClickListener(view -> {
-            if (repairBusy)
-                return;
-            if (gameProcessStatus() != 0) {
-                feedback.setText("Force-stop the running Halo game before repairing maps.");
-                return;
-            }
-            Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-            picker.addCategory(Intent.CATEGORY_OPENABLE);
-            picker.setType("*/*");
-            startActivityForResult(picker, PICK_SIDEWINDER);
-        });
-        repairPanel.addView(repairChooseButton);
-
-        repairRestoreButton = new Button(this);
-        repairRestoreButton.setText("RESTORE PREVIOUS SIDEWINDER");
-        hudButton(repairRestoreButton, false);
-        repairRestoreButton.setVisibility(
-            SidewinderRepair.hasPrevious(dataRoot) ? View.VISIBLE : View.GONE);
-        repairRestoreButton.setOnClickListener(view ->
-            new AlertDialog.Builder(this)
-                .setTitle("Restore previous Sidewinder?")
-                .setMessage("This restores your old Sidewinder map, which may still be "
-                    + "damaged. The current replacement is preserved separately.")
-                .setNegativeButton("CANCEL", null)
-                .setPositiveButton("RESTORE", (dialog, choice) -> restoreSidewinder())
-                .show());
-        repairPanel.addView(repairRestoreButton);
-        repairPanel.addView(hudSection("THE SILENT CARTOGRAPHER"));
-        repairPanel.addView(lanText("Campaign mission 4. Select a standalone "
-            + "b30.map file to replace only this level.", 12));
-        repairCartographerChooseButton = new Button(this);
-        repairCartographerChooseButton.setText("SELECT B30.MAP");
-        hudButton(repairCartographerChooseButton, false);
-        repairCartographerChooseButton.setOnClickListener(view -> {
-            if (repairBusy)
-                return;
-            if (gameProcessStatus() != 0) {
-                feedback.setText("Force-stop Halo before repairing campaign maps.");
-                return;
-            }
-            Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-            picker.addCategory(Intent.CATEGORY_OPENABLE);
-            picker.setType("*/*");
-            startActivityForResult(picker, PICK_CARTOGRAPHER);
-        });
-        repairPanel.addView(repairCartographerChooseButton);
-
-        repairCartographerRestoreButton = new Button(this);
-        repairCartographerRestoreButton.setText("RESTORE PREVIOUS B30.MAP");
-        hudButton(repairCartographerRestoreButton, false);
-        repairCartographerRestoreButton.setVisibility(
-            SidewinderRepair.hasPrevious(dataRoot, SidewinderRepair.CARTOGRAPHER_MAP)
-                ? View.VISIBLE : View.GONE);
-        repairCartographerRestoreButton.setOnClickListener(view ->
-            new AlertDialog.Builder(this)
-                .setTitle("Restore previous Silent Cartographer?")
-                .setMessage("This restores the old b30.map, which may still be damaged. "
-                    + "The new map is retained separately.")
-                .setNegativeButton("CANCEL", null)
-                .setPositiveButton("RESTORE", (dialog, choice) -> restoreCartographer())
-                .show());
-        repairPanel.addView(repairCartographerRestoreButton);
-
+        mapsToggle.setOnClickListener(view ->
+            toggleSection(mapsToggle, repairPanel));
         repairPanel.addView(hudSection("ORIGINAL CAMPAIGN MAPS"));
         repairPanel.addView(lanText(
             "Find which campaign maps are missing or damaged before creating "
             + "a co-op lobby. The check fully decompresses each file on a worker "
             + "thread. It never writes to maps or saves.", 12));
-        String[] mapNames = new String[SidewinderRepair.CAMPAIGN_MAP_FILES.length];
-        for (int i = 0; i < mapNames.length; i++)
+        String[] mapNames = new String[SidewinderRepair.CAMPAIGN_MAP_FILES.length + 1];
+        for (int i = 0; i < SidewinderRepair.CAMPAIGN_MAP_FILES.length; i++)
             mapNames[i] = SidewinderRepair.CAMPAIGN_MAP_TITLES[i]
                 + "  (" + SidewinderRepair.CAMPAIGN_MAP_FILES[i] + ")";
+        mapNames[mapNames.length - 1] = "Sidewinder  (sidewinder.map)";
         stockCampaignMapChoice = botChoice(
-            repairPanel, "MISSION", mapNames, 3);
+            repairPanel, "VERIFIED XBOX MAP", mapNames, 3);
         stockCampaignAuditButton = new Button(this);
         stockCampaignAuditButton.setText("CHECK ALL CAMPAIGN MAPS");
         hudButton(stockCampaignAuditButton, false);
@@ -1056,11 +862,11 @@ public class LauncherActivity extends Activity {
         repairPanel.addView(lanText(
             "To send a repaired original campaign map to a friend, export "
             + "your selected mission to Downloads, share that file privately, "
-            + "and have them import the SAME mission on their Halo launcher. "
+            + "and have them import the SAME Xbox map on their Halo launcher. "
             + "Each player must have legitimate Halo game data. Campaign "
             + "progress is separate and never transferred by this feature.", 11));
         stockCampaignExportButton = new Button(this);
-        stockCampaignExportButton.setText("EXPORT SELECTED CAMPAIGN MAP");
+        stockCampaignExportButton.setText("EXPORT SELECTED XBOX MAP");
         hudButton(stockCampaignExportButton, false);
         stockCampaignExportButton.setOnClickListener(view -> {
             if (repairBusy) return;
@@ -1079,7 +885,7 @@ public class LauncherActivity extends Activity {
         repairPanel.addView(stockCampaignExportButton);
 
         stockCampaignImportButton = new Button(this);
-        stockCampaignImportButton.setText("IMPORT VERIFIED CAMPAIGN MAP");
+        stockCampaignImportButton.setText("IMPORT VERIFIED XBOX MAP");
         hudButton(stockCampaignImportButton, false);
         stockCampaignImportButton.setOnClickListener(view -> {
             if (repairBusy) return;
@@ -1096,6 +902,37 @@ public class LauncherActivity extends Activity {
         });
         repairPanel.addView(stockCampaignImportButton);
 
+        Button restoreVerifiedMap = new Button(this);
+        restoreVerifiedMap.setText("RESTORE SELECTED PREVIOUS MAP");
+        hudButton(restoreVerifiedMap, false);
+        restoreVerifiedMap.setOnClickListener(view -> {
+            if (repairBusy) return;
+            String selected = selectedStockCampaignMap();
+            if (!SidewinderRepair.hasPrevious(dataRoot, selected)) {
+                repairStatus.setText("No earlier backup of " + selected + " exists.");
+                return;
+            }
+            new AlertDialog.Builder(this)
+                .setTitle("Restore the previous " + selected + "?")
+                .setMessage("This swaps the selected map with its preserved "
+                    + "backup. The backup may also be invalid. Existing saves "
+                    + "and other maps will not change.")
+                .setNegativeButton("CANCEL", null)
+                .setPositiveButton("RESTORE", (dialog, which) -> {
+                    runMapRepair("Restoring " + selected + "...", () -> {
+                        SidewinderRepair.restorePrevious(dataRoot, selected);
+                        return "Restored " + selected + " from its previous backup.";
+                    });
+                })
+                .show();
+        });
+        repairPanel.addView(restoreVerifiedMap);
+        repairPanel.addView(lanText(
+            "Original Xbox campaign maps and Sidewinder use this verified "
+            + "importer. Custom Edition maps use the separate CUSTOM MAPS section. "
+            + "Your b40.map and c10.map failed the Xbox-format check: replace "
+            + "those with valid original Xbox copies before hosting.", 12));
+
         repairStatus = lanText("", 12);
         repairStatus.setTextColor(HUD_WARNING);
         repairPanel.addView(repairStatus);
@@ -1107,8 +944,8 @@ public class LauncherActivity extends Activity {
         LinearLayout customMapsPanel = hudPanel();
         customMapsPanel.setVisibility(View.GONE);
         toolsPage.addView(customMapsPanel);
-        customMapsToggle.setOnClickListener(view -> customMapsPanel.setVisibility(
-            customMapsPanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+        customMapsToggle.setOnClickListener(view ->
+            toggleSection(customMapsToggle, customMapsPanel));
         customMapsPanel.addView(hudSection("HALO CUSTOM EDITION"));
         customMapsPanel.addView(lanText("Import .map files and shared resources. "
             + "Choose multiple files from Downloads/Halo-Custom-Maps. "
@@ -1201,8 +1038,7 @@ public class LauncherActivity extends Activity {
         campaignSavesPanel.setVisibility(View.GONE);
         toolsPage.addView(campaignSavesPanel);
         savesToggle.setOnClickListener(view ->
-            campaignSavesPanel.setVisibility(campaignSavesPanel.getVisibility()
-                == View.VISIBLE ? View.GONE : View.VISIBLE));
+            toggleSection(savesToggle, campaignSavesPanel));
         campaignSavesPanel.addView(hudSection("KEEP YOUR CAMPAIGN PROGRESS"));
         campaignSavesPanel.addView(lanText(
             "Normal Android UPDATE preserves progress. Never uninstall Halo "
@@ -1318,37 +1154,40 @@ public class LauncherActivity extends Activity {
             launcherPreferences.getString("play_mode", "lan");
         offlineMode.setChecked("offline".equals(savedMode));
         lanMode.setChecked("lan".equals(savedMode));
-        Runnable updateCommanderVisibility = () -> {
+        Runnable updateRewardVisibility = () -> {
             boolean available = offlineMode.isChecked() ||
                 (lanMode.isChecked() && hostRole.isChecked() &&
                     lanOnly.isChecked() && !invitePending);
-            optionsToggle.setVisibility(available ? View.VISIBLE : View.GONE);
-            commanderToggle.setVisibility(available ? View.VISIBLE : View.GONE);
             killstreakToggle.setVisibility(available ? View.VISIBLE : View.GONE);
-            commanderPanel.setVisibility(View.GONE);
             killstreakPanel.setVisibility(View.GONE);
+            hudButton(killstreakToggle, false);
         };
         roles.setOnCheckedChangeListener((group, id) -> {
             updateRole.run();
-            updateCommanderVisibility.run();
+            updateRewardVisibility.run();
         });
         lanOnly.setOnCheckedChangeListener((button, checked) ->
-            updateCommanderVisibility.run());
+            updateRewardVisibility.run());
         final boolean[] toolsVisible = { false };
+        final boolean[] homeVisible = { !invitePending };
         Runnable updateMode = () -> {
-            boolean playing = !toolsVisible[0];
+            boolean playing = !toolsVisible[0] && !homeVisible[0];
             offlinePanel.setVisibility(playing && offlineMode.isChecked() ?
                 View.VISIBLE : View.GONE);
             lanPanel.setVisibility(playing && lanMode.isChecked() ?
                 View.VISIBLE : View.GONE);
-            toolsPage.setVisibility(playing ? View.GONE : View.VISIBLE);
-            updateCommanderVisibility.run();
-            if (!playing) optionsToggle.setVisibility(View.GONE);
-            gameOptions.setVisibility(View.GONE);
+            toolsPage.setVisibility(toolsVisible[0] ? View.VISIBLE : View.GONE);
+            dashboardPanel.setVisibility(homeVisible[0] ?
+                View.VISIBLE : View.GONE);
+            updateRewardVisibility.run();
+            if (!playing) killstreakToggle.setVisibility(View.GONE);
+            killstreakPanel.setVisibility(View.GONE);
+            hudButton(killstreakToggle, false);
             if (playButton != null)
                 playButton.setVisibility(playing ? View.VISIBLE : View.GONE);
-            int chosen = !playing ? 4 : offlineMode.isChecked() ? 1 :
-                lanMode.isChecked() ? (hostRole.isChecked() ? 2 : 3) : 0;
+            int chosen = homeVisible[0] ? 0 : toolsVisible[0] ? 5 :
+                offlineMode.isChecked() ? 1 :
+                lanMode.isChecked() ? (hostRole.isChecked() ? 3 : 4) : 2;
             for (int i = 0; i < modeTabs.length; i++)
                 hudTab(modeTabs[i], i == chosen);
             scroll.scrollTo(0, 0);
@@ -1367,24 +1206,30 @@ public class LauncherActivity extends Activity {
         // Keep the existing mode/configuration machinery, but use one
         // compact navigation row for all normal player decisions.
         modeTabs[0].setOnClickListener(view -> {
+            homeVisible[0] = true;
             toolsVisible[0] = false;
-            offlineMode.setChecked(false);
-            lanMode.setChecked(false);
+            CareerProfile.dashboard(this, dataRoot, dashboardPanel);
             updateMode.run();
         });
         modeTabs[1].setOnClickListener(view -> {
-            toolsVisible[0] = false;
+            homeVisible[0] = toolsVisible[0] = false;
             offlineMode.setChecked(true);
             updateMode.run();
         });
         modeTabs[2].setOnClickListener(view -> {
-            toolsVisible[0] = false;
+            homeVisible[0] = toolsVisible[0] = false;
+            offlineMode.setChecked(false);
+            lanMode.setChecked(false);
+            updateMode.run();
+        });
+        modeTabs[3].setOnClickListener(view -> {
+            homeVisible[0] = toolsVisible[0] = false;
             roles.check(hostRole.getId());
             lanMode.setChecked(true);
             updateMode.run();
         });
-        modeTabs[3].setOnClickListener(view -> {
-            toolsVisible[0] = false;
+        modeTabs[4].setOnClickListener(view -> {
+            homeVisible[0] = toolsVisible[0] = false;
             roles.check(joinRole.getId());
             lanMode.setChecked(true);
             launcherPreferences.edit().putString("play_mode", "lan")
@@ -1393,7 +1238,8 @@ public class LauncherActivity extends Activity {
             if (lanOnly.isChecked() && !invitePending)
                 hostPicker.search(false, null);
         });
-        modeTabs[4].setOnClickListener(view -> {
+        modeTabs[5].setOnClickListener(view -> {
+            homeVisible[0] = false;
             toolsVisible[0] = true;
             updateMode.run();
         });
@@ -1452,8 +1298,7 @@ public class LauncherActivity extends Activity {
                     OfflineBotConfig.enable(new File(dataRoot, "config.toml"), count,
                         offlineSkills[skill].toLowerCase(java.util.Locale.ROOT),
                         team == 0 ? "even" : "against", crews, objectives);
-                    saveCommanderChoices(new File(dataRoot, "config.toml"),
-                        commanderChecks, commanderPrefs, true);
+                    CommanderConfig.disable(new File(dataRoot, "config.toml"));
                     saveKillstreakChoices(new File(dataRoot, "config.toml"),
                         killstreakChecks, killstreakPrefs, true);
                 } catch (java.io.IOException error) {
@@ -1490,8 +1335,7 @@ public class LauncherActivity extends Activity {
                     LanConfig.save(new File(dataRoot, "config.toml"),
                         local.getText().toString(), peer, lanOnly.isChecked(),
                         count, skill, true, true, hosting && driverBots.isChecked());
-                    saveCommanderChoices(new File(dataRoot, "config.toml"),
-                        commanderChecks, commanderPrefs, hosting);
+                    CommanderConfig.disable(new File(dataRoot, "config.toml"));
                     saveKillstreakChoices(new File(dataRoot, "config.toml"),
                         killstreakChecks, killstreakPrefs, hosting);
                     if (invitePending)
@@ -1548,6 +1392,7 @@ public class LauncherActivity extends Activity {
         footer.addView(play, playParams);
         root.addView(footer);
         setContentView(root);
+        updateMode.run(); // hide PLAY on the default service-record screen
         // Reentering Join after an in-place APK update should find a host
         // still playing without asking the host to leave the match.
         if (lanMode.isChecked() && joinRole.isChecked() &&
@@ -1555,27 +1400,7 @@ public class LauncherActivity extends Activity {
             hostPicker.search(false, null);
     }
 
-    private void saveCommanderChoices(File file, CheckBox[] checks,
-            SharedPreferences preferences, boolean hosting)
-            throws java.io.IOException {
-        if (!hosting) {
-            CommanderConfig.disable(file);
-            return;
-        }
-        CommanderConfig.Options selected = new CommanderConfig.Options();
-        SharedPreferences.Editor saved = preferences.edit();
-        for (int i = 0; i < CommanderConfig.KEYS.length; i++) {
-            String key = CommanderConfig.KEYS[i];
-            boolean checked = checks[i].isChecked();
-            selected.set(key, checked);
-            saved.putBoolean(key, checked);
-        }
-        CommanderConfig.save(file, selected);
-        saved.apply();
-    }
-
-    /** Separate user-facing killstreak mode: permission for individual
-     * human rewards, not attached to the designated 2142 commander. */
+    /** Individual host-authoritative rewards; retired orbital stays OFF. */
     private void saveKillstreakChoices(File file, CheckBox[] checks,
             SharedPreferences preferences, boolean hosting)
             throws java.io.IOException {
@@ -1587,7 +1412,7 @@ public class LauncherActivity extends Activity {
         SharedPreferences.Editor saved = preferences.edit();
         for (int i = 0; i < KillstreakConfig.KEYS.length; i++) {
             String key = KillstreakConfig.KEYS[i];
-            boolean checked = checks[i].isChecked();
+            boolean checked = !key.equals("orbital") && checks[i].isChecked();
             selected.set(key, checked);
             saved.putBoolean(key, checked);
         }
@@ -1694,14 +1519,6 @@ public class LauncherActivity extends Activity {
             customMapStatus.setText(initialStatus);
         if (playButton != null)
             playButton.setEnabled(false);
-        if (repairChooseButton != null)
-            repairChooseButton.setEnabled(false);
-        if (repairRestoreButton != null)
-            repairRestoreButton.setEnabled(false);
-        if (repairCartographerChooseButton != null)
-            repairCartographerChooseButton.setEnabled(false);
-        if (repairCartographerRestoreButton != null)
-            repairCartographerRestoreButton.setEnabled(false);
         if (customMapImportButton != null)
             customMapImportButton.setEnabled(false);
         if (customMapFolderButton != null)
@@ -1746,30 +1563,17 @@ public class LauncherActivity extends Activity {
                     stockCampaignExportButton.setEnabled(true);
                 if (playButton != null)
                     playButton.setEnabled(true);
-                if (repairChooseButton != null)
-                    repairChooseButton.setEnabled(true);
-                if (repairRestoreButton != null) {
-                    repairRestoreButton.setEnabled(true);
-                    repairRestoreButton.setVisibility(
-                        SidewinderRepair.hasPrevious(dataRoot) ? View.VISIBLE : View.GONE);
-                }
-                if (repairCartographerChooseButton != null)
-                    repairCartographerChooseButton.setEnabled(true);
-                if (repairCartographerRestoreButton != null) {
-                    repairCartographerRestoreButton.setEnabled(true);
-                    repairCartographerRestoreButton.setVisibility(
-                        SidewinderRepair.hasPrevious(dataRoot, SidewinderRepair.CARTOGRAPHER_MAP)
-                            ? View.VISIBLE : View.GONE);
-                }
             });
-        }, "Halo-Sidewinder-Repair").start();
+        }, "Halo-Xbox-Map-Transfer").start();
     }
 
     private String selectedStockCampaignMap() {
         int selected = stockCampaignMapChoice == null ? 3 :
             stockCampaignMapChoice.getSelectedItemPosition();
         String[] names = SidewinderRepair.CAMPAIGN_MAP_FILES;
-        return names[Math.max(0, Math.min(selected, names.length - 1))];
+        return selected == names.length ?
+            SidewinderRepair.SIDEWINDER_MAP :
+            names[Math.max(0, Math.min(selected, names.length - 1))];
     }
 
     private void auditStockCampaignMaps() {
@@ -1809,54 +1613,8 @@ public class LauncherActivity extends Activity {
                     result.bytes / 1048576 + " MiB, SHA-256 " +
                     result.sha256.substring(0, 12) + "...). Send this file " +
                     "privately to the other phone and use its matching " +
-                    "IMPORT VERIFIED CAMPAIGN MAP option. No saves were copied.";
+                    "IMPORT VERIFIED XBOX MAP option. No saves were copied.";
             }
-        });
-    }
-
-    private void importSidewinder(Uri document) {
-        runMapRepair("Checking Sidewinder's cache and compressed map data...", () -> {
-            try (InputStream input = getContentResolver().openInputStream(document)) {
-                if (input == null)
-                    throw new java.io.IOException("Android could not open the selected file.");
-                SidewinderRepair.Result repaired = SidewinderRepair.install(input, dataRoot);
-                return "Sidewinder installed and verified (SHA-256 "
-                    + repaired.sha256.substring(0, 12) + "...). "
-                    + (repaired.backedUpOriginal
-                        ? "The previous map is preserved for restoration."
-                        : "No previous map was present.");
-            }
-        });
-    }
-
-    private void restoreSidewinder() {
-        runMapRepair("Restoring your previous Sidewinder map...", () -> {
-            SidewinderRepair.restorePrevious(dataRoot);
-            return "Previous Sidewinder restored. The newer map is preserved separately.";
-        });
-    }
-
-    private void importCartographer(Uri document) {
-        runMapRepair("Verifying The Silent Cartographer's map data...", () -> {
-            try (InputStream input = getContentResolver().openInputStream(document)) {
-                if (input == null)
-                    throw new java.io.IOException("Android could not read the selected map.");
-                SidewinderRepair.Result repaired = SidewinderRepair.install(
-                    input, dataRoot, SidewinderRepair.CARTOGRAPHER_MAP);
-                return "The Silent Cartographer installed and verified (SHA-256 "
-                    + repaired.sha256.substring(0, 12) + "...). "
-                    + (repaired.backedUpOriginal
-                        ? "Your previous b30.map is available for restoration."
-                        : "No earlier b30.map was present.");
-            }
-        });
-    }
-
-    private void restoreCartographer() {
-        runMapRepair("Restoring your previous b30.map...", () -> {
-            SidewinderRepair.restorePrevious(dataRoot, SidewinderRepair.CARTOGRAPHER_MAP);
-            return "Previous Silent Cartographer map restored. "
-                + "The newer b30.map is preserved separately.";
         });
     }
 
@@ -2132,16 +1890,6 @@ public class LauncherActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == PICK_SIDEWINDER) {
-            if (resultCode == RESULT_OK && data != null && data.getData() != null)
-                importSidewinder(data.getData());
-            return;
-        }
-        if (requestCode == PICK_CARTOGRAPHER) {
-            if (resultCode == RESULT_OK && data != null && data.getData() != null)
-                importCartographer(data.getData());
-            return;
-        }
         if (requestCode == PICK_STOCK_MAP_IMPORT ||
             requestCode == PICK_STOCK_MAP_EXPORT) {
             String filename = pendingStockMapTransfer;

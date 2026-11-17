@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.content.res.ColorStateList;
 import android.graphics.Typeface;
 import android.text.InputFilter;
 import android.text.InputType;
@@ -14,6 +15,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import java.io.File;
@@ -32,6 +34,93 @@ final class CareerProfile {
     private static final String PREFS = "career_profile_v1";
 
     private CareerProfile() { }
+
+    private static int rarityColor(String rarity) {
+        switch (rarity) {
+            case "UNCOMMON": return Color.rgb(144, 214, 151);
+            case "RARE": return Color.rgb(125, 191, 244);
+            case "LEGENDARY": return Color.rgb(244, 183, 94);
+            default: return MUTED;
+        }
+    }
+
+    /** First launcher screen: compact local stats, not an intrusive modal.
+     * Loading is asynchronous and never blocks the main/UI thread. */
+    static void dashboard(Activity activity, File appDirectory, LinearLayout target) {
+        target.removeAllViews();
+        target.addView(text(activity, "LOADING SPARTAN SERVICE RECORD...", 14, MUTED, true));
+        new Thread(() -> {
+            CareerRecords.Career career;
+            String error = null;
+            try {
+                career = CareerRecords.load(appDirectory);
+            } catch (IOException failure) {
+                career = new CareerRecords.Career();
+                error = failure.getMessage();
+            }
+            final CareerRecords.Career result = career;
+            final String warning = error;
+            activity.runOnUiThread(() -> {
+                if (activity.isFinishing() || activity.isDestroyed()) return;
+                target.removeAllViews();
+                SharedPreferences pref = activity.getSharedPreferences(
+                    PREFS, Context.MODE_PRIVATE);
+                String name = pref.getString("name", "Spartan");
+                section(activity, target, "SPARTAN SERVICE RECORD");
+                target.addView(text(activity, name + "   •   " + result.rank(),
+                    22, GOLD, true));
+                target.addView(text(activity,
+                    "Rank " + result.rankNumber() + "    " +
+                    String.format(Locale.US, "%,d", result.xp) + " XP", 14, TEXT, true));
+                if (result.rankNext() > result.rankCurrent()) {
+                    int pct = (int)Math.min(100,
+                        (result.xp - result.rankCurrent()) * 100 /
+                        (result.rankNext() - result.rankCurrent()));
+                    ProgressBar progress = new ProgressBar(activity, null,
+                        android.R.attr.progressBarStyleHorizontal);
+                    progress.setMax(100);
+                    progress.setProgress(pct);
+                    progress.setProgressTintList(ColorStateList.valueOf(GOLD));
+                    target.addView(progress, new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, dp(activity, 12)));
+                    target.addView(text(activity, "Next promotion in " +
+                        String.format(Locale.US, "%,d", result.rankNext() - result.xp) +
+                        " XP", 12, MUTED, false));
+                } else {
+                    target.addView(text(activity, "MAXIMUM RANK EARNED",
+                        12, GOLD, true));
+                }
+                section(activity, target, "CAREER SNAPSHOT");
+                target.addView(text(activity, "Matches  " + result.games() +
+                    "     Wins  " + result.wins +
+                    "     K/D  " + result.kd(), 17, TEXT, true));
+                target.addView(text(activity, "Kills  " + result.kills +
+                    "     Deaths  " + result.deaths +
+                    "     Assists  " + result.assists +
+                    "     Best streak  " + result.bestStreak, 13, TEXT, false));
+                long earned = 0;
+                for (CareerRecords.Achievement medal : result.achievements())
+                    if (medal.earned) earned++;
+                target.addView(text(activity, "Achievements unlocked: " + earned +
+                    " / " + result.achievements().size(), 13, GOLD, true));
+                if (warning != null)
+                    target.addView(text(activity, "Career data: " + warning,
+                        12, Color.rgb(255, 184, 136), false));
+                Button full = new Button(activity);
+                full.setAllCaps(false);
+                full.setText("VIEW FULL PROFILE & ACHIEVEMENTS");
+                full.setTextColor(TEXT);
+                full.setBackgroundTintList(ColorStateList.valueOf(
+                    Color.rgb(40, 68, 80)));
+                full.setOnClickListener(view -> show(activity, appDirectory));
+                target.addView(full);
+                target.addView(text(activity,
+                    "Offline career history, stored only on this phone. " +
+                    "Ranked multiplayer leaderboards are a separate future feature.",
+                    11, MUTED, false));
+            });
+        }, "Halo-career-dashboard-read").start();
+    }
 
     static void show(Activity activity, File appDirectory) {
         new Thread(() -> {
@@ -122,12 +211,18 @@ final class CareerProfile {
             "Time played  " + (career.seconds / 3600) + "h " +
             (career.seconds / 60 % 60) + "m", 12, MUTED, false));
 
-        section(activity, panel, "ACHIEVEMENTS");
+        long unlocked = 0;
+        for (CareerRecords.Achievement medal : career.achievements())
+            if (medal.earned) unlocked++;
+        section(activity, panel, "ACHIEVEMENTS  " + unlocked + "/" +
+            career.achievements().size());
+        panel.addView(text(activity,
+            "COMMON  •  UNCOMMON  •  RARE  •  LEGENDARY", 11, MUTED, true));
         for (CareerRecords.Achievement medal : career.achievements()) {
             panel.addView(text(activity,
-                (medal.earned ? "★  " : "○  ") + medal.title +
-                "  —  " + medal.description, 12,
-                medal.earned ? GOLD : MUTED, medal.earned));
+                (medal.earned ? "★  " : "○  ") + "[" + medal.rarity +
+                "] " + medal.title + "  —  " + medal.description, 12,
+                medal.earned ? rarityColor(medal.rarity) : MUTED, medal.earned));
         }
 
         section(activity, panel, "RECENT MATCHES");

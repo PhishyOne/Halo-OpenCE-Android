@@ -130,11 +130,25 @@ unsigned int commander_features_mask(void)
     int team_multiplayer = commander_team_game();
     if (!multiplayer)
         return 0;
+    /* v38 Android retires unfinished Commander & Orbital gameplay.
+     * Keep old protocol IDs and config keys for compatibility, but no
+     * Android host or guest may enable those capabilities. The desktop
+     * builds retain their prior opt-in behavior. */
+#ifdef HALO_ANDROID
+    if (game_connection() == _game_connection_network_client)
+        return commander_policy_effective(commander_client_mask,
+            team_multiplayer, multiplayer) &
+            (KILLSTREAK_ENABLED | KILLSTREAK_ANNOUNCEMENTS);
+    return commander_policy_effective(commander_host_selected_mask(),
+        team_multiplayer, multiplayer) &
+        (KILLSTREAK_ENABLED | KILLSTREAK_ANNOUNCEMENTS);
+#else
     if (game_connection() == _game_connection_network_client)
         return commander_policy_effective(commander_client_mask,
             team_multiplayer, multiplayer);
     return commander_policy_effective(commander_host_selected_mask(),
         team_multiplayer, multiplayer);
+#endif
 }
 
 int commander_feature_allowed(unsigned int feature)

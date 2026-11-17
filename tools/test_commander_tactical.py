@@ -106,7 +106,7 @@ class TacticalMapTest(unittest.TestCase):
         self.assertIn("commander_tactical_present(render.local_player_index);", HUD.read_text())
         self.assertIn("No enemy intel", s)
 
-    def test_android_bridge_and_ui_are_opt_in(self):
+    def test_android_bridge_remains_compatible_but_ui_retired(self):
         raw = HOST.read_text()
         java = TOUCH.read_text()
         for name in ("host_touch_commander_state", "host_touch_commander_take_toggle", "host_touch_commander_take_assign"):
@@ -124,7 +124,7 @@ class TacticalMapTest(unittest.TestCase):
         self.assertIn("TOOLBAR_ASSIGN", java)
         self.assertIn("commander_features_cycle_role()", SOURCE.read_text())
         self.assertIn("commander_features_local_is_role(local)", SOURCE.read_text())
-        self.assertIn("in-game Map button", LAUNCHER.read_text())
+        self.assertNotIn("in-game Map button", LAUNCHER.read_text())
         self.assertIn('"commander.enabled", _config_boolean, "false"',
                       (ROOT / "port/linux/src/port_config.c").read_text())
 

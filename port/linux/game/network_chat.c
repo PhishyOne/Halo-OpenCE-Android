@@ -89,6 +89,10 @@ mutes.
 #include "network_votekick.h"
 #include "network_voice.h"
 #include "network_chat.h"
+#ifdef HALO_ANDROID
+#include "killstreak_rewards.h"
+#include "killstreak_recon.h"
+#endif
 #include "text_filter.h"
 #include "halo_keyboard.h"
 #include "server_director.h"
@@ -1750,6 +1754,20 @@ void network_chat_host_notice(
 {
 	long length = (long)csstrlen(text);
 	long start = 0;
+#ifdef HALO_ANDROID
+	/* A host-only reliable notice is presented on every phone, not only
+	 * on the earning player's machine. Do not synthesize ability from text. */
+	if (text && !csstrcmp(text, KILLSTREAK_PHANTOM_WARNING) &&
+		game_in_progress())
+	{
+		short local = local_player_get_next(NONE);
+		if (local >= 0 && local < MAXIMUM_LOCAL_PLAYERS)
+		{
+			hud_print_message(local, L"PHANTOM ACTIVE: INVISIBLE AND INVULNERABLE FOR 60 SECONDS");
+			game_engine_play_killstreak_sound(local, 14);
+		}
+	}
+#endif
 
 	/* (with the chat not shown, the console's red line, whatever
 	game.console_log says: the host's notices are for the players) */

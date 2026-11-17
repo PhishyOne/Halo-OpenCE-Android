@@ -129,25 +129,24 @@ class CommanderPolicyTest(unittest.TestCase):
         self.assertIn('commander_features_update();',main)
         self.assertIn('commander_features_mask() == 0',native) if False else None
 
-    def test_android_independent_masters_and_guest_disable(self):
+    def test_android_commander_retired_and_rewards_still_host_owned(self):
         s=LAUNCHER.read_text()
-        self.assertIn('getSharedPreferences("commander_controls", MODE_PRIVATE)',s)
+        self.assertNotIn('getSharedPreferences("commander_controls", MODE_PRIVATE)',s)
         self.assertIn('getSharedPreferences("killstreak_controls", MODE_PRIVATE)',s)
-        self.assertIn('commanderToggle.setText("2142 COMMANDER: "',s)
+        self.assertNotIn('commanderToggle',s)
+        self.assertNotIn('commanderChecks',s)
         self.assertIn('killstreakToggle.setText("KILLSTREAK REWARDS: "',s)
-        self.assertIn('commanderChecks[0].isChecked()',s)
         self.assertIn('killstreakChecks[0].isChecked()',s)
         self.assertIn('hostRole.isChecked()',s)
         self.assertIn('!invitePending',s)
-        self.assertIn('saveCommanderChoices(new File(dataRoot, "config.toml")',s)
+        self.assertNotIn('saveCommanderChoices(',s)
         self.assertIn('saveKillstreakChoices(new File(dataRoot, "config.toml")',s)
-        self.assertIn('CommanderConfig.disable(file)',s)
-        self.assertIn('KillstreakConfig.disable(file)',s)
-        self.assertIn('CommanderConfig.save(file, selected)',s)
-        self.assertIn('KillstreakConfig.save(file, selected)',s)
         self.assertIn('CommanderConfig.disable(new File(dataRoot, "config.toml"))',s)
+        self.assertIn('KillstreakConfig.disable(file)',s)
+        self.assertIn('KillstreakConfig.save(file, selected)',s)
+        self.assertIn('!key.equals("orbital") && checks[i].isChecked()',s)
         self.assertIn('KillstreakConfig.disable(new File(dataRoot, "config.toml"))',s)
-        self.assertIn('Switches only for now.',s)
+        self.assertNotIn('Switches only for now.',s)
 
 
 if __name__=="__main__":

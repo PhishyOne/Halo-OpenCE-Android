@@ -73,10 +73,12 @@ public final class CareerRecordsTest {
             check(career.bestStreak == 10, "best career streak");
             check(career.xp == 269 + 111,
                 "XP is based on bounded match activity");
-            check(career.rank().equals("Corporal"), "rank progression");
-            check(career.rankNext() == 650, "next rank threshold");
+            check(career.rank().equals("Recruit"), "long-term rank progression");
+            check(career.rankNext() == 1000, "first rank takes several matches");
             check(unlocked(career.achievements(), "First Blood"), "First Blood");
-            check(unlocked(career.achievements(), "Untouchable"), "Untouchable");
+            check(unlocked(career.achievements(), "Spartan Spree"), "10-kill reward achievement");
+            check(!unlocked(career.achievements(), "Untouchable"), "20-kill rare medal not farmed");
+            check(!unlocked(career.achievements(), "The Immortal"), "legendary medal locked");
             check(!unlocked(career.achievements(), "War Veteran"),
                 "veteran achievement still locked");
             check(!unlocked(career.achievements(), "Bot Buster"),

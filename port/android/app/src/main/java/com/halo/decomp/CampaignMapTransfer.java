@@ -40,11 +40,11 @@ final class CampaignMapTransfer {
     private CampaignMapTransfer() { }
 
     private static File checkedMap(File dataRoot, String name) throws IOException {
-        boolean allowlisted = false;
+        boolean allowlisted = SidewinderRepair.SIDEWINDER_MAP.equals(name);
         for (String candidate : SidewinderRepair.CAMPAIGN_MAP_FILES)
             if (candidate.equals(name)) allowlisted = true;
         if (!allowlisted)
-            throw new IOException("Only the ten original Halo campaign maps may be transferred.");
+            throw new IOException("Only the ten original campaign maps or Xbox Sidewinder may be transferred.");
         if (dataRoot == null)
             throw new IOException("Halo's game-data directory is unavailable.");
         File maps = new File(dataRoot, "maps");

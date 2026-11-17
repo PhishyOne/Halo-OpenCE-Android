@@ -20,8 +20,11 @@ final class CareerRecords {
         "Lieutenant", "Captain", "Major", "Colonel", "Brigadier",
         "General", "Legend"
     };
+    /* Long-term progression: thousands of actual games to reach Legend.
+     * Rank never drops. No premium boosts or account server are required. */
     private static final long[] THRESHOLDS = {
-        0, 100, 300, 650, 1100, 1700, 2500, 3500, 5000, 7000, 10000, 15000
+        0, 1000, 3000, 6500, 12000, 20000, 32000, 50000,
+        80000, 125000, 190000, 300000
     };
 
     static final class Match {
@@ -70,11 +73,12 @@ final class CareerRecords {
     }
 
     static final class Achievement {
-        final String title, description;
+        final String title, description, rarity;
         final boolean earned;
-        Achievement(String title, String description, boolean earned) {
+        Achievement(String title, String description, String rarity, boolean earned) {
             this.title = title;
             this.description = description;
+            this.rarity = rarity;
             this.earned = earned;
         }
     }
@@ -110,24 +114,53 @@ final class CareerRecords {
         }
 
         List<Achievement> achievements() {
-            List<Achievement> earned = new ArrayList<>();
-            boolean perfect = false, flagHero = false;
+            List<Achievement> awards = new ArrayList<>();
+            boolean flagHero = false, flawless = false, immortal = false;
             for (Match match : matches) {
-                if (match.kills >= 10 && match.deaths == 0)
-                    perfect = true;
-                if (match.captures >= 3)
-                    flagHero = true;
+                if (match.captures >= 5) flagHero = true;
+                if (match.kills >= 20 && match.deaths == 0) flawless = true;
+                if (match.humanKills >= 30 && match.deaths == 0) immortal = true;
             }
-            earned.add(new Achievement("First Blood", "Get your first kill", kills >= 1));
-            earned.add(new Achievement("War Veteran", "Finish 10 matches", games() >= 10));
-            earned.add(new Achievement("Untouchable", "Get a 10-kill streak", bestStreak >= 10));
-            earned.add(new Achievement("Human Hunter", "Defeat 25 human opponents", humanKills >= 25));
-            earned.add(new Achievement("Bot Buster", "Defeat 100 bots", botKills >= 100));
-            earned.add(new Achievement("Flag Hero", "Capture three flags in a match", flagHero));
-            earned.add(new Achievement("Perfect Game", "10 kills and no deaths in a match", perfect));
-            earned.add(new Achievement("Team Player", "Earn 50 assists", assists >= 50));
-            earned.add(new Achievement("Champion", "Win 10 matches", wins >= 10));
-            return earned;
+            awards.add(new Achievement("First Blood", "Earn your first kill",
+                "COMMON", kills >= 1));
+            awards.add(new Achievement("Enlisted", "Finish your first multiplayer match",
+                "COMMON", games() >= 1));
+            awards.add(new Achievement("First Victory", "Win your first multiplayer match",
+                "COMMON", wins >= 1));
+            awards.add(new Achievement("Bot Buster", "Defeat 100 bots",
+                "UNCOMMON", botKills >= 100));
+            awards.add(new Achievement("Human Hunter", "Defeat 250 human opponents",
+                "UNCOMMON", humanKills >= 250));
+            awards.add(new Achievement("Team Player", "Earn 250 assists",
+                "UNCOMMON", assists >= 250));
+            awards.add(new Achievement("Flag Runner", "Capture 20 flags",
+                "UNCOMMON", captures >= 20));
+            awards.add(new Achievement("Spartan Spree", "Get 10 kills without dying",
+                "UNCOMMON", bestStreak >= 10));
+            awards.add(new Achievement("Untouchable", "Get 20 kills without dying",
+                "RARE", bestStreak >= 20));
+            awards.add(new Achievement("War Veteran", "Finish 250 matches",
+                "RARE", games() >= 250));
+            awards.add(new Achievement("Champion", "Win 100 matches",
+                "RARE", wins >= 100));
+            awards.add(new Achievement("Flag Hero", "Capture 5 flags in one match",
+                "RARE", flagHero));
+            awards.add(new Achievement("Perfect Game", "20 kills with no deaths in one match",
+                "RARE", flawless));
+            awards.add(new Achievement("Slayer Elite", "Score 2,000 lifetime kills",
+                "RARE", kills >= 2000));
+            awards.add(new Achievement("The Immortal",
+                "30 human kills and no deaths in one match",
+                "LEGENDARY", immortal));
+            awards.add(new Achievement("War Eternal", "Finish 1,500 matches",
+                "LEGENDARY", games() >= 1500));
+            awards.add(new Achievement("Human Reaper", "Defeat 10,000 humans",
+                "LEGENDARY", humanKills >= 10000));
+            awards.add(new Achievement("Supreme Commander", "Win 1,000 matches",
+                "LEGENDARY", wins >= 1000));
+            awards.add(new Achievement("Flag Emperor", "Capture 1,000 flags",
+                "LEGENDARY", captures >= 1000));
+            return awards;
         }
 
         List<Match> recent() {

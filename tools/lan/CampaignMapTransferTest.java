@@ -84,6 +84,26 @@ public final class CampaignMapTransferTest {
                 check(SidewinderRepair.validate(maps.resolve(file).toFile(),file)==10240,
                     "Original campaign level refused: "+file);
             }
+            // Single verified Xbox map selector now includes Sidewinder.
+            // This remains distinct from v609 Custom Edition maps.
+            byte[] sidewinder = xboxMap("sidewinder");
+            Files.write(maps.resolve("sidewinder.map"),sidewinder);
+            check(SidewinderRepair.validate(
+                maps.resolve("sidewinder.map").toFile(),"sidewinder.map")==10240,
+                "Xbox Sidewinder failed verified validator");
+            ByteArrayOutputStream sideOut = new ByteArrayOutputStream();
+            CampaignMapTransfer.Export sideExport=CampaignMapTransfer.export(
+                root.toFile(),"sidewinder.map",sideOut);
+            check(sideExport.filename.equals("sidewinder.map") &&
+                Arrays.equals(sidewinder,sideOut.toByteArray()),
+                "Consolidated map export cannot transfer Sidewinder");
+            SidewinderRepair.Result sideImport=SidewinderRepair.install(
+                new ByteArrayInputStream(sideOut.toByteArray()),
+                friend.toFile(),"sidewinder.map");
+            check(!sideImport.backedUpOriginal &&
+                Arrays.equals(sidewinder,
+                    Files.readAllBytes(friendsMaps.resolve("sidewinder.map"))),
+                "Consolidated map import failed Sidewinder");
             String report=CampaignMapTransfer.audit(root.toFile(),null);
             check(report.contains("10/10 passed, 0 missing, 0 invalid"),
                 "Full verified campaign audit failed: "+report);

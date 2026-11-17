@@ -12,7 +12,8 @@
 #include "commander_features.h"
 #include "killstreak_rewards.h"
 #include "killstreak_recon.h"
-#include "killstreak_orbital.h"
+#include "network_distributed.h"
+#include "network_chat.h"
 
 #include <string.h>
 
@@ -22,6 +23,8 @@ struct killstreak_reward_state {
     unsigned char kills;
     boolean active;
     boolean owns_camouflage;
+    boolean owns_damage_immunity;
+    long immunity_end;
 };
 
 static struct killstreak_reward_state killstreak_players[HALO_PORT_MAXIMUM_NETWORK_PLAYERS];
@@ -57,7 +60,6 @@ void killstreak_rewards_reset_player(long player_index)
     struct player_datum *player;
     struct unit_datum *unit;
 
-    killstreak_orbital_reset_player(player_index);
     killstreak_recon_reset_player(player_index);
     if (!state || !state->active || state->player_index != player_index)
         return;
@@ -76,6 +78,16 @@ void killstreak_rewards_reset_player(long player_index)
             SET_FLAG(unit->unit.flags, _unit_active_camouflaged_bit, FALSE);
         }
     }
+    /* Only remove our own invulnerability, on the same actor and exact
+     * salted player/unit identities. Other damage-immunity owners win. */
+    if (killstreak_authority() && state->owns_damage_immunity)
+    {
+        player = player_try_and_get(player_index);
+        unit = player && player->unit_index == state->unit_index ?
+            unit_try_and_get(state->unit_index) : NULL;
+        if (unit && unit->unit.player_index == player_index)
+            SET_FLAG(unit->object.damage_flags, _object_cannot_take_damage_bit, FALSE);
+    }
     /* Overshields have no separate reward timer or provenance. Let the
      * stock engine consume them; never subtract shields during cleanup. */
     memset(state, 0, sizeof(*state));
@@ -90,7 +102,6 @@ void killstreak_rewards_stop(void)
             killstreak_rewards_reset_player(killstreak_players[slot].player_index);
     killstreak_match_active = FALSE;
     killstreak_recon_stop();
-    killstreak_orbital_stop();
 }
 
 void killstreak_rewards_start(void)
@@ -99,7 +110,6 @@ void killstreak_rewards_start(void)
      * effects are gone; do not look up old indices in the new world. */
     memset(killstreak_players, 0, sizeof(killstreak_players));
     killstreak_recon_reset();
-    killstreak_orbital_start();
     killstreak_match_active = TRUE;
 }
 
@@ -123,7 +133,6 @@ void killstreak_rewards_update(void)
         killstreak_feature_allowed(KILLSTREAK_ENABLED);
 
     killstreak_recon_update();
-    killstreak_orbital_update();
     for (slot = 0; slot < HALO_PORT_MAXIMUM_NETWORK_PLAYERS; slot++)
     {
         state = &killstreak_players[slot];
@@ -136,8 +145,18 @@ void killstreak_rewards_update(void)
             unit->unit.player_index != state->player_index ||
             TEST_FLAG(unit->object.damage_flags, _object_dead_bit))
             killstreak_rewards_reset_player(state->player_index);
-        else if (player->powerup_durations[_player_powerup_active_camouflage] == 0)
-            state->owns_camouflage = FALSE;
+        else
+        {
+            if (state->immunity_end > 0 && game_time_get() >= state->immunity_end)
+            {
+                if (state->owns_damage_immunity)
+                    SET_FLAG(unit->object.damage_flags, _object_cannot_take_damage_bit, FALSE);
+                state->owns_damage_immunity = FALSE;
+                state->immunity_end = 0;
+            }
+            if (player->powerup_durations[_player_powerup_active_camouflage] == 0)
+                state->owns_camouflage = FALSE;
+        }
     }
 }
 
@@ -183,7 +202,33 @@ void killstreak_rewards_record_kill(long credited_player_index, long dead_player
         return;
     state->kills++;
     if (state->kills == 10)
-        killstreak_orbital_award(credited_player_index, player->unit_index);
+    {
+        long now = game_time_get();
+        if (now < 0 || now > 0x7fffffffL - 1800)
+            return;
+        owns_camouflage = state->owns_camouflage ||
+            (player->powerup_durations[_player_powerup_active_camouflage] == 0 &&
+             !TEST_FLAG(unit->unit.flags, _unit_active_camouflaged_bit));
+        /* 60 seconds at Halo's 30-Hz authoritative simulation tick. */
+        player_handle_powerup_minor(credited_player_index,
+            _player_powerup_active_camouflage, 1800);
+        state->owns_camouflage = owns_camouflage;
+        state->owns_damage_immunity =
+            !TEST_FLAG(unit->object.damage_flags, _object_cannot_take_damage_bit);
+        if (state->owns_damage_immunity)
+            SET_FLAG(unit->object.damage_flags, _object_cannot_take_damage_bit, TRUE);
+        state->immunity_end = now + 1800;
+        /* One reliable broadcast. The host enforces the immunity; clients
+         * are never allowed to grant it through their own notice or input. */
+        if (killstreak_feature_allowed(KILLSTREAK_ANNOUNCEMENTS))
+        {
+            if (game_connection() == _game_connection_network_server)
+                distributed_send_notice(KILLSTREAK_PHANTOM_WARNING);
+            else
+                network_chat_host_notice(KILLSTREAK_PHANTOM_WARNING);
+        }
+        return;
+    }
     if (state->kills != 3 && state->kills != 5)
         return;
 

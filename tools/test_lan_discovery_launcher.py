@@ -45,18 +45,19 @@ class DiscoveryAndLauncherTests(unittest.TestCase):
                       self.launcher)
         self.assertIn('hostPicker.search(false, null);', self.launcher)
         self.assertIn('hostPicker.isSearching()', self.launcher)
-        self.assertIn('manualHostPanel.setVisibility(View.GONE);', self.launcher)
+        self.assertNotIn('manualHostToggle', self.launcher)
+        self.assertIn('manualHostPanel.addView(hostIp);', self.launcher)
         self.assertIn('manual.setVisibility(View.VISIBLE);', self.picker)
         self.assertIn('new AlertDialog.Builder(activity)', self.picker)
         self.assertIn('address.setText(current);', self.picker)
         self.assertIn('LanUpdateProtocol.privateAddress(\n', self.launcher)
 
     def test_tools_separate_from_game_modes(self):
-        self.assertIn('"Campaign", "Bots", "Host", "Join", "Tools"', self.launcher)
+        self.assertIn('"Profile", "Offline Match", "Campaign", "Host", "Join", "Tools"', self.launcher)
         for name in ('mapsToggle', 'repairPanel', 'customMapsToggle',
                      'campaignSavesPanel', 'diagnostics'):
             self.assertIn(f'toolsPage.addView({name});', self.launcher)
-        self.assertIn('toolsPage.setVisibility(playing ? View.GONE : View.VISIBLE);',
+        self.assertIn('toolsPage.setVisibility(toolsVisible[0] ? View.VISIBLE : View.GONE);',
                       self.launcher)
         self.assertNotIn('footer.addView(choices);', self.launcher)
         self.assertIn('footer.addView(play, playParams);', self.launcher)
