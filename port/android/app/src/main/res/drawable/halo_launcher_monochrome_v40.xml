@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Original simplified soldier helmet silhouette for Android themed icons.
+     Only the OS-selected monochrome tint is used; the main launcher image
+     remains the approved full-color ringworld/helmet artwork. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="3"
+        android:strokeLineJoin="round"
+        android:pathData="M25,37 L32,26 L47,20 L61,20 L77,26 L84,37
+            L81,74 L68,87 L40,87 L27,74 Z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M31,43 L45,36 L63,36 L77,43 L76,57
+            L65,64 L43,64 L32,57 Z" />
+    <path android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="3"
+        android:pathData="M31,69 L39,77 L69,77 L77,69
+            M22,75 L35,90 L73,90 L86,75" />
+</vector>

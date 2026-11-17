@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- the launcher icon (tools/app_icon.py, from port/assets/icon) -->
+<!-- Halo's chosen original helmet and ringworld icon, v40. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@drawable/ic_launcher_background" />
-    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
-    <monochrome android:drawable="@mipmap/ic_launcher_monochrome" />
+    <foreground android:drawable="@drawable/halo_launcher_foreground_v40" />
+    <monochrome android:drawable="@drawable/halo_launcher_monochrome_v40" />
 </adaptive-icon>

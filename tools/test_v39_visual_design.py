@@ -22,10 +22,12 @@ class VisualDesignV39Test(unittest.TestCase):
         cls.touch = (JAVA / "TouchControls.java").read_text()
 
     def test_rank_insignias_are_12_distinct_scalable_designs(self):
+        career = (JAVA / "CareerRecords.java").read_text()
         for rank in ("Recruit", "Private", "Corporal", "Sergeant",
                      "Staff Sergeant", "Lieutenant", "Captain", "Major",
                      "Colonel", "Brigadier", "General", "Legend"):
-            self.assertIn('"' + rank + '"', self.badges)
+            self.assertIn('"' + rank + '"', career)
+        self.assertIn("CareerRecords.rankName(rank)", self.badges)
         for expr in ("getWidth()", "getHeight()", "canvas.scale(scale, scale)",
                      "Paint.ANTI_ALIAS_FLAG", "switch (rank)", "case 10:",
                      "default: // Legend", "setContentDescription("):

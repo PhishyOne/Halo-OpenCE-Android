@@ -218,6 +218,7 @@ jobs:
           python3 tools/test_career_native_v37.py -v
           python3 tools/test_v38_launcher_phantom.py -v
           python3 tools/test_v39_visual_design.py -v
+          python3 tools/test_v40_rank_and_icon.py -v
           python3 tools/test_android_experiment_package.py -v
           python3 tools/test_lan_apk_update.py -v
           python3 tools/test_campaign_save_backup.py -v
@@ -282,7 +283,9 @@ jobs:
 
       - name: Verify packaged native-menu fonts and game image
         if: ${{ inputs.android_only }}
-        run: python3 tools/verify_android_ui_assets.py dist/halo-android-release/app-release.apk
+        run: |
+          python3 tools/verify_android_ui_assets.py dist/halo-android-release/app-release.apk
+          python3 tools/verify_android_icon_v40.py dist/halo-android-release/app-release.apk
 
       # the touch controls' layout and gyroscope maths (the runner's JDK)
       - name: Test the touch layout

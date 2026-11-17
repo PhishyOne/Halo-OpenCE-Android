@@ -38,8 +38,10 @@ final class RankGallery {
         int columns = activity.getResources().getConfiguration()
             .screenWidthDp >= 480 ? 3 : 2;
         int screenDp = activity.getResources().getConfiguration().screenWidthDp;
-        int tileWidth = dp(activity, Math.max(116,
-            Math.min(200, (screenDp - 65f) / columns)));
+        // A platform AlertDialog occupies less than full screen width.
+        // Leave room for its margins and per-card spacing in landscape.
+        int tileWidth = dp(activity, Math.max(104,
+            Math.min(176, (screenDp * .82f - 40f) / columns)));
         LinearLayout content = new LinearLayout(activity);
         content.setPadding(dp(activity, 6), dp(activity, 10),
             dp(activity, 6), dp(activity, 10));
