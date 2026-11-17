@@ -58,6 +58,15 @@ final class CareerProfile {
                 career = new CareerRecords.Career();
                 error = failure.getMessage();
             }
+            java.util.List<MatchHighlights.Moment> markers;
+            try {
+                markers = MatchHighlights.load(appDirectory);
+            } catch (IOException unreadable) {
+                markers = java.util.Collections.emptyList();
+                error = error == null ? unreadable.getMessage() :
+                    error + "; " + unreadable.getMessage();
+            }
+            final java.util.List<MatchHighlights.Moment> moments = markers;
             final CareerRecords.Career result = career;
             final String warning = error;
             activity.runOnUiThread(() -> {
@@ -105,6 +114,31 @@ final class CareerProfile {
                     " / " + result.achievements().size(), 13, GOLD, true));
                 section(activity, target, "TOP ACHIEVEMENTS");
                 target.addView(threeMedals(activity, result));
+                section(activity, target, "MATCH HIGHLIGHTS");
+                java.util.List<MatchHighlights.Moment> latest =
+                    MatchHighlights.mostRecent(result, moments);
+                if (latest.isEmpty()) {
+                    target.addView(text(activity,
+                        "No highlight moments yet. Finish a multiplayer match.",
+                        12, MUTED, false));
+                } else {
+                    for (MatchHighlights.Moment highlight : latest) {
+                        target.addView(text(activity,
+                            highlight.timing().substring(0, 5) + "  •  " +
+                            highlight.label(), 12, TEXT, true));
+                    }
+                    Button timeline = new Button(activity);
+                    timeline.setAllCaps(false);
+                    timeline.setText("VIEW MOMENT TIMELINE");
+                    HaloTheme.font(timeline, true);
+                    timeline.setTextColor(TEXT);
+                    timeline.setBackgroundTintList(ColorStateList.valueOf(
+                        HaloTheme.CONTROL_TOP));
+                    timeline.setOnClickListener(view ->
+                        showMomentTimeline(activity, result, moments));
+                    target.addView(timeline, new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, dp(activity, 40)));
+                }
                 section(activity, target, "SPARTAN RATING");
                 target.addView(text(activity, "UNRATED", 17, GOLD, true));
                 target.addView(text(activity,
@@ -143,11 +177,20 @@ final class CareerProfile {
                 career = new CareerRecords.Career();
                 problem = failed.getMessage();
             }
+            java.util.List<MatchHighlights.Moment> markers;
+            try {
+                markers = MatchHighlights.load(appDirectory);
+            } catch (IOException unreadable) {
+                markers = java.util.Collections.emptyList();
+                problem = problem == null ? unreadable.getMessage() :
+                    problem + "; " + unreadable.getMessage();
+            }
             CareerRecords.Career loaded = career;
+            java.util.List<MatchHighlights.Moment> highlights = markers;
             String error = problem;
             activity.runOnUiThread(() -> {
                 if (!activity.isFinishing() && !activity.isDestroyed())
-                    display(activity, loaded, error, onProfileChanged);
+                    display(activity, loaded, error, onProfileChanged, highlights);
             });
         }, "Halo-career-profile-read").start();
     }
@@ -322,8 +365,58 @@ final class CareerProfile {
             .show();
     }
 
+    private static void showMomentTimeline(Activity activity,
+            CareerRecords.Career career,
+            java.util.List<MatchHighlights.Moment> moments) {
+        java.util.List<CareerRecords.Match> games =
+            new java.util.ArrayList<>(career.matches);
+        java.util.Collections.reverse(games);
+        java.util.List<CareerRecords.Match> available =
+            new java.util.ArrayList<>();
+        java.util.List<String> labels = new java.util.ArrayList<>();
+        for (CareerRecords.Match match : games) {
+            java.util.List<MatchHighlights.Moment> selected =
+                MatchHighlights.forMatch(match, moments);
+            if (selected.isEmpty()) continue;
+            available.add(match);
+            labels.add(match.gameType() + "  " + match.map +
+                "    " + selected.size() + " moments");
+        }
+        if (available.isEmpty()) {
+            new AlertDialog.Builder(activity)
+                .setTitle("MATCH HIGHLIGHT MOMENTS")
+                .setMessage("No recorded moments yet. Complete a multiplayer "
+                    + "match in this version to capture event timestamps.")
+                .setPositiveButton("CLOSE", null)
+                .show();
+            return;
+        }
+        new AlertDialog.Builder(activity)
+            .setTitle("MATCH HIGHLIGHT MOMENTS")
+            .setItems(labels.toArray(new String[0]), (dialog, which) -> {
+                CareerRecords.Match match = available.get(which);
+                java.util.List<MatchHighlights.Moment> selected =
+                    MatchHighlights.forMatch(match, moments);
+                StringBuilder summary = new StringBuilder();
+                for (MatchHighlights.Moment moment : selected) {
+                    summary.append(moment.timing()).append("  ")
+                        .append(moment.label()).append('\n');
+                }
+                summary.append("\nEvent bookmarks only; no video or "
+                    + "3D replay was recorded in this version.");
+                new AlertDialog.Builder(activity)
+                    .setTitle(match.map + "  •  " + match.gameType())
+                    .setMessage(summary.toString())
+                    .setPositiveButton("CLOSE", null)
+                    .show();
+            })
+            .setNegativeButton("CLOSE", null)
+            .show();
+    }
+
     private static void display(Activity activity, CareerRecords.Career career,
-                                String error, Runnable onProfileChanged) {
+                                String error, Runnable onProfileChanged,
+                                java.util.List<MatchHighlights.Moment> highlights) {
         SharedPreferences pref = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         String name = pref.getString("name", "Spartan");
         LinearLayout panel = new LinearLayout(activity);
@@ -431,6 +524,18 @@ final class CareerProfile {
                     "  " + match.map + "  " + (match.wins == 1 ? "WIN" : "MATCH") +
                     "  " + match.kills + "K/" + match.deaths + "D", 11, MUTED, false));
             }
+        }
+        if (!MatchHighlights.mostRecent(career, highlights).isEmpty()) {
+            Button momentTimeline = new Button(activity);
+            momentTimeline.setText("VIEW MATCH HIGHLIGHTS");
+            momentTimeline.setAllCaps(false);
+            momentTimeline.setTextColor(TEXT);
+            HaloTheme.font(momentTimeline, true);
+            momentTimeline.setBackgroundTintList(ColorStateList.valueOf(
+                HaloTheme.CONTROL_TOP));
+            momentTimeline.setOnClickListener(view ->
+                showMomentTimeline(activity, career, highlights));
+            panel.addView(momentTimeline);
         }
         if (!career.matches.isEmpty()) {
             Button allHistory = new Button(activity);

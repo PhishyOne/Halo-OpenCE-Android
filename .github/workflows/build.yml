@@ -220,6 +220,8 @@ jobs:
           python3 tools/test_v39_visual_design.py -v
           python3 tools/test_v40_rank_and_icon.py -v
           python3 tools/test_v41_admin_profile_history.py -v
+          python3 tools/test_highlight_moments.py -v
+          python3 tools/test_v42_highlights_integration.py -v
           python3 tools/test_android_experiment_package.py -v
           python3 tools/test_lan_apk_update.py -v
           python3 tools/test_campaign_save_backup.py -v
@@ -246,6 +248,10 @@ jobs:
             port/android/app/src/main/java/com/halo/decomp/CareerRecords.java \
             tools/lan/CareerRecordsTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.CareerRecordsTest
+          javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" \
+            port/android/app/src/main/java/com/halo/decomp/MatchHighlights.java \
+            tools/lan/MatchHighlightsTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.MatchHighlightsTest
           javac -d "$RUNNER_TEMP/halo-test-classes" \
             port/android/app/src/main/java/com/halo/decomp/LanConfig.java \
             tools/lan/LanConfigSmokeTest.java

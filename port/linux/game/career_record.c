@@ -11,6 +11,7 @@
 #include "game/players.h"
 #include "memory/data.h"
 #include "career_record.h"
+#include "highlight_moments.h"
 /* The guest game build does not expose the platform layer's private
  * platform.h include directory. These are its two narrow entry points. */
 extern const char *platform_data_root(void);
@@ -30,6 +31,7 @@ static long longest_streak[MAXIMUM_LOCAL_PLAYERS];
 
 void career_record_start(void)
 {
+    halo_highlights_start();
     memset(human_kills, 0, sizeof(human_kills));
     memset(bot_kills, 0, sizeof(bot_kills));
     memset(longest_streak, 0, sizeof(longest_streak));
@@ -44,6 +46,8 @@ void career_record_kill(short local_slot, int bot_victim, long current_streak)
         bot_kills[local_slot]++;
     else
         human_kills[local_slot]++;
+    if (local_slot == 0)
+        halo_highlights_kill(bot_victim, current_streak, game_time_get());
     if (current_streak > longest_streak[local_slot])
         longest_streak[local_slot] = current_streak;
 }
@@ -224,6 +228,8 @@ void career_record_postgame(long game_type, const char *map_name)
             /* Even failed/partial appends must not be replayed by this
              * process. The Java reader rejects incomplete lines. */
             recorded = 1;
+            if (synced && closed)
+                halo_highlights_finish(root, id, map, game_time_get(), (int)won);
             platform_log(synced && closed ?
                 "career: saved local postgame record" :
                 "career: postgame storage failed (no completed record)");

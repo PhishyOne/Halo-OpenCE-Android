@@ -23,8 +23,11 @@ class NativeCareerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="halo-career-native-") as temp:
             work = Path(temp)
             (work / "production.inc").write_text(source)
-            built = subprocess.run([cc, "-std=gnu89", "-Wall", "-Wextra",
-                "-Werror", "-I", str(work), str(FIXTURE), "-o", str(work / "test")],
+            built = subprocess.run([cc, "-DHALO_ANDROID", "-std=gnu89",
+                "-Wall", "-Wextra", "-Werror",
+                "-I", str(work), "-I", str(ROOT / "port/linux/game"),
+                str(FIXTURE), str(ROOT / "port/linux/game/highlight_moments.c"),
+                "-o", str(work / "test")],
                 capture_output=True, text=True)
             self.assertEqual(built.returncode, 0, built.stderr)
             ran = subprocess.run([str(work / "test"), str(work)],

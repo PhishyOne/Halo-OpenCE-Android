@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <time.h>
+#include "highlight_moments.h"
 
 #define TRUE 1
 #define MAXIMUM_LOCAL_PLAYERS 4

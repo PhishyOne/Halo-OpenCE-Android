@@ -122,6 +122,9 @@ symbols in this file:
 #include "cseries/cseries_windows.h"
 #include "cseries/errors.h"
 #include "game_engine.h"
+#ifdef HALO_ANDROID
+#include "highlight_moments.h"
+#endif
 #include "players.h"
 #include "players_runtime.h"
 #include "items/weapons.h"
@@ -1276,6 +1279,10 @@ static void ctf_award_capture(
 	/* port: (a capture's points: 1, or Kills Score's) */
 	ctf_globals.scores[team_index] += ctf_capture_points();
 	player->statistics.multiplayer_statistics.ctf_statistics.flag_scores++;
+#ifdef HALO_ANDROID
+	if (player->local_player_index == 0)
+		halo_highlights_ctf_capture(game_time_get());
+#endif
 	ctf_show_capture(player_index, player->team_index);
 	if (VALID_INDEX(team_index, NUMBER_OF_CTF_TEAMS))
 	{
