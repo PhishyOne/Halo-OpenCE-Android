@@ -70,7 +70,10 @@ android {
         main {
             java.srcDirs += new File(staged, "third_party/SDL3/android-project/app/src/main/java")
             jniLibs.srcDirs = [new File(staged, "jniLibs")]
-            assets.srcDirs = [new File(staged, "assets")]
+            // Keep the guest ELF + broker data staged by Ninja, but also
+            // package the Android UI's exact OpenCE fonts and OFL license.
+            // Replacing (rather than extending) this list dropped src/main/assets.
+            assets.srcDirs = [file("src/main/assets"), new File(staged, "assets")]
         }
     }
 

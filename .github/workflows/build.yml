@@ -280,6 +280,10 @@ jobs:
           HALO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: python3 tools/ci_build.py android release
 
+      - name: Verify packaged native-menu fonts and game image
+        if: ${{ inputs.android_only }}
+        run: python3 tools/verify_android_ui_assets.py dist/halo-android-release/app-release.apk
+
       # the touch controls' layout and gyroscope maths (the runner's JDK)
       - name: Test the touch layout
         run: python3 tools/test_touch_layout.py

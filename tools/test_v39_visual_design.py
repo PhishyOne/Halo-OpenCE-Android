@@ -45,6 +45,8 @@ class VisualDesignV39Test(unittest.TestCase):
         self.assertIn('heading ? "fonts/Overpass-900.ttf"', self.theme)
         self.assertIn('"fonts/Overpass-750.ttf"', self.theme)
         self.assertIn("Typeface.createFromAsset", self.theme)
+        gradle = (ROOT / "port/android/app/build.gradle").read_text()
+        self.assertIn('assets.srcDirs = [file("src/main/assets"), new File(staged, "assets")]', gradle)
         self.assertIn("HaloTheme.font", self.launcher)
         self.assertIn("HaloTheme.font", self.career)
 
