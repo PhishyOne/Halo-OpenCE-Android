@@ -19,6 +19,31 @@ import java.util.Locale;
  * allowlisted scenario and backs up the original before replacing it.
  */
 final class CampaignMapTransfer {
+    static final class Check {
+        final String filename, title, detail;
+        final boolean passed;
+        Check(String name, boolean passed, String detail) {
+            this.filename = name; this.title = SidewinderRepair.titleFor(name);
+            this.passed = passed; this.detail = detail;
+        }
+    }
+
+    static java.util.List<Check> checks(File root, Progress progress) {
+        java.util.List<Check> results = new java.util.ArrayList<>();
+        String[] campaign = SidewinderRepair.CAMPAIGN_MAP_FILES;
+        for (int i = 0; i <= campaign.length; i++) {
+            String name = i == campaign.length ? SidewinderRepair.SIDEWINDER_MAP : campaign[i];
+            if (progress != null) progress.checking(name, i + 1, campaign.length + 1);
+            try {
+                File file = checkedMap(root, name);
+                SidewinderRepair.validate(file, name);
+                results.add(new Check(name, true, "File check passed"));
+            } catch (IOException failure) {
+                results.add(new Check(name, false, failure.getMessage()));
+            }
+        }
+        return results;
+    }
     interface Progress {
         void checking(String filename, int done, int total);
     }

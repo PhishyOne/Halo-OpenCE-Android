@@ -30,17 +30,17 @@ class CampaignMapTransferIntegration(unittest.TestCase):
         for phrase in (
             'PICK_STOCK_MAP_IMPORT = 10',
             'PICK_STOCK_MAP_EXPORT = 11',
-            'stockCampaignAuditButton.setText("CHECK ALL CAMPAIGN MAPS")',
-            'stockCampaignImportButton.setText("IMPORT MAP")',
+            'stockCampaignAuditButton.setText("CHECK MY MAPS")',
+            'stockCampaignImportButton.setText("IMPORT MAPS OR REPAIR ZIP")',
             'stockCampaignExportButton.setText("EXPORT MAP")',
             'Intent.ACTION_CREATE_DOCUMENT',
             'Intent.ACTION_OPEN_DOCUMENT',
             'selectedStockCampaignMap()',
             'pendingStockMapTransfer',
             'onSaveInstanceState(Bundle state)',
-            'runMapRepair("Checking the ten original campaign maps..."',
-            'CampaignMapTransfer.audit(dataRoot,',
-            'SidewinderRepair.install(input, dataRoot, filename)',
+            'runMapRepair("Checking your campaign maps and Sidewinder..."',
+            'CampaignMapTransfer.checks(dataRoot,',
+            'CampaignRepairImport.install(input, dataRoot,',
             'CampaignMapTransfer.export(dataRoot, filename, out)',
             'getContentResolver().openOutputStream(document, "w")',
         ):
@@ -69,7 +69,7 @@ class CampaignMapTransferIntegration(unittest.TestCase):
         self.assertIn('starting precaching of map',DIAG)
         self.assertIn('no cache file can hold map',DIAG)
         self.assertIn('couldn.t find map',DIAG)
-        self.assertIn('CHECK ALL CAMPAIGN MAPS',LAUNCHER)
+        self.assertIn('CHECK MY MAPS',LAUNCHER)
 
 if __name__=="__main__":
     unittest.main()

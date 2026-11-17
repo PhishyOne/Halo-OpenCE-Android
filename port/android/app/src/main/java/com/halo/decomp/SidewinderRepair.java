@@ -66,7 +66,7 @@ final class SidewinderRepair {
         throw new IOException("This map cannot be repaired by the launcher.");
     }
 
-    private static String titleFor(String targetMap) {
+    static String titleFor(String targetMap) {
         for (int i = 0; i < CAMPAIGN_MAP_FILES.length; i++)
             if (CAMPAIGN_MAP_FILES[i].equals(targetMap))
                 return CAMPAIGN_MAP_TITLES[i];
@@ -89,6 +89,34 @@ final class SidewinderRepair {
     }
 
     private SidewinderRepair() { }
+
+    /** Read identity from the cache, never its document/ZIP filename. */
+    static String detect(byte[] header) throws IOException {
+        if (header.length != HEADER_BYTES || !matches(header, 0, "daeh") ||
+            !matches(header, 0x7FC, "toof") || u32(header, 4) != 5)
+            throw new IOException("Choose an original Xbox .map file or a campaign repair ZIP. Custom maps belong in Custom Maps.");
+        int end = 0x20;
+        while (end < 0x40 && header[end] != 0) end++;
+        String name = new String(header, 0x20, end - 0x20,
+            StandardCharsets.US_ASCII).toLowerCase(java.util.Locale.ROOT) + ".map";
+        scenarioFor(name);
+        return name;
+    }
+
+    static String installDetected(InputStream source, File dataRoot) throws IOException {
+        java.io.PushbackInputStream input = new java.io.PushbackInputStream(source, HEADER_BYTES);
+        byte[] header = new byte[HEADER_BYTES];
+        readExactly(input, header);
+        String name = detect(header);
+        input.unread(header);
+        File current = new File(mapsDirectory(dataRoot), name);
+        boolean healthy = false;
+        try { validate(current, name); healthy = true; }
+        catch (IOException needsRepair) { /* missing or invalid: install below */ }
+        if (healthy) return "✓ PASS  " + titleFor(name) + " — already healthy; kept your map.";
+        install(input, dataRoot, name, true);
+        return "✓ PASS  " + titleFor(name) + " — repaired. Your earlier copies are kept.";
+    }
 
     private static boolean matches(byte[] data, int offset, String ascii) {
         byte[] expected = ascii.getBytes(StandardCharsets.US_ASCII);
@@ -276,6 +304,11 @@ final class SidewinderRepair {
 
     static synchronized Result install(InputStream source, File dataRoot,
             String targetMap) throws IOException {
+        return install(source, dataRoot, targetMap, false);
+    }
+
+    private static synchronized Result install(InputStream source, File dataRoot,
+            String targetMap, boolean keepEarlierBackups) throws IOException {
         String scenario = scenarioFor(targetMap);
         String title = titleFor(targetMap);
         if (source == null)
@@ -283,9 +316,15 @@ final class SidewinderRepair {
         File maps = mapsDirectory(dataRoot);
         Path target = new File(maps, targetMap).toPath();
         Path previous = new File(maps, targetMap + ".previous").toPath();
-        if (Files.exists(previous))
+        if (keepEarlierBackups) {
+            int generation = 1;
+            while (Files.exists(previous, java.nio.file.LinkOption.NOFOLLOW_LINKS) && generation < 8)
+                previous = new File(maps, targetMap + ".previous." + (++generation)).toPath();
+        }
+        if (Files.exists(previous, java.nio.file.LinkOption.NOFOLLOW_LINKS))
             throw new IOException("A previous " + title + " backup already exists. "
-                + "Restore it before attempting another replacement.");
+                + (keepEarlierBackups ? "Eight earlier copies are preserved; no files were replaced."
+                                      : "Restore it before attempting another replacement."));
         if (Files.exists(target) && (!Files.isRegularFile(target) ||
             Files.isSymbolicLink(target)))
             throw new IOException("The installed " + title + " map cannot be safely replaced.");

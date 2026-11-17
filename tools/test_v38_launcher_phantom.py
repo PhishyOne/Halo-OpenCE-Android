@@ -38,13 +38,13 @@ class V38Tests(unittest.TestCase):
         self.assertIn("manualHostPanel.addView(hostIp)", self.launcher)
         self.assertIn('mapNames[mapNames.length - 1] = "Sidewinder  (sidewinder.map)"',
                       self.launcher)
-        self.assertIn("SidewinderRepair.install(input, dataRoot, filename)", self.launcher)
+        self.assertIn("CampaignRepairImport.install(input, dataRoot,", self.launcher)
         self.assertIn("SidewinderRepair.restorePrevious(dataRoot, selected)",
                       self.launcher)
         self.assertIn("CustomMapImporter.install(input, dataRoot, name)", self.launcher)
         self.assertIn("SidewinderRepair.SIDEWINDER_MAP.equals(name)",
                       (APP / "CampaignMapTransfer.java").read_text())
-        self.assertIn("b40.map and c10.map failed", self.launcher)
+        self.assertNotIn("b40.map and c10.map failed", self.launcher)
 
     def test_expanded_sections_are_highlighted(self):
         self.assertIn("hudButton(button, open);", self.launcher)

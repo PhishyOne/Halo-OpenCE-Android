@@ -269,6 +269,10 @@ jobs:
             port/android/app/src/main/java/com/halo/decomp/CampaignAdminArchive.java \
             tools/lan/CampaignMapTransferTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.CampaignMapTransferTest
+          javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" \
+            port/android/app/src/main/java/com/halo/decomp/CampaignRepairImport.java \
+            tools/lan/CampaignRepairImportTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.CampaignRepairImportTest
           javac -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/CustomMapImporter.java tools/lan/CustomMapImporterTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.CustomMapImporterTest
           javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/CustomMapPack.java tools/lan/CustomMapPackTest.java
