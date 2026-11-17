@@ -36,6 +36,9 @@ final class CareerRecords {
         final int kills, humanKills, botKills, deaths, assists, wins;
         final int seconds, bestStreak, captures, returns, hillTicks;
         final int suicides, teamKills;
+        final boolean extended;
+        final int flagGrabs, oddballTicks, ballCarrierKills, killsAsCarrier;
+        final int raceLaps, bestLapTicks, lastLapTicks;
 
         private Match(String[] parts) {
             id = parts[1];
@@ -55,6 +58,15 @@ final class CareerRecords {
             hillTicks = parse(parts[15], 0, 8640000);
             suicides = parse(parts[16], 0, 10000);
             teamKills = parse(parts[17], 0, 10000);
+            boolean hc2 = parts[0].equals("HC2");
+            extended = hc2;
+            flagGrabs = hc2 ? parse(parts[18], 0, 10000) : 0;
+            oddballTicks = hc2 ? parse(parts[19], 0, 8640000) : 0;
+            ballCarrierKills = hc2 ? parse(parts[20], 0, 10000) : 0;
+            killsAsCarrier = hc2 ? parse(parts[21], 0, 10000) : 0;
+            raceLaps = hc2 ? parse(parts[22], 0, 10000) : 0;
+            bestLapTicks = hc2 ? parse(parts[23], 0, 8640000) : 0;
+            lastLapTicks = hc2 ? parse(parts[24], 0, 8640000) : 0;
             if ((humanKills == -1) != (botKills == -1) ||
                 (humanKills >= 0 && humanKills + botKills != kills) ||
                 bestStreak > kills || wins > 1)
@@ -88,7 +100,9 @@ final class CareerRecords {
         final List<Match> matches = new ArrayList<>();
         long kills, humanKills, botKills, unknownOpponentKills, deaths;
         long assists, wins, seconds, captures, returns, hillTicks;
+        long flagGrabs, oddballTicks, ballCarrierKills, killsAsCarrier, raceLaps;
         long suicides, teamKills, bestStreak, xp;
+        int fastestLapTicks;
         int invalidLines, duplicates;
 
         long games() { return matches.size(); }
@@ -164,6 +178,18 @@ final class CareerRecords {
             return awards;
         }
 
+        /** Top three actually earned achievements, rarest first.
+         * No automatic display of future/locked medals as earned awards. */
+        List<Achievement> topAchievements() {
+            List<Achievement> earned = new ArrayList<>();
+            for (Achievement medal : achievements())
+                if (medal.earned) earned.add(medal);
+            earned.sort((left, right) ->
+                Integer.compare(achievementTier(right.rarity),
+                    achievementTier(left.rarity)));
+            return earned.subList(0, Math.min(3, earned.size()));
+        }
+
         List<Match> recent() {
             List<Match> result = new ArrayList<>(matches);
             Collections.reverse(result);
@@ -182,6 +208,14 @@ final class CareerRecords {
             hillTicks += match.hillTicks;
             suicides += match.suicides;
             teamKills += match.teamKills;
+            flagGrabs += match.flagGrabs;
+            oddballTicks += match.oddballTicks;
+            ballCarrierKills += match.ballCarrierKills;
+            killsAsCarrier += match.killsAsCarrier;
+            raceLaps += match.raceLaps;
+            if (match.bestLapTicks > 0 &&
+                (fastestLapTicks == 0 || match.bestLapTicks < fastestLapTicks))
+                fastestLapTicks = match.bestLapTicks;
             bestStreak = Math.max(bestStreak, match.bestStreak);
             if (match.humanKills < 0) {
                 unknownOpponentKills += match.kills;
@@ -199,6 +233,16 @@ final class CareerRecords {
                 + 25L * Math.min(4, match.captures)
                 + 15L * Math.min(4, match.returns)
                 + Math.min(20, match.seconds / 60);
+        }
+    }
+
+    private static int achievementTier(String rarity) {
+        switch (rarity) {
+            case "LEGENDARY": return 4;
+            case "RARE": return 3;
+            case "UNCOMMON": return 2;
+            case "COMMON": return 1;
+            default: return 0;
         }
     }
 
@@ -230,10 +274,13 @@ final class CareerRecords {
     }
 
     static Match parseLine(String line) {
-        if (line == null || line.length() > 319 || line.length() < 66)
+        if (line == null || line.length() > 479 || line.length() < 66)
             throw new IllegalArgumentException("Bad match record length");
         String[] fields = line.split("\\|", -1);
-        if (fields.length != 18 || !fields[0].equals("HC1") ||
+        boolean old = fields.length == 18 && "HC1".equals(fields[0]);
+        boolean extended = fields.length == 25 && "HC2".equals(fields[0]);
+        if ((!old && !extended) ||
+            (old && line.length() > 319) ||
             !fields[1].matches("[0-9a-f]{32}") ||
             !fields[2].matches("[0-9]{1,11}") ||
             !fields[4].matches("[a-z0-9_-]{1,47}"))

@@ -11,15 +11,20 @@
 #define MAXIMUM_LOCAL_PLAYERS 4
 #define game_engine_ctf 1
 #define game_engine_slayer 2
+#define game_engine_oddball 3
 #define game_engine_king 4
 #define game_engine_race 5
-struct ctf_statistics { int flag_scores, flag_returns; };
+struct ctf_statistics { int flag_scores, flag_returns, flag_grabs; };
 struct king_statistics { int time_on_hill; };
+struct oddball_statistics { int time_with_the_ball, ball_carrier_kills, kills_as_ball_carrier; };
+struct race_statistics { int laps, best_lap_time, last_lap_time; };
 struct game_statistics {
     int kills[4], assists[4], deaths, suicides, friendly_fire_kills;
     union {
         struct ctf_statistics ctf_statistics;
         struct king_statistics king_statistics;
+        struct oddball_statistics oddball_statistics;
+        struct race_statistics race_statistics;
     } multiplayer_statistics;
 };
 struct player_datum {
@@ -75,13 +80,33 @@ int main(int argc, char **argv) {
     assert(count_records()==1); /* exactly one per real postgame */
     career_record_start(); /* next match */
     players[0].statistics.kills[0]=2;
+    players[0].statistics.multiplayer_statistics.ctf_statistics.flag_grabs=3;
+    players[0].statistics.multiplayer_statistics.ctf_statistics.flag_scores=2;
+    players[0].statistics.multiplayer_statistics.ctf_statistics.flag_returns=1;
     career_record_kill(0,1,1);
     career_record_postgame(game_engine_ctf,"levels/test/sidewinder");
     assert(count_records()==2);
+
+    career_record_start();
+    players[0].statistics.kills[0]=4;
+    players[0].statistics.multiplayer_statistics.oddball_statistics.time_with_the_ball=75;
+    players[0].statistics.multiplayer_statistics.oddball_statistics.ball_carrier_kills=2;
+    players[0].statistics.multiplayer_statistics.oddball_statistics.kills_as_ball_carrier=3;
+    career_record_postgame(game_engine_oddball,"levels/test/icefields");
+    assert(count_records()==3);
+
+    career_record_start();
+    players[0].statistics.kills[0]=1;
+    players[0].statistics.multiplayer_statistics.race_statistics.laps=2;
+    players[0].statistics.multiplayer_statistics.race_statistics.best_lap_time=300;
+    players[0].statistics.multiplayer_statistics.race_statistics.last_lap_time=420;
+    career_record_postgame(game_engine_race,"levels/test/raceway");
+    assert(count_records()==4);
+
     career_record_start();
     players[0].quit_out_of_game=1;
     career_record_postgame(game_engine_slayer,"excluded");
-    assert(count_records()==2);
-    puts("PASS career recorder: two completed matches, no duplicate/quit");
+    assert(count_records()==4);
+    puts("PASS career recorder: four HC2 matches, no duplicate/quit");
     return 0;
 }

@@ -103,6 +103,8 @@ final class CareerProfile {
                     if (medal.earned) earned++;
                 target.addView(text(activity, "Achievements unlocked: " + earned +
                     " / " + result.achievements().size(), 13, GOLD, true));
+                section(activity, target, "TOP ACHIEVEMENTS");
+                target.addView(threeMedals(activity, result));
                 section(activity, target, "SPARTAN RATING");
                 target.addView(text(activity, "UNRATED", 17, GOLD, true));
                 target.addView(text(activity,
@@ -111,9 +113,6 @@ final class CareerProfile {
                 if (warning != null)
                     target.addView(text(activity, "Career data: " + warning,
                         12, Color.rgb(255, 184, 136), false));
-                LinearLayout actions = new LinearLayout(activity);
-                actions.setOrientation(LinearLayout.HORIZONTAL);
-                actions.setGravity(Gravity.CENTER_VERTICAL);
                 Button full = new Button(activity);
                 full.setAllCaps(false);
                 full.setText("FULL SERVICE RECORD");
@@ -121,28 +120,20 @@ final class CareerProfile {
                 full.setBackgroundTintList(ColorStateList.valueOf(
                     HaloTheme.CONTROL_TOP));
                 HaloTheme.font(full, true);
-                full.setOnClickListener(view -> show(activity, appDirectory));
-                actions.addView(full, new LinearLayout.LayoutParams(0,
-                    dp(activity, 44), 1f));
-                Button ranks = new Button(activity);
-                ranks.setAllCaps(false);
-                ranks.setText("VIEW ALL RANKS");
-                ranks.setTextColor(TEXT);
-                ranks.setBackgroundTintList(ColorStateList.valueOf(
-                    HaloTheme.CONTROL_TOP));
-                HaloTheme.font(ranks, true);
-                ranks.setOnClickListener(view ->
-                    RankGallery.show(activity, result.rankIndex()));
-                LinearLayout.LayoutParams rankButton = new LinearLayout.LayoutParams(
-                    0, dp(activity, 44), 1f);
-                rankButton.leftMargin = dp(activity, 8);
-                actions.addView(ranks, rankButton);
-                target.addView(actions);
+                full.setOnClickListener(view -> show(activity, appDirectory,
+                    () -> dashboard(activity, appDirectory, target)));
+                target.addView(full, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, dp(activity, 44)));
             });
         }, "Halo-career-dashboard-read").start();
     }
 
     static void show(Activity activity, File appDirectory) {
+        show(activity, appDirectory, null);
+    }
+
+    static void show(Activity activity, File appDirectory,
+                     Runnable onProfileChanged) {
         new Thread(() -> {
             CareerRecords.Career career;
             String problem = null;
@@ -156,7 +147,7 @@ final class CareerProfile {
             String error = problem;
             activity.runOnUiThread(() -> {
                 if (!activity.isFinishing() && !activity.isDestroyed())
-                    display(activity, loaded, error);
+                    display(activity, loaded, error, onProfileChanged);
             });
         }, "Halo-career-profile-read").start();
     }
@@ -194,14 +185,145 @@ final class CareerProfile {
         return row;
     }
 
+    /** The three best earned medals, never unreleased rank insignias.
+     * Locked placeholders occupy empty slots without implying an award. */
+    private static LinearLayout threeMedals(Activity activity,
+                                            CareerRecords.Career career) {
+        LinearLayout row = new LinearLayout(activity);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        java.util.List<CareerRecords.Achievement> earned = career.topAchievements();
+        for (int index = 0; index < 3; index++) {
+            CareerRecords.Achievement medal = index < earned.size() ?
+                earned.get(index) : null;
+            LinearLayout tile = new LinearLayout(activity);
+            tile.setOrientation(LinearLayout.VERTICAL);
+            tile.setGravity(Gravity.CENTER);
+            tile.setPadding(dp(activity, 4), dp(activity, 3),
+                            dp(activity, 4), dp(activity, 3));
+            tile.setBackground(HaloTheme.surface(HaloTheme.PANEL_TOP,
+                HaloTheme.PANEL_BOTTOM, HaloTheme.BORDER, 5,
+                activity.getResources().getDisplayMetrics().density));
+            AchievementMedal badge = new AchievementMedal(activity,
+                medal == null ? null : medal.rarity);
+            tile.addView(badge, new LinearLayout.LayoutParams(
+                dp(activity, 43), dp(activity, 43)));
+            TextView title = text(activity,
+                medal == null ? "LOCKED" : medal.title,
+                12, medal == null ? MUTED : rarityColor(medal.rarity), true);
+            title.setGravity(Gravity.CENTER);
+            title.setMaxLines(2);
+            title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            tile.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+            TextView rarity = text(activity,
+                medal == null ? "NOT EARNED" : medal.rarity, 10, MUTED, false);
+            rarity.setGravity(Gravity.CENTER);
+            tile.addView(rarity);
+            LinearLayout.LayoutParams cell = new LinearLayout.LayoutParams(
+                0, dp(activity, 110), 1f);
+            if (index > 0) cell.leftMargin = dp(activity, 6);
+            row.addView(tile, cell);
+        }
+        return row;
+    }
+
     private static void section(Activity activity, LinearLayout layout, String title) {
         TextView label = text(activity, title, 13, GOLD, true);
         label.setPadding(0, dp(activity, 12), 0, dp(activity, 4));
         layout.addView(label);
     }
 
+    private static String matchDetails(CareerRecords.Match match) {
+        StringBuilder result = new StringBuilder();
+        result.append("Game type: ").append(match.gameType())
+            .append("\nMap: ").append(match.map)
+            .append("\nDate: ").append(DateFormat.getDateTimeInstance(
+                DateFormat.SHORT, DateFormat.SHORT)
+                .format(new Date(match.epoch * 1000L)))
+            .append("\nResult: ").append(match.wins == 1 ? "WIN" : "NOT WON")
+            .append("\nKills: ").append(match.kills)
+            .append("\nDeaths: ").append(match.deaths)
+            .append("\nAssists: ").append(match.assists)
+            .append("\nBest streak: ").append(match.bestStreak)
+            .append("\nDuration: ").append(match.seconds / 60).append(" min")
+            .append("\nSuicides: ").append(match.suicides)
+            .append("\nFriendly-fire kills: ").append(match.teamKills);
+        if (match.humanKills < 0) {
+            result.append("\nOpponent type: NOT CLASSIFIED");
+        } else {
+            result.append("\nHuman kills: ").append(match.humanKills)
+                .append("\nBot kills: ").append(match.botKills);
+        }
+        if (!match.extended) {
+            result.append("\n\nAdditional objective details were not "
+                + "recorded in this older match.");
+        } else {
+            switch (match.mode) {
+                case 1:
+                    result.append("\nFlag grabs: ").append(match.flagGrabs)
+                        .append("\nFlag captures: ").append(match.captures)
+                        .append("\nFlag returns: ").append(match.returns);
+                    break;
+                case 3:
+                    result.append("\nOddball held: ")
+                        .append(match.oddballTicks / 30).append(" sec")
+                        .append("\nBall-carrier kills: ")
+                        .append(match.ballCarrierKills)
+                        .append("\nKills while carrying: ")
+                        .append(match.killsAsCarrier);
+                    break;
+                case 4:
+                    result.append("\nHill time: ")
+                        .append(match.hillTicks / 30).append(" sec");
+                    break;
+                case 5:
+                    result.append("\nRace laps: ").append(match.raceLaps)
+                        .append("\nBest lap: ")
+                        .append(match.bestLapTicks > 0 ?
+                            String.format(Locale.US, "%.1f sec",
+                                match.bestLapTicks / 30f) : "No completed lap")
+                        .append("\nLast lap: ")
+                        .append(match.lastLapTicks > 0 ?
+                            String.format(Locale.US, "%.1f sec",
+                                match.lastLapTicks / 30f) : "No completed lap");
+                    break;
+                default:
+                    break;
+            }
+        }
+        result.append("\n\nAccuracy/headshots: Not yet instrumented");
+        return result.toString();
+    }
+
+    private static void allMatches(Activity activity, CareerRecords.Career career) {
+        java.util.List<CareerRecords.Match> history =
+            new java.util.ArrayList<>(career.matches);
+        java.util.Collections.reverse(history);
+        if (history.isEmpty()) return;
+        String[] labels = new String[history.size()];
+        DateFormat dates = DateFormat.getDateTimeInstance(
+            DateFormat.SHORT, DateFormat.SHORT);
+        for (int i = 0; i < history.size(); i++) {
+            CareerRecords.Match m = history.get(i);
+            labels[i] = dates.format(new Date(m.epoch * 1000L)) + "   " +
+                m.gameType() + "  " + m.map + "    " +
+                m.kills + "K / " + m.deaths + "D";
+        }
+        new AlertDialog.Builder(activity)
+            .setTitle("COMPLETE MATCH HISTORY")
+            .setItems(labels, (dialog, which) -> new AlertDialog.Builder(activity)
+                .setTitle("MATCH DETAILS")
+                .setMessage(matchDetails(history.get(which)))
+                .setPositiveButton("CLOSE", null)
+                .show())
+            .setNegativeButton("CLOSE", null)
+            .show();
+    }
+
     private static void display(Activity activity, CareerRecords.Career career,
-                                String error) {
+                                String error, Runnable onProfileChanged) {
         SharedPreferences pref = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         String name = pref.getString("name", "Spartan");
         LinearLayout panel = new LinearLayout(activity);
@@ -257,6 +379,28 @@ final class CareerProfile {
         panel.addView(text(activity,
             "Time played  " + (career.seconds / 3600) + "h " +
             (career.seconds / 60 % 60) + "m", 12, MUTED, false));
+        section(activity, panel, "OBJECTIVE AND MATCH RECORDS");
+        panel.addView(text(activity,
+            "CTF grabs  " + career.flagGrabs +
+            "     Captures  " + career.captures +
+            "     Returns  " + career.returns, 12, TEXT, false));
+        panel.addView(text(activity,
+            "Oddball held  " + (career.oddballTicks / 30) + " sec" +
+            "     Carrier kills  " + career.ballCarrierKills +
+            "     Kills carrying  " + career.killsAsCarrier, 12, TEXT, false));
+        panel.addView(text(activity,
+            "King hill time  " + (career.hillTicks / 30) + " sec" +
+            "     Race laps  " + career.raceLaps, 12, TEXT, false));
+        panel.addView(text(activity,
+            "Fastest lap  " + (career.fastestLapTicks > 0 ?
+                String.format(Locale.US, "%.1f sec",
+                    career.fastestLapTicks / 30f) : "Not recorded"), 12,
+            TEXT, false));
+        panel.addView(text(activity,
+            "Suicides  " + career.suicides +
+            "     Friendly-fire kills  " + career.teamKills, 12, TEXT, false));
+        panel.addView(text(activity, "Accuracy and headshots: Not tracked",
+            12, MUTED, false));
 
         long unlocked = 0;
         for (CareerRecords.Achievement medal : career.achievements())
@@ -288,6 +432,17 @@ final class CareerProfile {
                     "  " + match.kills + "K/" + match.deaths + "D", 11, MUTED, false));
             }
         }
+        if (!career.matches.isEmpty()) {
+            Button allHistory = new Button(activity);
+            allHistory.setText("VIEW COMPLETE MATCH HISTORY");
+            allHistory.setAllCaps(false);
+            allHistory.setTextColor(TEXT);
+            HaloTheme.font(allHistory, true);
+            allHistory.setBackgroundTintList(ColorStateList.valueOf(
+                HaloTheme.CONTROL_TOP));
+            allHistory.setOnClickListener(view -> allMatches(activity, career));
+            panel.addView(allHistory);
+        }
         if (career.invalidLines > 0 || career.duplicates > 0)
             panel.addView(text(activity, "Skipped " + career.invalidLines +
                 " invalid and " + career.duplicates + " duplicate records.",
@@ -295,16 +450,6 @@ final class CareerProfile {
         if (error != null)
             panel.addView(text(activity, "Storage: " + error,
                 12, Color.rgb(255, 184, 136), false));
-        Button gallery = new Button(activity);
-        gallery.setText("VIEW ALL 12 UNSC RANK INSIGNIAS");
-        gallery.setAllCaps(false);
-        HaloTheme.font(gallery, true);
-        gallery.setTextColor(TEXT);
-        gallery.setBackgroundTintList(ColorStateList.valueOf(HaloTheme.CONTROL_TOP));
-        gallery.setOnClickListener(view -> RankGallery.show(activity,
-            career.rankIndex()));
-        panel.addView(gallery);
-
         ScrollView scroll = new ScrollView(activity);
         scroll.setFillViewport(true);
         scroll.addView(panel);
@@ -316,11 +461,12 @@ final class CareerProfile {
             .create();
         dialog.setOnShowListener(unused -> dialog.getButton(
             AlertDialog.BUTTON_POSITIVE).setOnClickListener(v ->
-                rename(activity, dialog)));
+                rename(activity, dialog, onProfileChanged)));
         dialog.show();
     }
 
-    private static void rename(Activity activity, AlertDialog parent) {
+    private static void rename(Activity activity, AlertDialog parent,
+                               Runnable onProfileChanged) {
         SharedPreferences pref = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         EditText input = new EditText(activity);
         input.setSingleLine(true);
@@ -346,7 +492,12 @@ final class CareerProfile {
             pref.edit().putString("name", name).apply();
             rename.dismiss();
             parent.dismiss();
-            show(activity, activity.getExternalFilesDir(null));
+            // Refresh the live Profile tab now, not only on a tab switch.
+            // The name is already persisted before the callback executes.
+            if (onProfileChanged != null && !activity.isFinishing() &&
+                    !activity.isDestroyed())
+                onProfileChanged.run();
+            show(activity, activity.getExternalFilesDir(null), onProfileChanged);
         }));
         rename.show();
     }

@@ -9,6 +9,10 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import java.util.zip.DeflaterOutputStream;
 
 /** Pure JDK: stock Xbox campaign auditing and private Android-document transfer. */
@@ -110,6 +114,26 @@ public final class CampaignMapTransferTest {
             for(String file:ids)
                 check(report.contains(file+" ("),"Missing from audit: "+file);
 
+            // Admin-only library streams every verified mission, not an ISO
+            // or a raw dump of the app's inaccessible private directory.
+            ByteArrayOutputStream fullZip = new ByteArrayOutputStream();
+            CampaignAdminArchive.Report fullLibrary =
+                CampaignAdminArchive.export(root.toFile(), fullZip, null);
+            check(fullLibrary.valid==10 && fullLibrary.invalid==0 &&
+                fullLibrary.missing==0,"Complete admin campaign archive incorrect");
+            Map<String,byte[]> fullEntries = zipContents(fullZip.toByteArray());
+            check(fullEntries.size()==11,"Archive must contain 10 maps + inventory");
+            check(!fullEntries.containsKey("maps/sidewinder.map"),
+                "Sidewinder must not masquerade as a campaign mission");
+            for(String id:ids)
+                check(Arrays.equals(fullEntries.get("maps/"+id),
+                    Files.readAllBytes(maps.resolve(id))),
+                    "Admin archive changed source bytes: "+id);
+            String fullManifest = new String(fullEntries.get(
+                "CAMPAIGN-MAP-INVENTORY.txt"), StandardCharsets.UTF_8);
+            check(fullManifest.contains("SUMMARY|valid=10|missing=0|invalid=0"),
+                "Admin manifest lacks complete map audit");
+
             // Destination is only a caller-provided SAF stream.
             byte[] original=Files.readAllBytes(maps.resolve("b30.map"));
             ByteArrayOutputStream output=new ByteArrayOutputStream();
@@ -165,6 +189,24 @@ public final class CampaignMapTransferTest {
                 "Audit missed invalid/missing maps: "+report);
             check(report.contains("b40.map") && report.contains("c20.map"),
                 "Audit didn't identify broken mission IDs");
+            ByteArrayOutputStream incompleteZip = new ByteArrayOutputStream();
+            CampaignAdminArchive.Report partial =
+                CampaignAdminArchive.export(root.toFile(), incompleteZip, null);
+            check(partial.valid==8 && partial.missing==1 && partial.invalid==1,
+                "Admin library must report invalid/missing missions, not copy them");
+            Map<String,byte[]> incompleteEntries = zipContents(
+                incompleteZip.toByteArray());
+            check(incompleteEntries.size()==9,
+                "Partial archive must contain only eight verified maps + inventory");
+            check(!incompleteEntries.containsKey("maps/b40.map") &&
+                  !incompleteEntries.containsKey("maps/c20.map"),
+                "Admin library included missing or invalid campaign files");
+            String partialManifest = new String(incompleteEntries.get(
+                "CAMPAIGN-MAP-INVENTORY.txt"), StandardCharsets.UTF_8);
+            check(partialManifest.contains("MISSING|b40.map") &&
+                  partialManifest.contains("INVALID|c20.map") &&
+                  partialManifest.contains("SUMMARY|valid=8|missing=1|invalid=1"),
+                "Admin archive inventory did not identify unsafe copies");
 
             // Critical: exporting/importing maps never alters saved progress.
             Path saves=Files.createDirectories(friend.resolve("save/u"));
@@ -180,6 +222,25 @@ public final class CampaignMapTransferTest {
             deleteTree(root);
             deleteTree(friend);
         }
+    }
+
+    private static Map<String,byte[]> zipContents(byte[] archive) throws IOException {
+        Map<String,byte[]> contents=new HashMap<>();
+        try(ZipInputStream input=new ZipInputStream(
+                new ByteArrayInputStream(archive), StandardCharsets.UTF_8)) {
+            ZipEntry entry;
+            while((entry=input.getNextEntry())!=null) {
+                check(!entry.isDirectory(),"Unexpected directory inside repair ZIP");
+                check(entry.getName().equals("CAMPAIGN-MAP-INVENTORY.txt") ||
+                    entry.getName().matches("maps/[a-d][0-9]{2}\\.map"),
+                    "Unexpected archive entry: "+entry.getName());
+                byte[] data=input.readAllBytes();
+                check(contents.put(entry.getName(),data)==null,
+                    "Duplicate ZIP entry: "+entry.getName());
+                input.closeEntry();
+            }
+        }
+        return contents;
     }
 
     private static String hex(byte[] digest) {

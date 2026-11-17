@@ -107,9 +107,11 @@ void career_record_postgame(long game_type, const char *map_name)
     struct data_iterator iterator;
     struct player_datum *player;
     const char *root;
-    char path[1024], id[33], map[48], line[320];
+    char path[1024], id[33], map[48], line[480];
     FILE *ledger;
     long timestamp, total, humans, bots, caps = 0, returns = 0, hill = 0;
+    long grabs = 0, oddball_ticks = 0, carrier_kills = 0, kills_as_carrier = 0;
+    long laps = 0, best_lap_ticks = 0, last_lap_ticks = 0;
     long local_slot, won, seconds, length;
     int size;
 
@@ -141,26 +143,43 @@ void career_record_postgame(long game_type, const char *map_name)
         if (game_type == game_engine_ctf) {
             caps = career_nonnegative(player->statistics.multiplayer_statistics.ctf_statistics.flag_scores);
             returns = career_nonnegative(player->statistics.multiplayer_statistics.ctf_statistics.flag_returns);
+            grabs = career_nonnegative(player->statistics.multiplayer_statistics.ctf_statistics.flag_grabs);
         }
         if (game_type == game_engine_king)
             hill = career_nonnegative(player->statistics.multiplayer_statistics.king_statistics.time_on_hill);
+        if (game_type == game_engine_oddball) {
+            oddball_ticks = career_nonnegative(player->statistics.multiplayer_statistics.oddball_statistics.time_with_the_ball);
+            carrier_kills = career_nonnegative(player->statistics.multiplayer_statistics.oddball_statistics.ball_carrier_kills);
+            kills_as_carrier = career_nonnegative(player->statistics.multiplayer_statistics.oddball_statistics.kills_as_ball_carrier);
+        }
+        if (game_type == game_engine_race) {
+            laps = career_nonnegative(player->statistics.multiplayer_statistics.race_statistics.laps);
+            best_lap_ticks = career_nonnegative(player->statistics.multiplayer_statistics.race_statistics.best_lap_time);
+            last_lap_ticks = career_nonnegative(player->statistics.multiplayer_statistics.race_statistics.last_lap_time);
+        }
         career_map_token(map_name, map, sizeof(map));
         won = game_engine_did_player_win(iterator.datum_index) == TRUE ? 1 : 0;
         seconds = career_nonnegative(game_time_get() / 30);
         timestamp = (long)time(NULL);
         if (timestamp < 0) timestamp = 0;
 
-        /* 18 strictly ordered ASCII fields; bounded atomic append by one
-         * native game thread. No player names, network addresses or secrets. */
+        /* HC2 extends the original 18-field HC1 format with seven
+         * game-engine mode counters. Readers keep prior HC1 career XP.
+         * Do not encode shots_fired/hit: the engine does not update them. */
         size = snprintf(line, sizeof(line),
-            "HC1|%s|%ld|%ld|%s|%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld\n",
-            id, timestamp, game_type, map, total, humans, bots,
+            "HC2|%s|%ld|%ld|%s|"
+            "%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld|"
+            "%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld\n",
+            id, timestamp, game_type, map,
+            total, humans, bots,
             career_nonnegative(player->statistics.deaths),
             career_nonnegative(player->statistics.assists[0]), won, seconds,
             career_nonnegative(longest_streak[local_slot]),
             caps, returns, hill,
             career_nonnegative(player->statistics.suicides),
-            career_nonnegative(player->statistics.friendly_fire_kills));
+            career_nonnegative(player->statistics.friendly_fire_kills),
+            grabs, oddball_ticks, carrier_kills, kills_as_carrier,
+            laps, best_lap_ticks, last_lap_ticks);
         if (size <= 0 || size >= (int)sizeof(line))
             return;
         /* A power loss could leave a partial trailing line. Separate it

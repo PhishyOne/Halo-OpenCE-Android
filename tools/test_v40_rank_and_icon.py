@@ -22,7 +22,6 @@ class RankArtAndRatings(unittest.TestCase):
     def setUpClass(cls):
         cls.career = (JAVA / "CareerRecords.java").read_text()
         cls.profile = (JAVA / "CareerProfile.java").read_text()
-        cls.gallery = (JAVA / "RankGallery.java").read_text()
         cls.badges = (JAVA / "RankInsignia.java").read_text()
 
     def test_rank_naming_and_difficulty_unchanged(self):
@@ -37,16 +36,14 @@ class RankArtAndRatings(unittest.TestCase):
         self.assertIn('career_record', (ROOT /
             "port/linux/game/career_record.c").read_text())
 
-    def test_real_profile_and_gallery_share_same_artwork(self):
-        self.assertIn('RankGallery.show(activity, result.rankIndex())', self.profile)
-        self.assertIn('RankGallery.show(activity,', self.profile)
-        self.assertIn('new RankInsignia(activity, rank)', self.gallery)
-        self.assertIn('CareerRecords.rankName(rank)', self.gallery)
-        self.assertIn('CareerRecords.rankThreshold(rank)', self.gallery)
+    def test_service_rank_insignias_are_earned_not_previewed(self):
+        self.assertIn('new RankInsignia(activity, rankIndex)', self.profile)
+        self.assertNotIn('RankGallery.show(', self.profile)
+        self.assertNotIn('VIEW ALL RANKS', self.profile)
+        self.assertNotIn('VIEW ALL 12 UNSC RANK INSIGNIAS', self.profile)
         self.assertIn('CareerRecords.rankName(rank)', self.badges)
         self.assertIn('case 10:', self.badges)
         self.assertIn('default: // Legend', self.badges)
-        self.assertIn('CURRENT RANK', self.gallery)
         self.assertIn('canvas.scale(scale, scale)', self.badges)
 
     def test_skill_rating_is_unrated_until_verified_host_results(self):

@@ -71,6 +71,7 @@ public class LauncherActivity extends Activity {
     private static final int PICK_CAMPAIGN_RESTORE = 9;
     private static final int PICK_STOCK_MAP_IMPORT = 10;
     private static final int PICK_STOCK_MAP_EXPORT = 11;
+    private static final int PICK_ADMIN_CAMPAIGN_ARCHIVE = 12;
     private static final String STATE_STOCK_MAP_TRANSFER = "stock-map-transfer";
     // Halo-style HUD colours. Native Android widgets remain accessible,
     // including the system file picker and LAN diagnostics.
@@ -839,6 +840,38 @@ public class LauncherActivity extends Activity {
             auditStockCampaignMaps());
         repairPanel.addView(stockCampaignAuditButton);
 
+        Button exportAdminMaps = new Button(this);
+        exportAdminMaps.setText("EXPORT ADMIN REPAIR LIBRARY");
+        hudButton(exportAdminMaps, false);
+        exportAdminMaps.setOnClickListener(view -> {
+            if (repairBusy) return;
+            if (gameProcessStatus() != 0) {
+                repairStatus.setText("Close Halo before exporting campaign maps.");
+                return;
+            }
+            new AlertDialog.Builder(this)
+                .setTitle("Create your campaign repair library?")
+                .setMessage("Only your validated original Xbox campaign maps "
+                    + "will be included. Missing or invalid maps are listed "
+                    + "in the inventory, never exported as good copies. "
+                    + "The ZIP can require 1–2 GB of storage. Choose a "
+                    + "local folder with enough free space.")
+                .setNegativeButton("CANCEL", null)
+                .setPositiveButton("CHOOSE LOCATION", (dialog, which) -> {
+                    Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                    save.addCategory(Intent.CATEGORY_OPENABLE);
+                    save.setType("application/zip");
+                    save.putExtra(Intent.EXTRA_TITLE,
+                        "Halo-Campaign-Repair-Library-" +
+                        new java.text.SimpleDateFormat("yyyyMMdd",
+                            java.util.Locale.US).format(new java.util.Date()) +
+                        ".zip");
+                    startActivityForResult(save, PICK_ADMIN_CAMPAIGN_ARCHIVE);
+                })
+                .show();
+        });
+        repairPanel.addView(exportAdminMaps);
+
         repairPanel.addView(lanText(
             "Only verified Xbox map data is accepted; your original is backed up.", 12));
         LinearLayout mapTransferActions = new LinearLayout(this);
@@ -1570,6 +1603,34 @@ public class LauncherActivity extends Activity {
                 })));
     }
 
+    /** A user-selected SAF destination receives verified, streaming map
+     * copies without duplicating gigabytes inside the app's runtime disk. */
+    private void exportAdminCampaignLibrary(Uri destination) {
+        runMapRepair("Preparing your verified campaign-map archive...", () -> {
+            try (OutputStream output = getContentResolver().openOutputStream(
+                    destination, "w")) {
+                if (output == null)
+                    throw new java.io.IOException(
+                        "Android couldn't create the selected archive.");
+                CampaignAdminArchive.Report report = CampaignAdminArchive.export(
+                    dataRoot, output, (name, index, count) ->
+                        handler.post(() -> {
+                            if (repairStatus != null)
+                                repairStatus.setText("Campaign archive " + index +
+                                    "/" + count + ": " + name);
+                        }));
+                return "Admin archive written: " + report.valid +
+                    "/10 verified maps, " + report.invalid + " invalid, " +
+                    report.missing + " missing; " +
+                    (report.bytes / 1048576) + " MiB copied. Review " +
+                    "CAMPAIGN-MAP-INVENTORY.txt inside the ZIP. " +
+                    "A full library requires 10/10 valid Xbox maps. " +
+                    "Extract the ZIP and share only the needed .map file; " +
+                    "the recipient uses MAP REPAIR > IMPORT MAP.";
+            }
+        });
+    }
+
     private void importSelectedStockCampaignMap(Uri document, String filename) {
         runMapRepair("Validating " + filename + " and preserving its old copy...", () -> {
             try (InputStream input = getContentResolver().openInputStream(document)) {
@@ -1885,6 +1946,12 @@ public class LauncherActivity extends Activity {
                 else
                     exportSelectedStockCampaignMap(data.getData(), filename);
             }
+            return;
+        }
+        if (requestCode == PICK_ADMIN_CAMPAIGN_ARCHIVE) {
+            if (resultCode == RESULT_OK && data != null &&
+                data.getData() != null)
+                exportAdminCampaignLibrary(data.getData());
             return;
         }
         if (requestCode == PICK_CUSTOM_MAPS) {

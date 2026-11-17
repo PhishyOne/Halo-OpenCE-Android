@@ -51,6 +51,29 @@ public final class CareerRecordsTest {
         fails(valid.replace("|12|10|2|", "|20001|10|2|").trim(), "huge score");
         fails(valid.replace("HC1|", "HC0|").trim(), "wrong protocol");
         fails(valid.replace(a, a + "A").trim(), "invalid ID");
+        String enriched = "HC2|" + b +
+            "|1794800000|3|icefields|4|2|2|1|1|0|600|3|0|0|0|0|0" +
+            "|0|150|2|1|0|0|0";
+        CareerRecords.Match mode = CareerRecords.parseLine(enriched);
+        check(mode.oddballTicks == 150 && mode.ballCarrierKills == 2 &&
+            mode.killsAsCarrier == 1, "HC2 Oddball match stats");
+        check(mode.raceLaps == 0 && mode.flagGrabs == 0, "HC2 unused fields zero");
+        check(match.oddballTicks == 0 && match.flagGrabs == 0,
+            "legacy HC1 record safely defaults new fields to zero");
+        fails(enriched + "|9999", "extra HC2 field rejected");
+        fails(enriched.replace("|150|2|1|", "|-150|2|1|"),
+            "negative HC2 mode count rejected");
+        CareerRecords.Career rankTests = new CareerRecords.Career();
+        check(rankTests.topAchievements().isEmpty(),
+            "locked achievements must not appear as earned");
+        rankTests.wins = 1000;
+        rankTests.humanKills = 10000;
+        rankTests.captures = 1000;
+        rankTests.kills = 10000;
+        check(rankTests.topAchievements().size() == 3 &&
+            rankTests.topAchievements().stream().allMatch(
+                medal -> medal.rarity.equals("LEGENDARY")),
+            "top three medals must favor actually earned legendary achievements");
 
         Path dir = Files.createTempDirectory("halo-v37-career-");
         try {
@@ -69,6 +92,8 @@ public final class CareerRecordsTest {
             check(career.humanKills == 10 && career.botKills == 2,
                 "classified opponents retained");
             check(career.unknownOpponentKills == 8, "unclassified opponent handling");
+            check(career.oddballTicks == 0 && career.raceLaps == 0,
+                "old HC1 journal reads without manufactured new stats");
             check(career.wins == 1 && career.assists == 4, "win / assist counters");
             check(career.bestStreak == 10, "best career streak");
             check(career.xp == 269 + 111,
@@ -86,6 +111,15 @@ public final class CareerRecordsTest {
             check(career.recent().size() == 2 &&
                 career.recent().get(0).map.equals("sidewinder"),
                 "recent match order");
+            Files.writeString(ledger, valid + enriched + "\n",
+                StandardCharsets.UTF_8);
+            CareerRecords.Career mixed = CareerRecords.load(dir.toFile());
+            check(mixed.games() == 2 && mixed.oddballTicks == 150 &&
+                mixed.ballCarrierKills == 2 && mixed.killsAsCarrier == 1,
+                "Mixed HC1/HC2 durable journal aggregates correctly");
+            check(mixed.kills == 16 && mixed.humanKills == 12,
+                "HC2 added without modifying old career counters");
+
             // Wrongly classified records are skipped, not partly counted.
             Files.writeString(ledger, valid +
                 valid.replace("|12|10|2|", "|12|11|2|") +

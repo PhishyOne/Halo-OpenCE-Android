@@ -32,17 +32,26 @@ class NativeCareerTest(unittest.TestCase):
             self.assertEqual(ran.returncode, 0, ran.stdout + ran.stderr)
             self.assertIn("PASS career recorder", ran.stdout)
             lines = (work / "career-matches-v1.log").read_text().splitlines()
-            self.assertEqual(len(lines), 2)
-            a, b = (record.split("|") for record in lines)
-            self.assertEqual(len(a), 18)
-            self.assertEqual(len(b), 18)
-            self.assertEqual(a[0], "HC1")
-            self.assertEqual(len(a[1]), 32)
-            self.assertNotEqual(a[1], b[1])
-            self.assertEqual(a[3:10], ["2", "bloodgulch", "3", "2", "1", "2", "1"])
-            self.assertEqual(b[3:10], ["1", "sidewinder", "2", "-1", "-1", "2", "1"])
+            self.assertEqual(len(lines), 4)
+            a, b, oddball, race = (record.split("|") for record in lines)
+            for entry in (a, b, oddball, race):
+                self.assertEqual(len(entry), 25)
+                self.assertEqual(entry[0], "HC2")
+                self.assertEqual(len(entry[1]), 32)
+            self.assertEqual(len({a[1], b[1], oddball[1], race[1]}), 4)
+            self.assertEqual(a[3:10],
+                ["2", "bloodgulch", "3", "2", "1", "2", "1"])
+            self.assertEqual(b[3:10],
+                ["1", "sidewinder", "2", "-1", "-1", "2", "1"])
             self.assertEqual(a[12], "3")
             self.assertEqual(b[12], "1")
+            self.assertEqual(b[13:15], ["2", "1"]) # CTF captures, returns
+            self.assertEqual(b[18], "3") # flag grabs
+            self.assertEqual(oddball[3:5], ["3", "icefields"])
+            self.assertEqual(oddball[19:22], ["75", "2", "3"])
+            self.assertEqual(race[3:5], ["5", "raceway"])
+            self.assertEqual(race[22:25], ["2", "300", "420"])
+
 
 
 if __name__ == "__main__":
