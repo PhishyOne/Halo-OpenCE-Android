@@ -221,6 +221,7 @@ int career_results_handle(long machine_index, const void *data, unsigned short s
     struct distributed_career_start_message start;
     struct career_player_events *events;
     struct player_datum *player;
+    struct game_variant *variant;
     if (size < sizeof(header)) return 0;
     memcpy(&header, data, sizeof(header));
     if (header.type != _distributed_message_career_start &&
@@ -237,8 +238,9 @@ int career_results_handle(long machine_index, const void *data, unsigned short s
     }
     if (size != sizeof(message) || !career_generation) return 1;
     memcpy(&message, data, sizeof(message));
+    variant = game_engine_get_variant();
     if (message.seed != career_seed || message.generation != career_generation ||
-        message.result.game_type != game_engine_get_type() ||
+        !variant || message.result.game_type != variant->game_engine_index ||
         !career_result_valid(&message.result)) return 1;
     player = player_try_and_get(message.result.player_index);
     if (!player || player->local_player_index < 0 ||

@@ -45,7 +45,12 @@ static long game_connection(void) { return connection; }
 static int network_game_distributed_client(void) { return connection == 1; }
 static int game_in_progress(void) { return playing; }
 static long game_time_get(void) { return tick; }
-static long game_engine_get_type(void) { return mode; }
+struct game_variant { long game_engine_index; };
+static struct game_variant *game_engine_get_variant(void) {
+    static struct game_variant variant;
+    variant.game_engine_index = mode;
+    return &variant;
+}
 static long network_game_get_random_seed(void) { return seed; }
 static int bots_machine_is_bot(long m) { return m == 2; }
 static struct player_datum *player_try_and_get(long i) {

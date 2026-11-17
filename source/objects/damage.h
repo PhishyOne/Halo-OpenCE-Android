@@ -82,6 +82,8 @@ struct damage_network_state
 void damage_initialize(void);
 void damage_set_network_state(long object_index, struct damage_network_state const *state);
 void damage_get_network_state(long object_index, struct damage_network_state *state);
+/* port: shared declaration keeps the WebAssembly caller's return type exact. */
+void damage_kill_object_for_player(long object_index, long player_index);
 void damage_dispose(void);
 void damage_initialize_for_new_map(void);
 void damage_dispose_from_old_map(void);
