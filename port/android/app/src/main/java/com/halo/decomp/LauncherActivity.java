@@ -480,6 +480,16 @@ public class LauncherActivity extends Activity {
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         subtitleLayout.leftMargin = dp(14);
         masthead.addView(subtitle, subtitleLayout);
+        View flexibleSpace = new View(this);
+        masthead.addView(flexibleSpace, new LinearLayout.LayoutParams(
+            0, dp(1), 1f));
+        Button serviceRecord = new Button(this);
+        serviceRecord.setText("SERVICE RECORD");
+        hudButton(serviceRecord, false);
+        serviceRecord.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        serviceRecord.setOnClickListener(view -> CareerProfile.show(this, dataRoot));
+        masthead.addView(serviceRecord, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, dp(37)));
         root.addView(masthead);
         View accent = new View(this);
         accent.setBackgroundColor(HUD_ACCENT);
@@ -518,6 +528,12 @@ public class LauncherActivity extends Activity {
         toolsPage.setOrientation(LinearLayout.VERTICAL);
         toolsPage.setVisibility(View.GONE);
         content.addView(toolsPage);
+        Button toolsServiceRecord = new Button(this);
+        toolsServiceRecord.setText("MY SPARTAN PROFILE & ACHIEVEMENTS");
+        hudButton(toolsServiceRecord, false);
+        toolsServiceRecord.setOnClickListener(view ->
+            CareerProfile.show(this, dataRoot));
+        toolsPage.addView(toolsServiceRecord);
 
         // System Link panel. Host, guest and advanced controls are retained.
         LinearLayout lanPanel = hudPanel();

@@ -538,6 +538,9 @@ symbols in this file:
 
 #include "cseries.h"
 #include "game_modes.h" /* port: port/linux/game/game_modes.c */
+#ifdef HALO_ANDROID
+#include "career_record.h"
+#endif
 #include "infection.h" /* port: port/linux/game/infection.c */
 #include "cseries_windows.h"
 #include "errors.h"
@@ -2738,6 +2741,12 @@ void game_engine_post_rasterize_post_game(
 
 	if (!game_engine)
 		return;
+#ifdef HALO_ANDROID
+	/* Postgame is displayed after play has stopped. Save only the local
+	 * player's result, once per match, without touching the scoreboard. */
+	career_record_postgame(global_stage.variant.game_engine_index,
+		global_stage.map_name);
+#endif
 
 	tab_stops[0] = 50;
 	tab_stops[1] = 125;

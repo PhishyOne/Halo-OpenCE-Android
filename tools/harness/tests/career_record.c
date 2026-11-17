@@ -1,0 +1,87 @@
+/* Fake Halo game world: compile the production career-recorder functions. */
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <time.h>
+
+#define TRUE 1
+#define MAXIMUM_LOCAL_PLAYERS 4
+#define game_engine_ctf 1
+#define game_engine_slayer 2
+#define game_engine_king 4
+#define game_engine_race 5
+struct ctf_statistics { int flag_scores, flag_returns; };
+struct king_statistics { int time_on_hill; };
+struct game_statistics {
+    int kills[4], assists[4], deaths, suicides, friendly_fire_kills;
+    union {
+        struct ctf_statistics ctf_statistics;
+        struct king_statistics king_statistics;
+    } multiplayer_statistics;
+};
+struct player_datum {
+    int local_player_index, quit_out_of_game;
+    struct game_statistics statistics;
+};
+static struct player_datum players[2];
+static void *player_data;
+struct data_iterator { int position; long datum_index; };
+static void data_iterator_new(struct data_iterator *it, void *unused) {
+    (void)unused; it->position=0; it->datum_index=0;
+}
+static void *data_iterator_next(struct data_iterator *it) {
+    if (it->position >= 2) return NULL;
+    it->datum_index=it->position;
+    return &players[it->position++];
+}
+static long game_time_get(void) { return 600; }
+static long game_engine_did_player_win(long index) { return index == 0; }
+static char const *test_root;
+static char const *platform_data_root(void) { return test_root; }
+static void platform_log(char const *msg) { (void)msg; }
+
+#include "production.inc"
+
+static int count_records(void) {
+    char path[512], line[350];
+    FILE *in;
+    int n=0;
+    snprintf(path,sizeof(path),"%s/career-matches-v1.log",test_root);
+    in=fopen(path,"rb");
+    if(!in) return 0;
+    while(fgets(line,sizeof(line),in)) n++;
+    fclose(in);
+    return n;
+}
+int main(int argc, char **argv) {
+    assert(argc == 2);
+    test_root = argv[1];
+    memset(players,0,sizeof(players));
+    players[0].local_player_index=0;
+    players[1].local_player_index=-1; /* host's bot / remote guest */
+    players[0].statistics.kills[0]=3;
+    players[0].statistics.assists[0]=1;
+    players[0].statistics.deaths=2;
+    career_record_start();
+    career_record_kill(0,1,1);
+    career_record_kill(0,0,2);
+    career_record_kill(0,0,3);
+    career_record_postgame(game_engine_slayer,"levels\\test\\bloodgulch");
+    assert(count_records()==1);
+    career_record_postgame(game_engine_slayer,"levels\\test\\bloodgulch");
+    assert(count_records()==1); /* exactly one per real postgame */
+    career_record_start(); /* next match */
+    players[0].statistics.kills[0]=2;
+    career_record_kill(0,1,1);
+    career_record_postgame(game_engine_ctf,"levels/test/sidewinder");
+    assert(count_records()==2);
+    career_record_start();
+    players[0].quit_out_of_game=1;
+    career_record_postgame(game_engine_slayer,"excluded");
+    assert(count_records()==2);
+    puts("PASS career recorder: two completed matches, no duplicate/quit");
+    return 0;
+}

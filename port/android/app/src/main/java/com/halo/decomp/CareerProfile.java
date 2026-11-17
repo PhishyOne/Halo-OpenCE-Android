@@ -1,0 +1,205 @@
+package com.halo.decomp;
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.text.InputFilter;
+import android.text.InputType;
+import android.view.View;
+import android.view.Gravity;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
+
+import java.io.File;
+import java.io.IOException;
+import java.text.DateFormat;
+import java.util.Date;
+import java.util.Locale;
+
+/** Local Spartan service record, available from launcher while game is closed.
+ * No login, network fetch, tracking SDK or permissions. */
+final class CareerProfile {
+    private static final int TEXT = Color.rgb(225, 237, 227);
+    private static final int MUTED = Color.rgb(169, 193, 191);
+    private static final int GOLD = Color.rgb(190, 216, 164);
+    private static final int PANEL = Color.rgb(19, 35, 45);
+    private static final String PREFS = "career_profile_v1";
+
+    private CareerProfile() { }
+
+    static void show(Activity activity, File appDirectory) {
+        new Thread(() -> {
+            CareerRecords.Career career;
+            String problem = null;
+            try {
+                career = CareerRecords.load(appDirectory);
+            } catch (IOException failed) {
+                career = new CareerRecords.Career();
+                problem = failed.getMessage();
+            }
+            CareerRecords.Career loaded = career;
+            String error = problem;
+            activity.runOnUiThread(() -> {
+                if (!activity.isFinishing() && !activity.isDestroyed())
+                    display(activity, loaded, error);
+            });
+        }, "Halo-career-profile-read").start();
+    }
+
+    private static int dp(Activity activity, int amount) {
+        return (int)(amount * activity.getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private static TextView text(Activity activity, String content, int size,
+                                 int color, boolean bold) {
+        TextView view = new TextView(activity);
+        view.setText(content);
+        view.setTextColor(color);
+        view.setTextSize(size);
+        view.setPadding(0, dp(activity, 3), 0, dp(activity, 3));
+        if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        return view;
+    }
+
+    private static void section(Activity activity, LinearLayout layout, String title) {
+        TextView label = text(activity, title, 13, GOLD, true);
+        label.setPadding(0, dp(activity, 12), 0, dp(activity, 4));
+        layout.addView(label);
+    }
+
+    private static void display(Activity activity, CareerRecords.Career career,
+                                String error) {
+        SharedPreferences pref = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String name = pref.getString("name", "Spartan");
+        LinearLayout panel = new LinearLayout(activity);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(activity, 14), dp(activity, 10),
+            dp(activity, 14), dp(activity, 12));
+        panel.setBackgroundColor(PANEL);
+
+        TextView nameView = text(activity, name + "  •  " + career.rank(),
+            20, TEXT, true);
+        panel.addView(nameView);
+        panel.addView(text(activity,
+            "RANK " + career.rankNumber() + "     " +
+            String.format(Locale.US, "%,d", career.xp) + " XP",
+            12, GOLD, true));
+        if (career.rankNext() > career.rankCurrent()) {
+            int percent = (int)(100 * (career.xp - career.rankCurrent()) /
+                (career.rankNext() - career.rankCurrent()));
+            panel.addView(text(activity,
+                "Next rank: " + (career.rankNext() - career.xp) +
+                " XP    (" + percent + "% complete)", 12, MUTED, false));
+        } else {
+            panel.addView(text(activity, "Maximum career rank reached",
+                12, GOLD, true));
+        }
+
+        section(activity, panel, "CAREER STATISTICS");
+        panel.addView(text(activity,
+            "Matches  " + career.games() + "     Wins  " + career.wins +
+            "     K/D  " + career.kd(), 14, TEXT, true));
+        panel.addView(text(activity,
+            "Kills  " + career.kills + "     Deaths  " + career.deaths +
+            "     Assists  " + career.assists, 13, TEXT, false));
+        panel.addView(text(activity,
+            "Human kills  " + career.humanKills +
+            "     Bot kills  " + career.botKills, 13, TEXT, false));
+        if (career.unknownOpponentKills > 0)
+            panel.addView(text(activity, career.unknownOpponentKills +
+                " kills not classified by opponent type", 12, MUTED, false));
+        panel.addView(text(activity,
+            "Best streak  " + career.bestStreak +
+            "     Flag captures  " + career.captures +
+            "     Flag returns  " + career.returns, 13, TEXT, false));
+        panel.addView(text(activity,
+            "Time played  " + (career.seconds / 3600) + "h " +
+            (career.seconds / 60 % 60) + "m", 12, MUTED, false));
+
+        section(activity, panel, "ACHIEVEMENTS");
+        for (CareerRecords.Achievement medal : career.achievements()) {
+            panel.addView(text(activity,
+                (medal.earned ? "★  " : "○  ") + medal.title +
+                "  —  " + medal.description, 12,
+                medal.earned ? GOLD : MUTED, medal.earned));
+        }
+
+        section(activity, panel, "RECENT MATCHES");
+        if (career.matches.isEmpty()) {
+            panel.addView(text(activity,
+                "No completed multiplayer matches recorded yet. Finish a match " +
+                "in v37, then reopen Service Record.", 12, MUTED, false));
+        } else {
+            DateFormat dates = DateFormat.getDateTimeInstance(
+                DateFormat.SHORT, DateFormat.SHORT);
+            for (CareerRecords.Match match : career.recent()) {
+                String date = match.epoch > 0 ?
+                    dates.format(new Date(match.epoch * 1000L)) : "Date unavailable";
+                panel.addView(text(activity, date + "  " + match.gameType() +
+                    "  " + match.map + "  " + (match.wins == 1 ? "WIN" : "MATCH") +
+                    "  " + match.kills + "K/" + match.deaths + "D", 11, MUTED, false));
+            }
+        }
+        if (career.invalidLines > 0 || career.duplicates > 0)
+            panel.addView(text(activity, "Skipped " + career.invalidLines +
+                " invalid and " + career.duplicates + " duplicate records.",
+                11, MUTED, false));
+        if (error != null)
+            panel.addView(text(activity, "Storage: " + error,
+                12, Color.rgb(255, 184, 136), false));
+        panel.addView(text(activity,
+            "Local career progression only. Competitive skill ratings and " +
+            "cross-phone leaderboards are not active yet.", 11, MUTED, false));
+
+        ScrollView scroll = new ScrollView(activity);
+        scroll.setFillViewport(true);
+        scroll.addView(panel);
+        AlertDialog dialog = new AlertDialog.Builder(activity)
+            .setTitle("SPARTAN SERVICE RECORD")
+            .setView(scroll)
+            .setNegativeButton("CLOSE", null)
+            .setPositiveButton("RENAME", null)
+            .create();
+        dialog.setOnShowListener(unused -> dialog.getButton(
+            AlertDialog.BUTTON_POSITIVE).setOnClickListener(v ->
+                rename(activity, dialog)));
+        dialog.show();
+    }
+
+    private static void rename(Activity activity, AlertDialog parent) {
+        SharedPreferences pref = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        EditText input = new EditText(activity);
+        input.setSingleLine(true);
+        input.setInputType(InputType.TYPE_CLASS_TEXT |
+            InputType.TYPE_TEXT_FLAG_CAP_WORDS);
+        input.setFilters(new InputFilter[] { new InputFilter.LengthFilter(16) });
+        input.setText(pref.getString("name", "Spartan"));
+        input.setSelectAllOnFocus(true);
+        AlertDialog rename = new AlertDialog.Builder(activity)
+            .setTitle("Choose your Spartan name")
+            .setMessage("2–16 characters: letters, digits, spaces, hyphens or underscores.")
+            .setView(input)
+            .setNegativeButton("CANCEL", null)
+            .setPositiveButton("SAVE", null)
+            .create();
+        rename.setOnShowListener(unused -> rename.getButton(
+            AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String name = input.getText().toString().trim();
+            if (!name.matches("[A-Za-z0-9 _-]{2,16}")) {
+                input.setError("Use 2–16 safe characters.");
+                return;
+            }
+            pref.edit().putString("name", name).apply();
+            rename.dismiss();
+            parent.dismiss();
+            show(activity, activity.getExternalFilesDir(null));
+        }));
+        rename.show();
+    }
+}
