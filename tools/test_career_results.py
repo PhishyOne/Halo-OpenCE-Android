@@ -47,7 +47,7 @@ class CareerResultsTest(unittest.TestCase):
     def test_runtime(self):
         with tempfile.TemporaryDirectory() as temp:
             executable = self.build(temp)
-            for case in ('ordering', 'replay_first', 'missing', 'capture', 'frozen', 'validation', 'death'):
+            for case in ('ordering', 'replay_first', 'missing', 'capture', 'frozen', 'validation', 'death', 'checkpoint', 'checkpoint_final'):
                 with self.subTest(case=case):
                     data = Path(temp) / case; data.mkdir()
                     ran = subprocess.run([str(executable), case, str(data)],
@@ -79,7 +79,7 @@ class CareerResultsTest(unittest.TestCase):
         mutations = [
             ('validation', ('!reliable ||', '(reliable && 0) ||')),
             ('validation', ('message.generation != career_generation ||', '0 ||')),
-            ('validation', ('if (!events || events->result_ready) return 1;', 'if (!events) return 1;')),
+            ('validation', ('!events->result.incomplete || message.result.end_tick < events->result.end_tick', 'message.result.end_tick < events->result.end_tick')),
             ('capture', ('if (events) halo_highlight_capture(&events->highlights, game_time_get());',
                          'if (events) halo_highlight_capture(&events->highlights, game_time_get() + 1);')),
         ]

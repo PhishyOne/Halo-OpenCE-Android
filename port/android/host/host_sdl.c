@@ -113,7 +113,9 @@ static void *handle_release(uint32_t handle, int type, void **binding)
 
 int host_sdl_init(uint32_t flags)
 {
-	return SDL_Init((SDL_InitFlags)flags);
+	/* Keep transport/simulation alive when the surface is gone. */
+    SDL_SetHint(SDL_HINT_ANDROID_BLOCK_ON_PAUSE, "0");
+    return SDL_Init((SDL_InitFlags)flags);
 }
 
 int host_sdl_set_hint(const char *name, const char *value)
@@ -196,7 +198,11 @@ int host_sdl_gl_swap_window(uint32_t window)
 {
 	SDL_Window *object = handle_get(window, _handle_window);
 
-	return object ? SDL_GL_SwapWindow(object) : 0;
+	/* Drain lifecycle events before entering a swap, which would otherwise
+     * wait for the Activity to resume. SDL restores the context on resume. */
+    SDL_PumpEvents();
+    if (!SDL_GL_GetCurrentContext()) return 1;
+    return object ? SDL_GL_SwapWindow(object) : 0;
 }
 
 /* ---------- events */

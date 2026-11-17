@@ -285,7 +285,7 @@ final class CareerProfile {
             .append("\nDate: ").append(DateFormat.getDateTimeInstance(
                 DateFormat.SHORT, DateFormat.SHORT)
                 .format(new Date(match.epoch * 1000L)))
-            .append("\nResult: ").append(match.wins == 1 ? "WIN" : "NOT WON")
+            .append("\nResult: ").append(match.outcome())
             .append("\nKills: ").append(match.kills)
             .append("\nDeaths: ").append(match.deaths)
             .append("\nAssists: ").append(match.assists)
@@ -454,7 +454,7 @@ final class CareerProfile {
 
         section(activity, panel, "CAREER STATISTICS");
         panel.addView(text(activity,
-            "Matches  " + career.games() + "     Wins  " + career.wins +
+            "Matches  " + career.games() + "     DNF  " + career.unfinished + "     Wins  " + career.wins +
             "     K/D  " + career.kd(), 14, TEXT, true));
         panel.addView(text(activity,
             "Kills  " + career.kills + "     Deaths  " + career.deaths +
@@ -521,7 +521,7 @@ final class CareerProfile {
                 String date = match.epoch > 0 ?
                     dates.format(new Date(match.epoch * 1000L)) : "Date unavailable";
                 panel.addView(text(activity, date + "  " + match.gameType() +
-                    "  " + match.map + "  " + (match.wins == 1 ? "WIN" : "MATCH") +
+                    "  " + match.map + "  " + match.outcome() +
                     "  " + match.kills + "K/" + match.deaths + "D", 11, MUTED, false));
             }
         }

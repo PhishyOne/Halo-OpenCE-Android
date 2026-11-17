@@ -23,6 +23,10 @@ and the debug keyboard that the game's console reads.
 #include "../game/text_filter.h"
 
 #include <SDL3/SDL.h>
+
+static int android_background;
+int halo_background_mode(void) { return android_background; }
+void halo_background_pace(void) { SDL_Delay(30); }
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -2484,6 +2488,16 @@ void platform_pump_events(void)
 #endif
 			input_state.mouse_wheel += event.wheel.y;
 			break;
+#ifdef HALO_ANDROID
+        case SDL_EVENT_WILL_ENTER_BACKGROUND:
+        case SDL_EVENT_DID_ENTER_BACKGROUND:
+            android_background = 1;
+            touch_input_cancel();
+            break;
+        case SDL_EVENT_DID_ENTER_FOREGROUND:
+            android_background = 0;
+            break;
+#endif
 		case SDL_EVENT_WINDOW_FOCUS_LOST:
 			memset(input_state.keys, 0, sizeof(input_state.keys));
 			memset(input_state.mouse_buttons, 0, sizeof(input_state.mouse_buttons));

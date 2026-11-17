@@ -22,9 +22,9 @@ struct distributed_career_start_message {
     uint32_t seed, generation;
 };
 #if UINTPTR_MAX == UINT32_MAX
-typedef char career_result_wire_size[sizeof(struct career_result) == 128 ? 1 : -1];
+typedef char career_result_wire_size[sizeof(struct career_result) == 132 ? 1 : -1];
 typedef char career_result_message_wire_size[
-    sizeof(struct distributed_career_result_message) == 144 ? 1 : -1];
+    sizeof(struct distributed_career_result_message) == 148 ? 1 : -1];
 typedef char career_start_message_wire_size[
     sizeof(struct distributed_career_start_message) == 16 ? 1 : -1];
 #endif
@@ -39,11 +39,13 @@ struct career_player_events {
 static struct career_player_events career_players[HALO_PORT_MAXIMUM_NETWORK_PLAYERS];
 static uint32_t career_generation, career_seed, career_next_generation;
 static int career_finished;
+static long career_checkpoint_tick;
 
 void career_results_start(void)
 {
     memset(career_players, 0, sizeof(career_players));
     career_finished = 0;
+    career_checkpoint_tick = -30;
     career_seed = (game_connection() == _game_connection_network_server ||
         network_game_distributed_client()) ? (uint32_t)network_game_get_random_seed() : 0;
     if (++career_next_generation == 0) ++career_next_generation;
@@ -98,8 +100,10 @@ static int career_result_valid(const struct career_result *r)
     const struct game_statistics *s = &r->statistics;
     int i;
     if (r->game_type < game_engine_ctf || r->game_type > game_engine_race ||
-        r->end_tick < 30 || r->end_tick > 86400L * 30 ||
+        r->end_tick < 1 || r->end_tick > 86400L * 30 ||
         r->won < 0 || r->won > 1 ||
+        r->incomplete < 0 || r->incomplete > 1 ||
+        (r->incomplete && r->won) ||
         s->kills[0] < 0 || s->kills[0] > 10000 ||
         s->deaths < 0 || s->deaths > 10000 ||
         s->assists[0] < 0 || s->assists[0] > 10000 ||
@@ -161,13 +165,13 @@ void career_results_send_start(long machine_index)
         _distributed_message_career_start, 1, sizeof(message));
 }
 
-void career_results_finish(long game_type)
+static void career_results_collect(long game_type, int incomplete)
 {
     struct data_iterator iterator;
     struct player_datum *player;
     if (network_game_distributed_client() || career_finished ||
         game_type < game_engine_ctf || game_type > game_engine_race) return;
-    career_finished = 1;
+    career_finished = !incomplete;
     data_iterator_new(&iterator, player_data);
     while ((player = data_iterator_next(&iterator)) != NULL) {
         struct career_player_events *events = career_player(iterator.datum_index);
@@ -178,13 +182,14 @@ void career_results_finish(long game_type)
         r->player_index = iterator.datum_index;
         r->game_type = game_type;
         r->end_tick = game_time_get();
-        r->won = game_engine_did_player_win(iterator.datum_index) == TRUE;
+        r->incomplete = incomplete;
+        r->won = !incomplete && game_engine_did_player_win(iterator.datum_index) == TRUE;
         r->statistics = player->statistics;
         r->humans = events->humans;
         r->bots = events->bots;
         r->best_streak = events->best_streak;
         if (r->humans + r->bots != r->statistics.kills[0]) r->humans = r->bots = -1;
-        r->moment_count = halo_highlight_select(&events->highlights,
+        r->moment_count = incomplete ? 0 : halo_highlight_select(&events->highlights,
             r->end_tick, r->won, r->moments);
         if (!career_result_valid(r)) continue;
         events->result_ready = 1;
@@ -203,6 +208,20 @@ void career_results_finish(long game_type)
                 _distributed_message_career_result, 1, sizeof(message));
         }
     }
+}
+
+void career_results_finish(long game_type)
+{
+    career_results_collect(game_type, 0);
+}
+
+void career_results_update(long game_type)
+{
+    long tick = game_time_get();
+    if (!game_in_progress() || tick < 1 || tick - career_checkpoint_tick < 30)
+        return;
+    career_checkpoint_tick = tick;
+    career_results_collect(game_type, 1);
 }
 
 const struct career_result *career_results_get(long player_index, long game_type)
@@ -246,7 +265,9 @@ int career_results_handle(long machine_index, const void *data, unsigned short s
     if (!player || player->local_player_index < 0 ||
         player->local_player_index >= MAXIMUM_LOCAL_PLAYERS) return 1;
     events = career_player(message.result.player_index);
-    if (!events || events->result_ready) return 1;
+    if (!events || (events->result_ready &&
+        (!events->result.incomplete || message.result.end_tick < events->result.end_tick)))
+        return 1;
     events->result = message.result;
     events->result_ready = 1;
     return 1;

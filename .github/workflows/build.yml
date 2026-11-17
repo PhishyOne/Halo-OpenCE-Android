@@ -216,7 +216,7 @@ jobs:
           python3 tools/test_lan_discovery_launcher.py -v
           python3 tools/test_career_records_v37.py -v
           python3 tools/test_career_native_v37.py -v
-          python3 -m unittest tools.test_career_results -v
+          python3 -m unittest tools.test_career_results tools.test_background_session -v
           python3 tools/test_v38_launcher_phantom.py -v
           python3 tools/test_v39_visual_design.py -v
           python3 tools/test_v40_rank_and_icon.py -v
@@ -249,6 +249,8 @@ jobs:
             port/android/app/src/main/java/com/halo/decomp/CareerRecords.java \
             tools/lan/CareerRecordsTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.CareerRecordsTest
+          javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" tools/lan/CareerExitTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.CareerExitTest
           javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" \
             port/android/app/src/main/java/com/halo/decomp/MatchHighlights.java \
             tools/lan/MatchHighlightsTest.java

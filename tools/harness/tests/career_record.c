@@ -46,7 +46,7 @@ static void *data_iterator_next(struct data_iterator *it) {
 struct career_result {
     struct game_statistics statistics;
     long humans, bots, best_streak, won, end_tick;
-    int moment_count;
+    int moment_count, incomplete;
     struct halo_highlight_event moments[3];
 };
 static struct career_result snapshot;

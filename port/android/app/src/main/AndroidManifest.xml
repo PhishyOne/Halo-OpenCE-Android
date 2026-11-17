@@ -10,6 +10,9 @@
 
     <!-- controller rumble -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <!-- system link multiplayer on the local network -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -83,6 +86,10 @@
                 android:name="android.app.category"
                 android:value="game" />
         </activity>
+
+        <service android:name=".NetworkSessionService" android:process=":game"
+            android:exported="false" android:stopWithTask="true"
+            android:foregroundServiceType="connectedDevice" />
 
         <!-- the downloaded new version, for the package installer (Updater) -->
         <provider

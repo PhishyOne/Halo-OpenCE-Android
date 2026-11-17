@@ -1,4 +1,4 @@
-version 53
+version 54
 bound CHAT_TEXT_SIZE 64
 bound DISCORD_ID_SIZE 24
 bound DISCORD_NAME_SIZE 40
@@ -252,7 +252,7 @@ size message_server_pregame_countdown 0x02
 size message_server_pregame_keep_alive 0x04
 size message_server_remove_player_ingame 0x24
 size message_server_switch_to_pregame 0x04
-struct career_result 06560ff26e16
+struct career_result 2647c82ed809
 struct distributed_actor_damage 96a57e13e2b8
 struct distributed_actor_damage_message f985e899a708
 struct distributed_actor_state 8bd5e771659d

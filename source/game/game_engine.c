@@ -5049,6 +5049,13 @@ void game_engine_update(
 		}
 	}
 
+    /* port: one bounded host result per player per second. */
+    if (game_engine) career_results_update(global_stage.variant.game_engine_index);
+#ifdef HALO_ANDROID
+    /* port: persist host checkpoints/finals even when no frame is rendered. */
+    if (game_engine)
+        career_record_update(global_stage.variant.game_engine_index, global_stage.map_name);
+#endif
 	return;
 }
 
@@ -5347,6 +5354,11 @@ void game_engine_player_killed(
 void game_engine_update_non_deterministic(
 	real delta_seconds)
 {
+#ifdef HALO_ANDROID
+    /* port: a final receipt can arrive after simulation has stopped. */
+    if (game_engine)
+        career_record_update(global_stage.variant.game_engine_index, global_stage.map_name);
+#endif
 	if (game_engine)
 	{
 		switch (game_engine_globals.postgame_state)

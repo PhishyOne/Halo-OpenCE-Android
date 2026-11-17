@@ -33,6 +33,7 @@ import org.libsdl.app.SDLActivity;
  * loads the game image from the APK's assets.
  */
 public class HaloActivity extends SDLActivity {
+    static final String NETWORK_SESSION = "com.halo.decomp.NETWORK_SESSION";
     static final String OFFLINE_BOT_ARGUMENTS = "com.halo.decomp.OFFLINE_BOT_ARGUMENTS";
     static final String LAN_UPDATE_HOST = "com.halo.decomp.LAN_UPDATE_HOST";
     static final String LAN_DISCOVERY_HOST = "com.halo.decomp.LAN_DISCOVERY_HOST";
@@ -80,6 +81,8 @@ public class HaloActivity extends SDLActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // SDL loads here, before its game thread starts on resume/surface ready.
+        SDLActivity.nativeSetenv("SDL_ANDROID_BLOCK_ON_PAUSE", "0");
         if (savedInstanceState != null)
             pendingLayoutExport = savedInstanceState.getString("pending-layout-export");
         if (mLayout != null) {
@@ -113,6 +116,7 @@ public class HaloActivity extends SDLActivity {
     @Override
     public void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        if ("com.halo.decomp.RESUME_SESSION".equals(intent.getAction())) return;
         setIntent(intent);
         /* The previous server may exist but have failed initial hotspot
          * binding. Every explicit new LAN launch is a fresh opportunity
@@ -326,6 +330,14 @@ public class HaloActivity extends SDLActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (getIntent().getBooleanExtra(NETWORK_SESSION, false)) {
+            try { startForegroundService(new Intent(this, NetworkSessionService.class)); }
+            catch (RuntimeException failure) {
+                Log.w("Halo", "Could not protect background multiplayer", failure);
+                Toast.makeText(this, "Background protection unavailable. Keep the screen on during LAN play.", Toast.LENGTH_LONG).show();
+            }
+        }
+        else stopService(new Intent(this, NetworkSessionService.class));
         rewardActivityResumed = true;
         if (touchControls != null && getWindow().getDecorView().hasWindowFocus())
             touchControls.startDeviceInput();
@@ -356,6 +368,7 @@ public class HaloActivity extends SDLActivity {
 
     @Override
     protected void onDestroy() {
+        stopService(new Intent(this, NetworkSessionService.class));
         if (lanDiscoveryServer != null) {
             lanDiscoveryServer.stop();
             lanDiscoveryServer = null;

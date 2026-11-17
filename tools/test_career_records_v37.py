@@ -45,7 +45,7 @@ class CareerV37Tests(unittest.TestCase):
         self.assertIn("CareerProfile.dashboard(this, dataRoot, dashboardPanel)", self.launcher)
         self.assertNotIn('MY SPARTAN PROFILE & ACHIEVEMENTS', self.launcher)
         self.assertIn("MAX_FILE_BYTES = 2 * 1024 * 1024", self.reader)
-        self.assertIn("Set<String> seen = new HashSet<>()", self.reader)
+        self.assertIn("java.util.LinkedHashMap<String, Match> records", self.reader)
         self.assertIn("if (content[i] == '\\n')", self.reader)
         self.assertIn("unknownOpponentKills", self.reader)
         self.assertIn("Math.min(30, Math.max(0, match.botKills))", self.reader)

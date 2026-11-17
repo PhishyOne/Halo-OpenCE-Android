@@ -6,9 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 /** Pure-Java v37 local career ledger. Never interprets match results as
  * independently certified proof of competitive rank. */
@@ -36,7 +34,7 @@ final class CareerRecords {
         final int kills, humanKills, botKills, deaths, assists, wins;
         final int seconds, bestStreak, captures, returns, hillTicks;
         final int suicides, teamKills;
-        final boolean extended;
+        final boolean extended, incomplete;
         final int flagGrabs, oddballTicks, ballCarrierKills, killsAsCarrier;
         final int raceLaps, bestLapTicks, lastLapTicks;
 
@@ -58,7 +56,8 @@ final class CareerRecords {
             hillTicks = parse(parts[15], 0, 8640000);
             suicides = parse(parts[16], 0, 10000);
             teamKills = parse(parts[17], 0, 10000);
-            boolean hc2 = parts[0].equals("HC2");
+            boolean hc2 = parts[0].equals("HC2") || parts[0].equals("HC3");
+            incomplete = parts[0].equals("HC3") && parse(parts[25], 0, 1) == 1;
             extended = hc2;
             flagGrabs = hc2 ? parse(parts[18], 0, 10000) : 0;
             oddballTicks = hc2 ? parse(parts[19], 0, 8640000) : 0;
@@ -69,9 +68,11 @@ final class CareerRecords {
             lastLapTicks = hc2 ? parse(parts[24], 0, 8640000) : 0;
             if ((humanKills == -1) != (botKills == -1) ||
                 (humanKills >= 0 && humanKills + botKills != kills) ||
-                bestStreak > kills || wins > 1)
+                bestStreak > kills || wins > 1 || (incomplete && wins != 0))
                 throw new IllegalArgumentException("Inconsistent match stats");
         }
+
+        String outcome() { return incomplete ? "DNF / LOSS" : wins == 1 ? "WIN" : "NOT WON"; }
 
         String gameType() {
             switch (mode) {
@@ -101,11 +102,12 @@ final class CareerRecords {
         long kills, humanKills, botKills, unknownOpponentKills, deaths;
         long assists, wins, seconds, captures, returns, hillTicks;
         long flagGrabs, oddballTicks, ballCarrierKills, killsAsCarrier, raceLaps;
-        long suicides, teamKills, bestStreak, xp;
+        long suicides, teamKills, bestStreak, xp, unfinished;
         int fastestLapTicks;
         int invalidLines, duplicates;
 
         long games() { return matches.size(); }
+        long completedGames() { return games() - unfinished; }
 
         int rankIndex() {
             int n = 0;
@@ -133,13 +135,13 @@ final class CareerRecords {
             boolean flagHero = false, flawless = false, immortal = false;
             for (Match match : matches) {
                 if (match.captures >= 5) flagHero = true;
-                if (match.kills >= 20 && match.deaths == 0) flawless = true;
-                if (match.humanKills >= 30 && match.deaths == 0) immortal = true;
+                if (!match.incomplete && match.kills >= 20 && match.deaths == 0) flawless = true;
+                if (!match.incomplete && match.humanKills >= 30 && match.deaths == 0) immortal = true;
             }
             awards.add(new Achievement("First Blood", "Earn your first kill",
                 "COMMON", kills >= 1));
             awards.add(new Achievement("Enlisted", "Finish your first multiplayer match",
-                "COMMON", games() >= 1));
+                "COMMON", completedGames() >= 1));
             awards.add(new Achievement("First Victory", "Win your first multiplayer match",
                 "COMMON", wins >= 1));
             awards.add(new Achievement("Bot Buster", "Defeat 100 bots",
@@ -155,7 +157,7 @@ final class CareerRecords {
             awards.add(new Achievement("Untouchable", "Get 20 kills without dying",
                 "RARE", bestStreak >= 20));
             awards.add(new Achievement("War Veteran", "Finish 250 matches",
-                "RARE", games() >= 250));
+                "RARE", completedGames() >= 250));
             awards.add(new Achievement("Champion", "Win 100 matches",
                 "RARE", wins >= 100));
             awards.add(new Achievement("Flag Hero", "Capture 5 flags in one match",
@@ -168,7 +170,7 @@ final class CareerRecords {
                 "30 human kills and no deaths in one match",
                 "LEGENDARY", immortal));
             awards.add(new Achievement("War Eternal", "Finish 1,500 matches",
-                "LEGENDARY", games() >= 1500));
+                "LEGENDARY", completedGames() >= 1500));
             awards.add(new Achievement("Human Reaper", "Defeat 10,000 humans",
                 "LEGENDARY", humanKills >= 10000));
             awards.add(new Achievement("Supreme Commander", "Win 1,000 matches",
@@ -198,6 +200,7 @@ final class CareerRecords {
 
         private void add(Match match) {
             matches.add(match);
+            if (match.incomplete) unfinished++;
             kills += match.kills;
             deaths += match.deaths;
             assists += match.assists;
@@ -225,7 +228,7 @@ final class CareerRecords {
             }
             // XP is progression, NOT skill rating; hard-cap bot rewards to
             // prevent 64 Recruit bots from overwhelming real-player effort.
-            xp += 50L + 40L * match.wins
+            xp += (match.incomplete ? 0L : 50L) + 40L * match.wins
                 + 12L * Math.min(20, Math.max(0, match.humanKills))
                 + 2L * Math.min(30, Math.max(0, match.botKills))
                 + 2L * Math.min(10, match.humanKills < 0 ? match.kills : 0)
@@ -278,7 +281,8 @@ final class CareerRecords {
             throw new IllegalArgumentException("Bad match record length");
         String[] fields = line.split("\\|", -1);
         boolean old = fields.length == 18 && "HC1".equals(fields[0]);
-        boolean extended = fields.length == 25 && "HC2".equals(fields[0]);
+        boolean extended = (fields.length == 25 && "HC2".equals(fields[0])) ||
+            (fields.length == 26 && "HC3".equals(fields[0]));
         if ((!old && !extended) ||
             (old && line.length() > 319) ||
             !fields[1].matches("[0-9a-f]{32}") ||
@@ -294,34 +298,39 @@ final class CareerRecords {
     static Career load(File appDirectory) throws IOException {
         Career career = new Career();
         if (appDirectory == null) return career;
-        File source = new File(appDirectory, LOG_NAME);
-        if (!source.isFile()) return career;
-        if (source.length() > MAX_FILE_BYTES || source.length() < 0)
+        java.util.LinkedHashMap<String, Match> records = new java.util.LinkedHashMap<>();
+        readRecords(new File(appDirectory, LOG_NAME), MAX_FILE_BYTES, career, records);
+        readRecords(new File(appDirectory, "career-pending-v1.log"), 479, career, records);
+        for (Match match : records.values()) career.add(match);
+        return career;
+    }
+
+    private static void readRecords(File source, int limit, Career career,
+            java.util.Map<String, Match> records) throws IOException {
+        if (!source.isFile()) return;
+        if (source.length() > limit || source.length() < 0)
             throw new IOException("Career log is too large; back it up before adding matches.");
         byte[] content = Files.readAllBytes(source.toPath());
-        if (content.length > MAX_FILE_BYTES)
-            throw new IOException("Career history grew while it was being read.");
+        if (content.length > limit) throw new IOException("Career history grew while it was being read.");
         int end = 0;
-        // A crash may leave an incomplete trailing record. Never count it.
-        for (int i = content.length - 1; i >= 0; --i) {
+        for (int i = content.length - 1; i >= 0; --i)
             if (content[i] == '\n') { end = i + 1; break; }
-        }
         String data = new String(content, 0, end, StandardCharsets.UTF_8);
-        Set<String> seen = new HashSet<>();
         for (String raw : data.split("\\n")) {
             if (raw.isEmpty()) continue;
-            String line = raw.endsWith("\r") ?
-                raw.substring(0, raw.length() - 1) : raw;
+            String line = raw.endsWith("\r") ? raw.substring(0, raw.length() - 1) : raw;
             try {
                 Match match = parseLine(line);
-                if (seen.add(match.id))
-                    career.add(match);
-                else
+                Match old = records.get(match.id);
+                if (old == null) records.put(match.id, match);
+                else {
                     career.duplicates++;
-            } catch (IllegalArgumentException bad) {
-                career.invalidLines++;
-            }
+                    // A completed receipt replaces its durable checkpoint.
+                    // A later crash-recovery copy cannot downgrade it to DNF.
+                    if (old.incomplete && (!match.incomplete || match.seconds > old.seconds))
+                        records.put(match.id, match);
+                }
+            } catch (IllegalArgumentException bad) { career.invalidLines++; }
         }
-        return career;
     }
 }

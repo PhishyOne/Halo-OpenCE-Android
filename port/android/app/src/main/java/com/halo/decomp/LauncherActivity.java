@@ -248,6 +248,8 @@ public class LauncherActivity extends Activity {
     }
 
     private void startGame(Intent intent) {
+        intent.putExtra(HaloActivity.NETWORK_SESSION, "lan".equals(
+            getSharedPreferences("launcher_ui", MODE_PRIVATE).getString("play_mode", "standard")));
         startActivity(intent);
         finish();
     }

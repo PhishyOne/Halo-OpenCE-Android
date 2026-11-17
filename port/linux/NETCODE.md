@@ -1228,3 +1228,14 @@ contract. Storage stays HC2 / HLM1, so existing valid career history remains
 readable. A crash or disconnect before receipt delivery produces no completed
 match award. There is no per-kill network traffic or disk I/O for career events;
 host event buffers use at most about 400 KiB across 128 player slots.
+
+## Version 54: durable unfinished results
+
+Network version 54 adds an `incomplete` field to career receipts. The host sends bounded checkpoints
+once per simulation second, using the existing reliable per-player stream and
+seed/generation binding. Checkpoints cannot claim victory. A final replaces a
+checkpoint; an older checkpoint cannot replace newer state or a final. Android
+persists one checkpoint atomically, with a stable local match ID, and saves
+finals outside rendering. HC3 adds an incomplete/DNF flag; HC1/HC2 still read.
+Unfinished matches keep earned stats and count as DNF/loss, but receive no
+completion/win bonus. Abrupt exits retain only the last delivered checkpoint.

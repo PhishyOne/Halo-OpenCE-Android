@@ -27,10 +27,16 @@ extern void platform_log(const char *format, ...);
 
 enum { CAREER_MAX_BYTES = 2 * 1024 * 1024 };
 static int recorded;
+static char career_id[33];
+static long career_attempted_tick;
+static int career_recover_pending(void);
+
 void career_record_start(void)
 {
     halo_highlights_start();
-    recorded = 0;
+    recorded = !career_recover_pending();
+    career_id[0] = 0;
+    career_attempted_tick = -1;
 }
 
 /* A random 128-bit match ID prevents double counting on re-import.
@@ -60,6 +66,58 @@ static int career_match_id(char *hex, size_t capacity)
     return 1;
 }
 
+static int career_recover_pending(void)
+{
+    char pending[1024], journal[1024], row[480];
+    const char *root = platform_data_root();
+    FILE *in, *out;
+    size_t n;
+    long length;
+    int ok, last = '\n';
+    if (!root || snprintf(pending, sizeof(pending), "%s/career-pending-v1.log", root) >= (int)sizeof(pending) ||
+        snprintf(journal, sizeof(journal), "%s/career-matches-v1.log", root) >= (int)sizeof(journal)) return 0;
+    in = fopen(pending, "rb");
+    if (!in) return 1;
+    n = fread(row, 1, sizeof(row), in);
+    ok = !ferror(in) && feof(in) && n > 0 && n < sizeof(row) && row[n - 1] == '\n';
+    fclose(in);
+    if (!ok) return 0; /* preserve damaged evidence rather than overwrite it */
+    out = fopen(journal, "ab+");
+    if (!out) return 0;
+    ok = fseek(out, 0, SEEK_END) == 0 && (length = ftell(out)) >= 0 &&
+        length <= CAREER_MAX_BYTES - (long)n - 1;
+    if (ok && length > 0) {
+        ok = fseek(out, -1, SEEK_END) == 0;
+        if (ok) last = fgetc(out);
+        ok = ok && fseek(out, 0, SEEK_END) == 0;
+    }
+    if (ok && last != '\n') ok = fwrite("\n", 1, 1, out) == 1;
+    if (ok) ok = fwrite(row, 1, n, out) == n && fflush(out) == 0 && fsync(fileno(out)) == 0;
+    if (fclose(out) != 0) ok = 0;
+    return ok && unlink(pending) == 0;
+}
+
+static int career_checkpoint(const char *root, const char *row, int size)
+{
+    char path[1024], temporary[1024];
+    FILE *out;
+    int ok;
+    if (snprintf(path, sizeof(path), "%s/career-pending-v1.log", root) >= (int)sizeof(path) ||
+        snprintf(temporary, sizeof(temporary), "%s/career-pending-v1.tmp", root) >= (int)sizeof(temporary)) return 0;
+    out = fopen(temporary, "wb");
+    if (!out) return 0;
+    ok = fwrite(row, 1, size, out) == (size_t)size && fflush(out) == 0 && fsync(fileno(out)) == 0;
+    if (fclose(out) != 0) ok = 0;
+    if (ok) ok = rename(temporary, path) == 0;
+    if (ok) {
+        /* Persist the directory entry as well as the checkpoint bytes. */
+        FILE *directory = fopen(root, "r");
+        if (directory) { (void)fsync(fileno(directory)); fclose(directory); }
+    }
+    if (!ok) unlink(temporary);
+    return ok;
+}
+
 static void career_map_token(const char *input, char *output, size_t capacity)
 {
     const char *cursor, *start = input ? input : "";
@@ -87,13 +145,14 @@ static long career_nonnegative(long n)
     return n < 0 ? 0 : n;
 }
 
-void career_record_postgame(long game_type, const char *map_name)
+static void career_record_write(long game_type, const char *map_name)
 {
     struct data_iterator iterator;
     struct player_datum *player;
     const struct career_result *result;
     const char *root;
-    char path[1024], id[33], map[48], line[480];
+    char path[1024], map[48], line[480];
+    const char *id = career_id;
     FILE *ledger;
     long timestamp, total, humans, bots, caps = 0, returns = 0, hill = 0;
     long grabs = 0, oddball_ticks = 0, carrier_kills = 0, kills_as_carrier = 0;
@@ -104,10 +163,6 @@ void career_record_postgame(long game_type, const char *map_name)
     if (recorded || game_type < game_engine_ctf ||
         game_type > game_engine_race)
         return;
-    /* A local/host game may enter postgame directly. Guests must wait for
-     * the host's receipt; no amount of waiting makes a mutable scoreboard
-     * into an authoritative final result. */
-    if (!network_game_distributed_client()) career_results_finish(game_type);
     data_iterator_new(&iterator, player_data);
     while ((player = (struct player_datum *)data_iterator_next(&iterator)) != NULL)
     {
@@ -116,7 +171,8 @@ void career_record_postgame(long game_type, const char *map_name)
             continue; /* Android has one local controller; never save bots/guests. */
         result = career_results_get(iterator.datum_index, game_type);
         if (!result) return; /* missing final receipt: never invent a result */
-        if (!career_match_id(id, sizeof(id)))
+        if (result->incomplete && result->end_tick <= career_attempted_tick) return;
+        if (!career_id[0] && !career_match_id(career_id, sizeof(career_id)))
             return;
         root = platform_data_root();
         if (!root || !root[0] ||
@@ -152,13 +208,13 @@ void career_record_postgame(long game_type, const char *map_name)
         timestamp = (long)time(NULL);
         if (timestamp < 0) timestamp = 0;
 
-        /* HC2 extends the original 18-field HC1 format with seven
-         * game-engine mode counters. Readers keep prior HC1 career XP.
+        /* HC3 keeps HC2 mode counters and adds incomplete/DNF status.
+         * Readers preserve older HC1/HC2 career history.
          * Do not encode shots_fired/hit: the engine does not update them. */
         size = snprintf(line, sizeof(line),
-            "HC2|%s|%ld|%ld|%s|"
+            "HC3|%s|%ld|%ld|%s|"
             "%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld|"
-            "%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld\n",
+            "%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld|%ld\n",
             id, timestamp, game_type, map,
             total, humans, bots,
             career_nonnegative(result->statistics.deaths),
@@ -168,9 +224,14 @@ void career_record_postgame(long game_type, const char *map_name)
             career_nonnegative(result->statistics.suicides),
             career_nonnegative(result->statistics.friendly_fire_kills),
             grabs, oddball_ticks, carrier_kills, kills_as_carrier,
-            laps, best_lap_ticks, last_lap_ticks);
+            laps, best_lap_ticks, last_lap_ticks, (long)result->incomplete);
         if (size <= 0 || size >= (int)sizeof(line))
             return;
+        if (result->incomplete) {
+            career_attempted_tick = result->end_tick;
+            if (!career_checkpoint(root, line, size)) platform_log("career: checkpoint storage failed");
+            return;
+        }
         /* A power loss could leave a partial trailing line. Separate it
          * rather than merging it with the next match; the reader rejects
          * the partial line and keeps the complete one that follows. */
@@ -214,6 +275,9 @@ void career_record_postgame(long game_type, const char *map_name)
              * process. The Java reader rejects incomplete lines. */
             recorded = 1;
             if (synced && closed) {
+                char pending[1024];
+                if (snprintf(pending, sizeof(pending), "%s/career-pending-v1.log", root) < (int)sizeof(pending))
+                    unlink(pending);
                 halo_highlights_import(result->moments, result->moment_count);
                 /* The host already included victory in its selection. */
                 halo_highlights_finish(root, id, map, result->end_tick, 0);
@@ -224,5 +288,15 @@ void career_record_postgame(long game_type, const char *map_name)
         }
         return;
     }
+}
+void career_record_update(long game_type, const char *map_name)
+{
+    career_record_write(game_type, map_name);
+}
+
+void career_record_postgame(long game_type, const char *map_name)
+{
+    if (!network_game_distributed_client()) career_results_finish(game_type);
+    career_record_write(game_type, map_name);
 }
 #endif /* HALO_ANDROID */

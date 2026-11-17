@@ -114,6 +114,9 @@ run is one; its start, before the game's (shell_xbox.c); its frames' pace
 (main.c); the game's fatal error ended with (main.c); and the console's
 output, which it logs and captures for its commands' replies (terminal.c) */
 int halo_server_mode(void);
+/* Android hidden surface: continue networking without drawing or vsync. */
+int halo_background_mode(void);
+void halo_background_pace(void);
 void server_mode_start(void);
 void server_mode_pace_frame(void);
 void server_fatal(char const *text);

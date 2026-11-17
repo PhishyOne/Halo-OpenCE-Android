@@ -237,6 +237,37 @@ int main(int argc, char **argv) {
         assert(!career_results_get(0x10002, mode)); /* no bot profile */
         guest(); deliver(0); deliver(1);
         career_record_postgame(mode, "bloodgulch"); assert(records() == 1);
+    } else if (!strcmp(argv[1], "checkpoint") || !strcmp(argv[1], "checkpoint_final")) {
+        char pending[1024], row[480], original_id[33];
+        FILE *in;
+        host();
+        game_statistics_record_kill(0x10002, 0x10001, NONE, 1);
+        tick = 900; career_results_update(mode);
+        assert(packet_count == 2);
+        tick = 901; career_results_update(mode); assert(packet_count == 2);
+        tick = 1000; ctf_award_capture(0x10001, 1);
+        tick = 1200; career_results_finish(mode); assert(packet_count == 4);
+        guest(); deliver(0); deliver(1);
+        r = career_results_get(0x10001, mode);
+        assert(r && r->incomplete && !r->won && r->statistics.kills[0] == 1);
+        career_record_update(mode, "bloodgulch"); assert(records() == 0);
+        snprintf(pending, sizeof(pending), "%s/career-pending-v1.log", test_root);
+        in = fopen(pending, "rb"); assert(in); assert(fgets(row, sizeof(row), in)); fclose(in);
+        assert(!strncmp(row, "HC3|", 4)); memcpy(original_id, row + 4, 32); original_id[32] = 0;
+        assert(strstr(row, "|1\n"));
+        if (!strcmp(argv[1], "checkpoint_final")) {
+            deliver(2); deliver(3);
+            r = career_results_get(0x10001, mode); assert(r && !r->incomplete && r->moment_count >= 2);
+            career_record_update(mode, "bloodgulch");
+            assert(records() == 1 && access(pending, F_OK) != 0);
+            deliver(1); career_record_update(mode, "bloodgulch");
+            assert(records() == 1); /* checkpoint cannot downgrade final */
+            assert(!strcmp(original_id, career_id));
+        } else {
+            /* A fresh recorder recovers the on-disk checkpoint before a new game. */
+            career_record_start(); assert(records() == 1 && access(pending, F_OK) != 0);
+            career_record_start(); assert(records() == 1);
+        }
     } else assert(0 && "unknown test");
     puts("PASS career final results"); return 0;
 }

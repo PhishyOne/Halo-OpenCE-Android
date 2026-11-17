@@ -38,8 +38,8 @@ class NativeCareerTest(unittest.TestCase):
             self.assertEqual(len(lines), 4)
             a, b, oddball, race = (record.split("|") for record in lines)
             for entry in (a, b, oddball, race):
-                self.assertEqual(len(entry), 25)
-                self.assertEqual(entry[0], "HC2")
+                self.assertEqual(len(entry), 26)
+                self.assertEqual(entry[0], "HC3")
                 self.assertEqual(len(entry[1]), 32)
             self.assertEqual(len({a[1], b[1], oddball[1], race[1]}), 4)
             self.assertEqual(a[3:10],

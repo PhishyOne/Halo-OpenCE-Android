@@ -3480,7 +3480,8 @@ static boolean main_loop_iteration(
 	while (TRUE)
 #endif
 	{
-		if (!game_in_editor())
+		/* port: defer map/GL-resource transitions while Android has no surface. */
+		if (!game_in_editor() && !halo_background_mode())
 		{
 			if (main_globals.switch_to_structure_bsp_index!=NONE)
 			{
@@ -3562,7 +3563,7 @@ static boolean main_loop_iteration(
 				main_queue_map_private();
 			}
 		}
-		else if (main_globals.reset_map)
+		else if (!halo_background_mode() && main_globals.reset_map)
 		{
 			main_reset_map_private();
 		}
@@ -3579,7 +3580,14 @@ static boolean main_loop_iteration(
 		telnet_console_process();
 		profile_scope_exit(main_platform_events_section)
 
-		if (!shell_application_is_paused())
+		/* port: hidden offline games pause; network sessions keep ticking. */
+		if (halo_background_mode())
+		{
+			halo_background_pace();
+			if (main_globals.connection == _game_connection_local) main_reset_time();
+		}
+		if (!shell_application_is_paused() &&
+			(!halo_background_mode() || main_globals.connection != _game_connection_local))
 		{
 			render_frame = TRUE;
 
@@ -3637,9 +3645,9 @@ static boolean main_loop_iteration(
 
 			/* port: a dedicated server's frames paced by its clock, with no
 			display to wait for (port/linux/src/server_mode.c) */
-			if (halo_server_mode())
+			if (halo_server_mode() || halo_background_mode())
 			{
-				server_mode_pace_frame();
+				if (halo_server_mode()) server_mode_pace_frame();
 				profile_scope(main_update_time_section, main_update_time_unthrottled();)
 			}
 			else
@@ -3711,7 +3719,7 @@ static boolean main_loop_iteration(
 					main_save_map_private();
 				}
 
-				if (render_frame && !debug_no_drawing)
+				if (render_frame && !debug_no_drawing && !halo_background_mode())
 				{
 					profile_render_start();
 					render_interpolation_frame_begin();
@@ -3721,17 +3729,17 @@ static boolean main_loop_iteration(
 				}
 			}
 			/* port: nothing drawn on a dedicated server, nor waited for */
-			else if (!halo_server_mode())
+			else if (!halo_server_mode() && !halo_background_mode())
 			{
 				profile_render_start();
 				main_pregame_render();
 				profile_render_end();
 			}
 
-			if (!halo_server_mode())
+			if (!halo_server_mode() && !halo_background_mode())
 				profile_scope(main_throttle_section, main_rasterizer_throttle();)
 
-			if (render_frame && !debug_no_drawing)
+			if (render_frame && !debug_no_drawing && !halo_background_mode())
 			{
 				profile_scope(main_present_section, main_present_frame();)
 			}
