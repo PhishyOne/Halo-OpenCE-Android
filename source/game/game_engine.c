@@ -2745,8 +2745,7 @@ void game_engine_post_rasterize_post_game(
 #ifdef HALO_ANDROID
 	/* Postgame is displayed after play has stopped. Save only the local
 	 * player's result, once per match, without touching the scoreboard. */
-	career_record_postgame(global_stage.variant.game_engine_index,
-		global_stage.map_name);
+	career_record_postgame(global_variant.game_engine_index, game_loaded_level_path());
 #endif
 
 	tab_stops[0] = 50;
@@ -5028,7 +5027,7 @@ void game_engine_update(
 				}
 
 				/* port: freeze and send final results before the transition. */
-				career_results_finish(global_stage.variant.game_engine_index);
+				career_results_finish(global_variant.game_engine_index);
 				server = global_network_game_server_get();
 				if (server)
 					network_game_server_switch_to_postgame(
@@ -5050,11 +5049,13 @@ void game_engine_update(
 	}
 
     /* port: one bounded host result per player per second. */
-    if (game_engine) career_results_update(global_stage.variant.game_engine_index);
+    if (game_engine || network_coop_active())
+        career_results_update(game_engine ? global_variant.game_engine_index : game_engine_none);
 #ifdef HALO_ANDROID
     /* port: persist host checkpoints/finals even when no frame is rendered. */
-    if (game_engine)
-        career_record_update(global_stage.variant.game_engine_index, global_stage.map_name);
+    if (game_engine || network_coop_active())
+        career_record_update(game_engine ? global_variant.game_engine_index : game_engine_none,
+            game_loaded_level_path());
 #endif
 	return;
 }
@@ -5356,8 +5357,9 @@ void game_engine_update_non_deterministic(
 {
 #ifdef HALO_ANDROID
     /* port: a final receipt can arrive after simulation has stopped. */
-    if (game_engine)
-        career_record_update(global_stage.variant.game_engine_index, global_stage.map_name);
+    if (game_engine || network_coop_active())
+        career_record_update(game_engine ? global_variant.game_engine_index : game_engine_none,
+            game_loaded_level_path());
 #endif
 	if (game_engine)
 	{

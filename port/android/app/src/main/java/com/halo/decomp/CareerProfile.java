@@ -47,6 +47,8 @@ final class CareerProfile {
     /** First launcher screen: compact local stats, not an intrusive modal.
      * Loading is asynchronous and never blocks the main/UI thread. */
     static void dashboard(Activity activity, File appDirectory, LinearLayout target) {
+        Object request = new Object();
+        target.setTag(request);
         target.removeAllViews();
         target.addView(text(activity, "LOADING SPARTAN SERVICE RECORD...", 14, MUTED, true));
         new Thread(() -> {
@@ -70,7 +72,7 @@ final class CareerProfile {
             final CareerRecords.Career result = career;
             final String warning = error;
             activity.runOnUiThread(() -> {
-                if (activity.isFinishing() || activity.isDestroyed()) return;
+                if (activity.isFinishing() || activity.isDestroyed() || target.getTag() != request) return;
                 target.removeAllViews();
                 SharedPreferences pref = activity.getSharedPreferences(
                     PREFS, Context.MODE_PRIVATE);
@@ -112,6 +114,7 @@ final class CareerProfile {
                     if (medal.earned) earned++;
                 target.addView(text(activity, "Achievements unlocked: " + earned +
                     " / " + result.achievements().size(), 13, GOLD, true));
+                target.addView(text(activity, coopSummary(result), 14, TEXT, false));
                 section(activity, target, "TOP ACHIEVEMENTS");
                 target.addView(threeMedals(activity, result));
                 section(activity, target, "MATCH HIGHLIGHTS");
@@ -278,7 +281,13 @@ final class CareerProfile {
         layout.addView(label);
     }
 
+    private static String coopSummary(CareerRecords.Career career) {
+        return "Co-op sessions  " + career.coopSessions + "     Missions completed  " + career.coopCompletions;
+    }
+
     private static String matchDetails(CareerRecords.Match match) {
+        if (match.cooperative())
+            return "Co-op  •  " + match.map + "\n" + match.outcome() + "\n" + match.seconds + " seconds";
         StringBuilder result = new StringBuilder();
         result.append("Game type: ").append(match.gameType())
             .append("\nMap: ").append(match.map)
@@ -352,7 +361,7 @@ final class CareerProfile {
             CareerRecords.Match m = history.get(i);
             labels[i] = dates.format(new Date(m.epoch * 1000L)) + "   " +
                 m.gameType() + "  " + m.map + "    " +
-                m.kills + "K / " + m.deaths + "D";
+                (m.cooperative() ? m.outcome() : m.kills + "K / " + m.deaths + "D");
         }
         new AlertDialog.Builder(activity)
             .setTitle("COMPLETE MATCH HISTORY")
@@ -509,11 +518,11 @@ final class CareerProfile {
                 medal.earned ? rarityColor(medal.rarity) : MUTED, medal.earned));
         }
 
+        panel.addView(text(activity, coopSummary(career), 14, TEXT, false));
         section(activity, panel, "RECENT MATCHES");
         if (career.matches.isEmpty()) {
             panel.addView(text(activity,
-                "No completed multiplayer matches recorded yet. Finish a match " +
-                "then reopen Service Record.", 12, MUTED, false));
+                "Play a multiplayer match or co-op mission to start your service record.", 12, MUTED, false));
         } else {
             DateFormat dates = DateFormat.getDateTimeInstance(
                 DateFormat.SHORT, DateFormat.SHORT);
@@ -522,7 +531,7 @@ final class CareerProfile {
                     dates.format(new Date(match.epoch * 1000L)) : "Date unavailable";
                 panel.addView(text(activity, date + "  " + match.gameType() +
                     "  " + match.map + "  " + match.outcome() +
-                    "  " + match.kills + "K/" + match.deaths + "D", 11, MUTED, false));
+                    (match.cooperative() ? "" : "  " + match.kills + "K/" + match.deaths + "D"), 11, MUTED, false));
             }
         }
         if (!MatchHighlights.mostRecent(career, highlights).isEmpty()) {

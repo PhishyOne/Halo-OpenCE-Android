@@ -162,6 +162,8 @@ boolean game_safe_to_save(
 	void);
 boolean game_safe_to_speak(
 	void);
+/* port: source/game/game.c */
+const char *game_loaded_level_path(void);
 boolean game_is_cooperative(void);
 boolean game_load(
 	struct game_options *options);

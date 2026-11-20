@@ -88,6 +88,7 @@ public class LauncherActivity extends Activity {
     private Button pick;
     private TextView repairStatus;
     private LinearLayout stockMapResults;
+    private LinearLayout dashboardPanel;
     private LanMapRepair lanMapRepair;
     private ChoiceButton stockCampaignMapChoice;
     private Button stockCampaignAuditButton;
@@ -557,7 +558,7 @@ public class LauncherActivity extends Activity {
         toolsPage.setOrientation(LinearLayout.VERTICAL);
         toolsPage.setVisibility(View.GONE);
         content.addView(toolsPage);
-        LinearLayout dashboardPanel = hudPanel();
+        dashboardPanel = hudPanel();
         dashboardPanel.setVisibility(View.GONE);
         content.addView(dashboardPanel);
         CareerProfile.dashboard(this, dataRoot, dashboardPanel);
@@ -2019,6 +2020,8 @@ public class LauncherActivity extends Activity {
         if (pick != null && pick.isEnabled() && haveData()) {
             pick = null;
             buildLanInterface();
+        } else if (dashboardPanel != null && dashboardPanel.getVisibility() == View.VISIBLE) {
+            CareerProfile.dashboard(this, dataRoot, dashboardPanel);
         }
     }
 

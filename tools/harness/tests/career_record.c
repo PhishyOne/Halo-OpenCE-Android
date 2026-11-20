@@ -10,6 +10,7 @@
 
 #define TRUE 1
 #define MAXIMUM_LOCAL_PLAYERS 4
+#define game_engine_none 0
 #define game_engine_ctf 1
 #define game_engine_slayer 2
 #define game_engine_oddball 3
@@ -69,7 +70,6 @@ static void observed_kill(short slot, int bot, long streak) {
 }
 static void reset_snapshot(void) { memset(&snapshot, 0, sizeof(snapshot)); frozen = 0; }
 static char const *test_root;
-static char const *platform_data_root(void) { return test_root; }
 static void platform_log(char const *msg) { (void)msg; }
 
 #include "production.inc"
@@ -88,6 +88,7 @@ static int count_records(void) {
 int main(int argc, char **argv) {
     assert(argc == 2);
     test_root = argv[1];
+    assert(setenv("HALO_DATA_ROOT", test_root, 1) == 0);
     memset(players,0,sizeof(players));
     players[0].local_player_index=0;
     players[1].local_player_index=-1; /* host's bot / remote guest */

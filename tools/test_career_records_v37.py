@@ -16,7 +16,7 @@ class CareerV37Tests(unittest.TestCase):
     def test_postgame_snapshot_once(self):
         self.assertIn("career_record_start();", self.stats)
         self.assertIn("career_record_postgame(", self.engine)
-        self.assertIn("if (recorded || game_type < game_engine_ctf", self.native)
+        self.assertIn("if (recorded || game_type < game_engine_none", self.native)
         self.assertIn("recorded = 1;", self.native)
         self.assertIn('career-matches-v1.log', self.native)
         self.assertIn('fopen(path, "ab")', self.native)
@@ -35,7 +35,7 @@ class CareerV37Tests(unittest.TestCase):
         self.assertNotIn('#include "platform.h"', self.native)
         self.assertNotIn("struct stat", self.native)
         self.assertIn("ftell(previous)", self.native)
-        self.assertIn("extern const char *platform_data_root(void);", self.native)
+        self.assertIn('getenv("HALO_DATA_ROOT")', self.native)
         self.assertIn("#ifdef HALO_ANDROID", self.stats)
         self.assertIn("#ifdef HALO_ANDROID", self.engine)
         self.assertNotIn("network_send", self.native)

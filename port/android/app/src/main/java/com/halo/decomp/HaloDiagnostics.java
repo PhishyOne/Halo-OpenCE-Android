@@ -23,7 +23,7 @@ final class HaloDiagnostics {
     private static final int MAX_LINE = 250;
     private static final int MAX_FILE_NAMES = 48;
     private static final Pattern RELEVANT = Pattern.compile(
-        "(?i)(co-op:|network objects|distributed:|respawn|spectat|"
+        "(?i)(career:|co-op:|network objects|distributed:|respawn|spectat|"
         + "cache file|game_load\\(\\)|map sharing|network connection|"
         + "network went down|objects:|bots: perf|bots: tick|"
         + "failed to load|host has local player|custom edition|"

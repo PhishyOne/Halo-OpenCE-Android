@@ -9,6 +9,10 @@
 #include "memory/data.h"
 #include "networking/network_game_globals.h"
 #include "network_distributed.h"
+#include "network_coop.h"
+#ifdef HALO_ANDROID
+#include "career_record.h"
+#endif
 #include "bots.h"
 #include <string.h>
 
@@ -32,6 +36,7 @@ typedef char career_start_message_wire_size[
 struct career_player_events {
     long player_index;
     long humans, bots, best_streak;
+    long coop_first_tick;
     int valid, result_ready;
     struct halo_highlight_buffer highlights;
     struct career_result result;
@@ -39,13 +44,15 @@ struct career_player_events {
 static struct career_player_events career_players[HALO_PORT_MAXIMUM_NETWORK_PLAYERS];
 static uint32_t career_generation, career_seed, career_next_generation;
 static int career_finished;
-static long career_checkpoint_tick;
+static long career_checkpoint_tick, coop_ticks, coop_last_sim_tick;
 
 void career_results_start(void)
 {
     memset(career_players, 0, sizeof(career_players));
     career_finished = 0;
     career_checkpoint_tick = -30;
+    coop_ticks = 0;
+    coop_last_sim_tick = -1;
     career_seed = (game_connection() == _game_connection_network_server ||
         network_game_distributed_client()) ? (uint32_t)network_game_get_random_seed() : 0;
     if (++career_next_generation == 0) ++career_next_generation;
@@ -99,7 +106,7 @@ static int career_result_valid(const struct career_result *r)
 {
     const struct game_statistics *s = &r->statistics;
     int i;
-    if (r->game_type < game_engine_ctf || r->game_type > game_engine_race ||
+    if (r->game_type < game_engine_none || r->game_type > game_engine_race ||
         r->end_tick < 1 || r->end_tick > 86400L * 30 ||
         r->won < 0 || r->won > 1 ||
         r->incomplete < 0 || r->incomplete > 1 ||
@@ -112,6 +119,12 @@ static int career_result_valid(const struct career_result *r)
         r->best_streak < 0 || r->best_streak > s->kills[0] ||
         r->moment_count < 0 || r->moment_count > 3)
         return 0;
+    if (r->game_type == game_engine_none) {
+        struct game_statistics empty;
+        memset(&empty, 0, sizeof(empty));
+        return !memcmp(s, &empty, sizeof(empty)) && !r->humans && !r->bots &&
+            !r->best_streak && !r->moment_count && r->won == !r->incomplete;
+    }
     if (!((r->humans == -1 && r->bots == -1) ||
         (r->humans >= 0 && r->humans <= 10000 && r->bots >= 0 &&
          r->bots <= 10000 && r->humans + r->bots == s->kills[0])))
@@ -170,7 +183,8 @@ static void career_results_collect(long game_type, int incomplete)
     struct data_iterator iterator;
     struct player_datum *player;
     if (network_game_distributed_client() || career_finished ||
-        game_type < game_engine_ctf || game_type > game_engine_race) return;
+        game_type < game_engine_none || game_type > game_engine_race ||
+        (game_type == game_engine_none && !network_coop_active())) return;
     career_finished = !incomplete;
     data_iterator_new(&iterator, player_data);
     while ((player = data_iterator_next(&iterator)) != NULL) {
@@ -183,14 +197,23 @@ static void career_results_collect(long game_type, int incomplete)
         r->game_type = game_type;
         r->end_tick = game_time_get();
         r->incomplete = incomplete;
-        r->won = !incomplete && game_engine_did_player_win(iterator.datum_index) == TRUE;
-        r->statistics = player->statistics;
-        r->humans = events->humans;
-        r->bots = events->bots;
-        r->best_streak = events->best_streak;
-        if (r->humans + r->bots != r->statistics.kills[0]) r->humans = r->bots = -1;
-        r->moment_count = incomplete ? 0 : halo_highlight_select(&events->highlights,
-            r->end_tick, r->won, r->moments);
+        if (game_type == game_engine_none) {
+            /* Co-op has no competitive scoreboard. Only the campaign victory
+             * path finalizes a mission, before the host returns to the lobby. */
+            if (!events->coop_first_tick) events->coop_first_tick = coop_ticks;
+            r->end_tick = coop_ticks - events->coop_first_tick + 1;
+            r->won = !incomplete;
+        } else {
+            r->won = !incomplete && game_engine_did_player_win(iterator.datum_index) == TRUE;
+            r->statistics = player->statistics;
+            r->humans = events->humans;
+            r->bots = events->bots;
+            r->best_streak = events->best_streak;
+            if (r->humans + r->bots != r->statistics.kills[0]) r->humans = r->bots = -1;
+            r->moment_count = incomplete ? 0 : halo_highlight_select(&events->highlights,
+                r->end_tick, r->won, r->moments);
+        }
+        events->result_ready = 0;
         if (!career_result_valid(r)) continue;
         events->result_ready = 1;
         if (game_connection() == _game_connection_network_server &&
@@ -218,8 +241,14 @@ void career_results_finish(long game_type)
 void career_results_update(long game_type)
 {
     long tick = game_time_get();
-    if (!game_in_progress() || tick < 1 || tick - career_checkpoint_tick < 30)
-        return;
+    if (!game_in_progress() || tick < 1 || career_finished || network_game_distributed_client()) return;
+    /* The campaign simulation clock can rewind on death or jump when loading
+     * a save. Count actual simulation ticks observed in this session. */
+    if (game_type == game_engine_none && network_coop_active() && tick != coop_last_sim_tick) {
+        if (coop_ticks < 86400L * 30) coop_ticks++;
+        coop_last_sim_tick = tick;
+    }
+    if (tick >= career_checkpoint_tick && tick - career_checkpoint_tick < 30) return;
     career_checkpoint_tick = tick;
     career_results_collect(game_type, 1);
 }
@@ -240,7 +269,7 @@ int career_results_handle(long machine_index, const void *data, unsigned short s
     struct distributed_career_start_message start;
     struct career_player_events *events;
     struct player_datum *player;
-    struct game_variant *variant;
+    long expected_mode;
     if (size < sizeof(header)) return 0;
     memcpy(&header, data, sizeof(header));
     if (header.type != _distributed_message_career_start &&
@@ -257,9 +286,10 @@ int career_results_handle(long machine_index, const void *data, unsigned short s
     }
     if (size != sizeof(message) || !career_generation) return 1;
     memcpy(&message, data, sizeof(message));
-    variant = game_engine_get_variant();
+    expected_mode = network_coop_active() ? game_engine_none : game_engine_get_variant()->game_engine_index;
     if (message.seed != career_seed || message.generation != career_generation ||
-        !variant || message.result.game_type != variant->game_engine_index ||
+        message.result.game_type != expected_mode ||
+        (message.result.game_type == game_engine_none && !network_coop_active()) ||
         !career_result_valid(&message.result)) return 1;
     player = player_try_and_get(message.result.player_index);
     if (!player || player->local_player_index < 0 ||
@@ -270,5 +300,11 @@ int career_results_handle(long machine_index, const void *data, unsigned short s
         return 1;
     events->result = message.result;
     events->result_ready = 1;
+#ifdef HALO_ANDROID
+    /* A co-op win immediately returns to the lobby. Save before the next
+     * network message can tear down the local player. */
+    if (events->result.game_type == game_engine_none && !events->result.incomplete)
+        career_record_update(game_engine_none, game_loaded_level_path());
+#endif
     return 1;
 }

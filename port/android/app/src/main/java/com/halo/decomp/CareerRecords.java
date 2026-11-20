@@ -41,7 +41,7 @@ final class CareerRecords {
         private Match(String[] parts) {
             id = parts[1];
             epoch = Long.parseLong(parts[2]);
-            mode = parse(parts[3], 1, 5);
+            mode = parse(parts[3], parts[0].equals("HC3") ? 0 : 1, 5);
             map = parts[4];
             kills = parse(parts[5], 0, 10000);
             humanKills = parse(parts[6], -1, 10000);
@@ -70,12 +70,22 @@ final class CareerRecords {
                 (humanKills >= 0 && humanKills + botKills != kills) ||
                 bestStreak > kills || wins > 1 || (incomplete && wins != 0))
                 throw new IllegalArgumentException("Inconsistent match stats");
+            if (cooperative() && (wins != (incomplete ? 0 : 1) || humanKills != 0 ||
+                botKills != 0 || kills + deaths + assists + bestStreak + captures + returns +
+                hillTicks + suicides + teamKills + flagGrabs + oddballTicks + ballCarrierKills +
+                killsAsCarrier + raceLaps + bestLapTicks + lastLapTicks != 0))
+                throw new IllegalArgumentException("Inconsistent co-op result");
         }
 
-        String outcome() { return incomplete ? "DNF / LOSS" : wins == 1 ? "WIN" : "NOT WON"; }
+        boolean cooperative() { return mode == 0; }
+        String outcome() {
+            if (cooperative()) return incomplete ? "UNFINISHED" : "MISSION COMPLETE";
+            return incomplete ? "DNF / LOSS" : wins == 1 ? "WIN" : "NOT WON";
+        }
 
         String gameType() {
             switch (mode) {
+                case 0: return "Co-op";
                 case 1: return "CTF";
                 case 2: return "Slayer";
                 case 3: return "Oddball";
@@ -103,10 +113,10 @@ final class CareerRecords {
         long assists, wins, seconds, captures, returns, hillTicks;
         long flagGrabs, oddballTicks, ballCarrierKills, killsAsCarrier, raceLaps;
         long suicides, teamKills, bestStreak, xp, unfinished;
-        int fastestLapTicks;
+        int fastestLapTicks, coopSessions, coopCompletions;
         int invalidLines, duplicates;
 
-        long games() { return matches.size(); }
+        long games() { return matches.size() - coopSessions; }
         long completedGames() { return games() - unfinished; }
 
         int rankIndex() {
@@ -134,6 +144,7 @@ final class CareerRecords {
             List<Achievement> awards = new ArrayList<>();
             boolean flagHero = false, flawless = false, immortal = false;
             for (Match match : matches) {
+                if (match.cooperative()) continue;
                 if (match.captures >= 5) flagHero = true;
                 if (!match.incomplete && match.kills >= 20 && match.deaths == 0) flawless = true;
                 if (!match.incomplete && match.humanKills >= 30 && match.deaths == 0) immortal = true;
@@ -177,6 +188,8 @@ final class CareerRecords {
                 "LEGENDARY", wins >= 1000));
             awards.add(new Achievement("Flag Emperor", "Capture 1,000 flags",
                 "LEGENDARY", captures >= 1000));
+            awards.add(new Achievement("Fireteam", "Complete a co-op mission",
+                "COMMON", coopCompletions > 0));
             return awards;
         }
 
@@ -200,6 +213,13 @@ final class CareerRecords {
 
         private void add(Match match) {
             matches.add(match);
+            if (match.cooperative()) {
+                coopSessions++;
+                seconds += match.seconds;
+                if (!match.incomplete) coopCompletions++;
+                xp += (match.incomplete ? 0L : 50L) + Math.min(20, match.seconds / 60);
+                return;
+            }
             if (match.incomplete) unfinished++;
             kills += match.kills;
             deaths += match.deaths;
@@ -300,7 +320,11 @@ final class CareerRecords {
         if (appDirectory == null) return career;
         java.util.LinkedHashMap<String, Match> records = new java.util.LinkedHashMap<>();
         readRecords(new File(appDirectory, LOG_NAME), MAX_FILE_BYTES, career, records);
-        readRecords(new File(appDirectory, "career-pending-v1.log"), 479, career, records);
+        try {
+            readRecords(new File(appDirectory, "career-pending-v1.log"), 479, career, records);
+        } catch (IOException unreadableCheckpoint) {
+            career.invalidLines++;
+        }
         for (Match match : records.values()) career.add(match);
         return career;
     }

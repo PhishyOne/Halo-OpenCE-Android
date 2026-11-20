@@ -379,6 +379,10 @@ symbols in this file:
 #include "networking/network_game_globals.h"
 #include "networking/network_game_manager.h"
 #include "networking/network_server_manager.h" /* port: a co-op game's level won */
+#include "career_results.h" /* port: finalize a won co-op mission before the lobby transition */
+#ifdef HALO_ANDROID
+#include "career_record.h"
+#endif
 #include "network_coop.h"
 #include "coop_scripts.h" /* port: port/linux/game/coop_scripts.c */
 #include "network_voice.h" /* port: port/linux/game/network_voice.c */
@@ -2399,6 +2403,10 @@ static void main_won_map_private(
 
 		main_globals.won_map = FALSE;
 		level = game ? main_get_solo_level_from_name(game->map.name) : NONE;
+		career_results_finish(game_engine_none);
+#ifdef HALO_ANDROID
+		career_record_update(game_engine_none, game_loaded_level_path());
+#endif
 		player_profile_save_level_completed(0);
 		network_game_server_port_cooperative_won(level != NONE ?
 			main_get_solo_level_name((level + 1) % NUMBER_OF_SINGLE_PLAYER_LEVELS) : NULL);

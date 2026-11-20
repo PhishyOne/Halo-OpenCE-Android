@@ -140,6 +140,8 @@ int halo_highlight_valid(const struct halo_highlight_event *event, long end_tick
 }
 
 #ifdef HALO_ANDROID
+/* root is the absolute Android app directory supplied by the recorder. */
+#undef fopen
 static const char *kind(int code)
 {
     switch (code) {

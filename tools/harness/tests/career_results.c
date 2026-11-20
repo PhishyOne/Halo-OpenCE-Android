@@ -8,6 +8,7 @@
 #include <time.h>
 #include <unistd.h>
 #include "career_results.h"
+#include "career_record.h"
 #define TRUE 1
 #define NONE (-1)
 #define MAXIMUM_LOCAL_PLAYERS 4
@@ -20,6 +21,7 @@
 #define _distributed_message_career_start 101
 #define _distributed_message_career_result 102
 #define GET_MESSAGE_TYPE(n) ((n) & 3)
+#define game_engine_none 0
 #define game_engine_ctf 1
 #define game_engine_slayer 2
 #define game_engine_oddball 3
@@ -35,6 +37,9 @@ struct data_iterator { int position; long datum_index; };
 static struct player_datum players[3];
 static void *player_data;
 static int connection, playing = 1, mode = 1;
+static int coop;
+static int network_coop_active(void) { return coop; }
+static const char *game_loaded_level_path(void) { return "levels\\b30\\b30"; }
 static long tick = 600;
 static uint32_t seed = 12345;
 static char const *test_root;
@@ -66,7 +71,6 @@ static void *data_iterator_next(struct data_iterator *it) {
     return &players[it->position++];
 }
 static long game_engine_did_player_win(long i) { return i == 0x10001; }
-static char const *platform_data_root(void) { return test_root; }
 static void platform_log(char const *message) { (void)message; }
 static void distributed_send_to_machine_reliably(long machine, void *data,
     unsigned char type, short count, unsigned short size) {
@@ -155,6 +159,7 @@ int main(int argc, char **argv) {
     struct distributed_career_result_message corrupt;
     struct distributed_career_start_message start;
     assert(argc == 3); test_root = argv[2];
+    assert(setenv("HALO_DATA_ROOT", test_root, 1) == 0);
     host_match();
     if (!strcmp(argv[1], "frozen")) {
         players[1].statistics.kills[0] = 99;
@@ -267,6 +272,34 @@ int main(int argc, char **argv) {
             /* A fresh recorder recovers the on-disk checkpoint before a new game. */
             career_record_start(); assert(records() == 1 && access(pending, F_OK) != 0);
             career_record_start(); assert(records() == 1);
+        }
+    } else if (!strncmp(argv[1], "coop_", 5)) {
+        host(); mode = game_engine_none;
+        career_results_update(mode);
+        assert(!career_results_get(0x10000, mode)); /* solo/menu excluded */
+        coop = 1;
+        for (tick = 1; tick <= 2400; tick++) {
+            career_results_update(mode);
+            packet_count = 0;
+        }
+        career_results_update(mode); assert(packet_count == 2);
+        r = career_results_get(0x10000, mode);
+        assert(r && r->incomplete && !r->won);
+        if (!strcmp(argv[1], "coop_host"))
+            career_record_update(mode, game_loaded_level_path());
+        tick = 2250; /* a campaign checkpoint reverted before victory */
+        career_results_finish(mode); assert(packet_count == 4);
+        if (!strcmp(argv[1], "coop_host")) {
+            career_record_update(mode, game_loaded_level_path());
+            assert(records() == 1);
+        } else {
+            guest(); deliver(0); deliver(1);
+            career_record_update(mode, game_loaded_level_path());
+            assert(records() == 0);
+            if (!strcmp(argv[1], "coop_guest")) {
+                deliver(2); deliver(3); /* saved before lobby teardown */
+                deliver(3); deliver(1); assert(records() == 1);
+            } else assert(!strcmp(argv[1], "coop_exit"));
         }
     } else assert(0 && "unknown test");
     puts("PASS career final results"); return 0;

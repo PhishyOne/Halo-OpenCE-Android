@@ -605,6 +605,12 @@ boolean game_safe_to_speak(
 	return TRUE;
 }
 
+/* port: the map actually loaded by this machine, including direct LAN joins. */
+const char *game_loaded_level_path(void)
+{
+	return game_globals->options.map_name;
+}
+
 boolean game_is_cooperative(
 	void)
 {

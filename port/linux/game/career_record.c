@@ -15,8 +15,7 @@
 #include "networking/network_game_globals.h"
 #include "highlight_moments.h"
 /* The guest game build does not expose the platform layer's private
- * platform.h include directory. These are its two narrow entry points. */
-extern const char *platform_data_root(void);
+ * platform.h include directory. Declare the logging entry point here. */
 extern void platform_log(const char *format, ...);
 
 #include <stdio.h>
@@ -26,6 +25,10 @@ extern void platform_log(const char *format, ...);
 #include <unistd.h>
 
 enum { CAREER_MAX_BYTES = 2 * 1024 * 1024 };
+/* All paths in this recorder are already Android paths. The game CRT's
+ * Xbox drive translation would prefix even /dev/urandom with the data root. */
+#undef fopen
+#undef rename
 static int recorded;
 static char career_id[33];
 static long career_attempted_tick;
@@ -35,6 +38,7 @@ void career_record_start(void)
 {
     halo_highlights_start();
     recorded = !career_recover_pending();
+    if (recorded) platform_log("career: could not recover pending record");
     career_id[0] = 0;
     career_attempted_tick = -1;
 }
@@ -69,19 +73,28 @@ static int career_match_id(char *hex, size_t capacity)
 static int career_recover_pending(void)
 {
     char pending[1024], journal[1024], row[480];
-    const char *root = platform_data_root();
+    const char *root = getenv("HALO_DATA_ROOT");
     FILE *in, *out;
     size_t n;
     long length;
-    int ok, last = '\n';
-    if (!root || snprintf(pending, sizeof(pending), "%s/career-pending-v1.log", root) >= (int)sizeof(pending) ||
+    int ok, read_failed, last = '\n';
+    if (!root || !*root || snprintf(pending, sizeof(pending), "%s/career-pending-v1.log", root) >= (int)sizeof(pending) ||
         snprintf(journal, sizeof(journal), "%s/career-matches-v1.log", root) >= (int)sizeof(journal)) return 0;
     in = fopen(pending, "rb");
     if (!in) return 1;
     n = fread(row, 1, sizeof(row), in);
-    ok = !ferror(in) && feof(in) && n > 0 && n < sizeof(row) && row[n - 1] == '\n';
+    read_failed = ferror(in);
+    ok = feof(in) && n > 0 && n < sizeof(row) && row[n - 1] == '\n';
     fclose(in);
-    if (!ok) return 0; /* preserve damaged evidence rather than overwrite it */
+    if (read_failed) return 0;
+    if (!ok) {
+        char id[33], backup[1024];
+        if (!career_match_id(id, sizeof(id)) ||
+            snprintf(backup, sizeof(backup), "%s/career-damaged-%s.log", root, id) >= (int)sizeof(backup) ||
+            rename(pending, backup) != 0) return 0;
+        platform_log("career: saved damaged checkpoint for inspection");
+        return 1;
+    }
     out = fopen(journal, "ab+");
     if (!out) return 0;
     ok = fseek(out, 0, SEEK_END) == 0 && (length = ftell(out)) >= 0 &&
@@ -160,7 +173,7 @@ static void career_record_write(long game_type, const char *map_name)
     long local_slot, won, seconds, length;
     int size;
 
-    if (recorded || game_type < game_engine_ctf ||
+    if (recorded || game_type < game_engine_none ||
         game_type > game_engine_race)
         return;
     data_iterator_new(&iterator, player_data);
@@ -172,9 +185,12 @@ static void career_record_write(long game_type, const char *map_name)
         result = career_results_get(iterator.datum_index, game_type);
         if (!result) return; /* missing final receipt: never invent a result */
         if (result->incomplete && result->end_tick <= career_attempted_tick) return;
-        if (!career_id[0] && !career_match_id(career_id, sizeof(career_id)))
+        if (!career_id[0] && !career_match_id(career_id, sizeof(career_id))) {
+            if (career_attempted_tick < 0) platform_log("career: could not read match ID entropy");
+            career_attempted_tick = result->end_tick;
             return;
-        root = platform_data_root();
+        }
+        root = getenv("HALO_DATA_ROOT");
         if (!root || !root[0] ||
             snprintf(path, sizeof(path), "%s/%s", root,
                 "career-matches-v1.log") >= (int)sizeof(path))
