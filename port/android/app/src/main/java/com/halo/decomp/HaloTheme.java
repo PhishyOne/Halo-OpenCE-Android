@@ -1,9 +1,14 @@
 package com.halo.decomp;
 
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.graphics.drawable.StateListDrawable;
+import android.util.StateSet;
+import android.widget.Button;
 import android.widget.TextView;
 
 /** Shared OpenCE visual language for the Android launcher and Android-made
@@ -25,6 +30,10 @@ final class HaloTheme {
     static final int CONTROL_TOP = Color.rgb(31, 66, 100);
     static final int CONTROL_BOTTOM = Color.rgb(16, 40, 65);
     static final int HIGHLIGHT_TEXT = Color.rgb(7, 21, 36);
+
+    static final ColorStateList CHECK_TINT = new ColorStateList(new int[][]{
+        {-android.R.attr.state_enabled}, {android.R.attr.state_checked}, StateSet.WILD_CARD
+    }, new int[]{BORDER, FOCUS, MUTED});
 
     private static volatile Typeface small;
     private static volatile Typeface large;
@@ -54,6 +63,22 @@ final class HaloTheme {
 
     static void font(TextView view, boolean heading) {
         view.setTypeface(face(view.getContext(), heading));
+    }
+
+    /** Bright blue means this tab or section is selected. A tap gives only
+     * a brief light ripple, including on one-shot actions such as Play. */
+    static void menuButtonColors(Button button) {
+        int[] disabled = {-android.R.attr.state_enabled};
+        int[] selected = {android.R.attr.state_selected};
+        float density = button.getResources().getDisplayMetrics().density;
+        StateListDrawable fill = new StateListDrawable();
+        fill.addState(disabled, surface(PANEL_BOTTOM, PANEL_BOTTOM, PANEL_TOP, 3, density));
+        fill.addState(selected, surface(FOCUS, FOCUS, FOCUS_TEXT, 3, density));
+        fill.addState(StateSet.WILD_CARD, surface(CONTROL_TOP, CONTROL_BOTTOM, BORDER, 3, density));
+        button.setBackgroundTintList(null);
+        button.setBackground(new RippleDrawable(ColorStateList.valueOf(0x30FFFFFF), fill, null));
+        button.setTextColor(new ColorStateList(new int[][]{disabled, selected, StateSet.WILD_CARD},
+            new int[]{MUTED, HIGHLIGHT_TEXT, TEXT}));
     }
 
     static GradientDrawable surface(int top, int bottom, int border, float radiusDp,

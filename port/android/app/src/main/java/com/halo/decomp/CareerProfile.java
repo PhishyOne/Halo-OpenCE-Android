@@ -134,9 +134,7 @@ final class CareerProfile {
                     timeline.setAllCaps(false);
                     timeline.setText("VIEW MOMENT TIMELINE");
                     HaloTheme.font(timeline, true);
-                    timeline.setTextColor(TEXT);
-                    timeline.setBackgroundTintList(ColorStateList.valueOf(
-                        HaloTheme.CONTROL_TOP));
+                    HaloTheme.menuButtonColors(timeline);
                     timeline.setOnClickListener(view ->
                         showMomentTimeline(activity, result, moments));
                     target.addView(timeline, new LinearLayout.LayoutParams(
@@ -153,9 +151,7 @@ final class CareerProfile {
                 Button full = new Button(activity);
                 full.setAllCaps(false);
                 full.setText("FULL SERVICE RECORD");
-                full.setTextColor(TEXT);
-                full.setBackgroundTintList(ColorStateList.valueOf(
-                    HaloTheme.CONTROL_TOP));
+                HaloTheme.menuButtonColors(full);
                 HaloTheme.font(full, true);
                 full.setOnClickListener(view -> show(activity, appDirectory,
                     () -> dashboard(activity, appDirectory, target)));
@@ -538,10 +534,8 @@ final class CareerProfile {
             Button momentTimeline = new Button(activity);
             momentTimeline.setText("VIEW MATCH HIGHLIGHTS");
             momentTimeline.setAllCaps(false);
-            momentTimeline.setTextColor(TEXT);
+            HaloTheme.menuButtonColors(momentTimeline);
             HaloTheme.font(momentTimeline, true);
-            momentTimeline.setBackgroundTintList(ColorStateList.valueOf(
-                HaloTheme.CONTROL_TOP));
             momentTimeline.setOnClickListener(view ->
                 showMomentTimeline(activity, career, highlights));
             panel.addView(momentTimeline);
@@ -550,10 +544,8 @@ final class CareerProfile {
             Button allHistory = new Button(activity);
             allHistory.setText("VIEW COMPLETE MATCH HISTORY");
             allHistory.setAllCaps(false);
-            allHistory.setTextColor(TEXT);
+            HaloTheme.menuButtonColors(allHistory);
             HaloTheme.font(allHistory, true);
-            allHistory.setBackgroundTintList(ColorStateList.valueOf(
-                HaloTheme.CONTROL_TOP));
             allHistory.setOnClickListener(view -> allMatches(activity, career));
             panel.addView(allHistory);
         }

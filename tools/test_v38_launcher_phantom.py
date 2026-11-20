@@ -47,7 +47,18 @@ class V38Tests(unittest.TestCase):
         self.assertNotIn("b40.map and c10.map failed", self.launcher)
 
     def test_expanded_sections_are_highlighted(self):
-        self.assertIn("hudButton(button, open);", self.launcher)
+        self.assertIn("button.setSelected(open);", self.launcher)
+        self.assertIn("modeTabs[i].setSelected(i == chosen);", self.launcher)
+        self.assertIn("advancedToggle.setSelected(advanced.getVisibility() == View.VISIBLE);", self.launcher)
+        self.assertIn("killstreakToggle.setSelected(false);", self.launcher)
+        action_style = self.launcher.split("private void hudButton(", 1)[1].split("private void ", 1)[0]
+        self.assertIn("HaloTheme.menuButtonColors(button)", action_style)
+        self.assertNotIn("setSelected", action_style)
+        self.assertNotIn("FOCUS", action_style)
+        theme = (APP / "HaloTheme.java").read_text()
+        self.assertIn("fill.addState(selected, surface(FOCUS, FOCUS,", theme)
+        self.assertIn("fill.addState(StateSet.WILD_CARD, surface(CONTROL_TOP, CONTROL_BOTTOM,", theme)
+        self.assertLess(theme.index("fill.addState(disabled"), theme.index("fill.addState(selected"))
         self.assertNotIn("hostHintsToggle", self.launcher)
         for control in ("advancedToggle, advanced",
                         "killstreakToggle, killstreakPanel", "mapsToggle, repairPanel",

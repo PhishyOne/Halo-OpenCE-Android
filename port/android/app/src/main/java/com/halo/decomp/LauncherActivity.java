@@ -9,7 +9,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
-import android.content.res.ColorStateList;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -350,25 +349,20 @@ public class LauncherActivity extends Activity {
         return panel;
     }
 
-    private void hudButton(Button button, boolean primary) {
-        button.setTextColor(primary ? HaloTheme.HIGHLIGHT_TEXT : HUD_TEXT);
-        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, primary ? 19 : 13);
+    private void hudButton(Button button, boolean large) {
+        HaloTheme.menuButtonColors(button);
+        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, large ? 19 : 13);
         button.setAllCaps(true);
         HaloTheme.font(button, true);
-        button.setMinHeight(dp(primary ? 48 : 38));
+        button.setMinHeight(dp(large ? 48 : 38));
         button.setPadding(dp(12), dp(6), dp(12), dp(6));
-        button.setBackground(primary
-            ? hudSurface(HaloTheme.FOCUS, HaloTheme.FOCUS,
-                HaloTheme.FOCUS_TEXT)
-            : hudSurface(HaloTheme.CONTROL_TOP, HaloTheme.CONTROL_BOTTOM,
-                HUD_BORDER));
     }
 
     private void hudCheck(CheckBox check) {
         check.setTextColor(HUD_TEXT);
         check.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         HaloTheme.font(check, false);
-        check.setButtonTintList(ColorStateList.valueOf(HUD_ACCENT));
+        check.setButtonTintList(HaloTheme.CHECK_TINT);
         check.setGravity(Gravity.CENTER_VERTICAL);
         check.setPadding(dp(6), dp(3), dp(6), dp(3));
     }
@@ -413,14 +407,12 @@ public class LauncherActivity extends Activity {
             this.choices = choices.clone();
             this.selection = Math.max(0, Math.min(selected, choices.length - 1));
             setAllCaps(false);
-            setTextColor(HUD_TEXT);
+            HaloTheme.menuButtonColors(this);
             HaloTheme.font(this, true);
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
             setSingleLine(true);
             setEllipsize(android.text.TextUtils.TruncateAt.END);
             setPadding(dp(9), dp(4), dp(9), dp(4));
-            setBackground(hudSurface(HaloTheme.CONTROL_TOP,
-                HaloTheme.CONTROL_BOTTOM, HUD_BORDER));
             refresh();
             setOnClickListener(view -> new AlertDialog.Builder(
                     LauncherActivity.this)
@@ -462,25 +454,20 @@ public class LauncherActivity extends Activity {
 
     /** Native OpenCE-style tabs for Profile, Offline Match, Campaign,
      * Host, Join and Tools. */
-    private void hudTab(Button button, boolean selected) {
+    private void hudTab(Button button) {
         button.setAllCaps(false);
         HaloTheme.font(button, true);
         button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        button.setTextColor(selected ? HaloTheme.HIGHLIGHT_TEXT : HUD_TEXT);
+        HaloTheme.menuButtonColors(button);
         button.setMinHeight(dp(39));
         button.setPadding(dp(2), dp(3), dp(2), dp(3));
-        button.setBackground(selected ?
-            hudSurface(HaloTheme.FOCUS, HaloTheme.FOCUS,
-                HaloTheme.FOCUS_TEXT) :
-            hudSurface(HaloTheme.CONTROL_TOP, HaloTheme.CONTROL_BOTTOM,
-                HUD_BORDER));
     }
 
     /** A disclosure control stays visually selected while its section is open. */
     private void toggleSection(Button button, View section) {
         boolean open = section.getVisibility() != View.VISIBLE;
         section.setVisibility(open ? View.VISIBLE : View.GONE);
-        hudButton(button, open);
+        button.setSelected(open);
     }
 
     private void buildLanInterface() {
@@ -535,7 +522,7 @@ public class LauncherActivity extends Activity {
         for (int i = 0; i < modeNames.length; i++) {
             Button tab = new Button(this);
             tab.setText(modeNames[i]);
-            hudTab(tab, false);
+            hudTab(tab);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 0, dp(39), 1.0f);
             if (i > 0) params.leftMargin = dp(5);
@@ -572,12 +559,12 @@ public class LauncherActivity extends Activity {
         hostRole.setId(View.generateViewId());
         hostRole.setText("HOST");
         hostRole.setTextColor(HUD_TEXT);
-        hostRole.setButtonTintList(ColorStateList.valueOf(HUD_ACCENT));
+        hostRole.setButtonTintList(HaloTheme.CHECK_TINT);
         RadioButton joinRole = new RadioButton(this);
         joinRole.setId(View.generateViewId());
         joinRole.setText("JOIN");
         joinRole.setTextColor(HUD_TEXT);
-        joinRole.setButtonTintList(ColorStateList.valueOf(HUD_ACCENT));
+        joinRole.setButtonTintList(HaloTheme.CHECK_TINT);
         roles.addView(hostRole);
         roles.addView(joinRole);
         String rememberedRole = getSharedPreferences("launcher_ui", MODE_PRIVATE)
@@ -729,7 +716,7 @@ public class LauncherActivity extends Activity {
         advanced.addView(lanText("Host port 5150. Joining client 5151.", 11));
         advanced.setVisibility(invitePending || !settings.lanOnly
             ? View.VISIBLE : View.GONE);
-        hudButton(advancedToggle, advanced.getVisibility() == View.VISIBLE);
+        advancedToggle.setSelected(advanced.getVisibility() == View.VISIBLE);
         advancedToggle.setOnClickListener(view ->
             toggleSection(advancedToggle, advanced));
         lanPanel.addView(advanced);
@@ -1195,7 +1182,7 @@ public class LauncherActivity extends Activity {
                     lanOnly.isChecked() && !invitePending);
             killstreakToggle.setVisibility(available ? View.VISIBLE : View.GONE);
             killstreakPanel.setVisibility(View.GONE);
-            hudButton(killstreakToggle, false);
+            killstreakToggle.setSelected(false);
         };
         roles.setOnCheckedChangeListener((group, id) -> {
             updateRole.run();
@@ -1217,14 +1204,14 @@ public class LauncherActivity extends Activity {
             updateRewardVisibility.run();
             if (!playing) killstreakToggle.setVisibility(View.GONE);
             killstreakPanel.setVisibility(View.GONE);
-            hudButton(killstreakToggle, false);
+            killstreakToggle.setSelected(false);
             if (playButton != null)
                 playButton.setVisibility(playing ? View.VISIBLE : View.GONE);
             int chosen = homeVisible[0] ? 0 : toolsVisible[0] ? 5 :
                 offlineMode.isChecked() ? 1 :
                 lanMode.isChecked() ? (hostRole.isChecked() ? 3 : 4) : 2;
             for (int i = 0; i < modeTabs.length; i++)
-                hudTab(modeTabs[i], i == chosen);
+                modeTabs[i].setSelected(i == chosen);
             scroll.scrollTo(0, 0);
         };
         offlineMode.setOnCheckedChangeListener((button, selected) -> {
