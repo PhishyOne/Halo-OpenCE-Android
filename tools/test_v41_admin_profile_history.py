@@ -53,7 +53,7 @@ class V41Tests(unittest.TestCase):
         self.assertIn("fields.length == 25", self.career)
         self.assertIn('return new Match(fields);', self.career)
         self.assertIn('"VIEW COMPLETE MATCH HISTORY"', self.profile)
-        self.assertIn('setTitle("MATCH DETAILS")', self.profile)
+        self.assertIn('MatchHistoryView.show(activity, career)', self.profile)
         for java_name, native_name in (
             ("flagGrabs", "grabs"), ("oddballTicks", "oddball_ticks"),
             ("ballCarrierKills", "carrier_kills"),

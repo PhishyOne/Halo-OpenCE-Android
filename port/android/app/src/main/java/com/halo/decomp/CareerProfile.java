@@ -281,7 +281,8 @@ final class CareerProfile {
         return "Co-op sessions  " + career.coopSessions + "     Missions completed  " + career.coopCompletions;
     }
 
-    private static String matchDetails(CareerRecords.Match match) {
+    /** Read-only per-match details shared with themed history cards. */
+    static String matchDetails(CareerRecords.Match match) {
         if (match.cooperative())
             return "Co-op  •  " + match.map + "\n" + match.outcome() + "\n" + match.seconds + " seconds";
         StringBuilder result = new StringBuilder();
@@ -346,28 +347,7 @@ final class CareerProfile {
     }
 
     private static void allMatches(Activity activity, CareerRecords.Career career) {
-        java.util.List<CareerRecords.Match> history =
-            new java.util.ArrayList<>(career.matches);
-        java.util.Collections.reverse(history);
-        if (history.isEmpty()) return;
-        String[] labels = new String[history.size()];
-        DateFormat dates = DateFormat.getDateTimeInstance(
-            DateFormat.SHORT, DateFormat.SHORT);
-        for (int i = 0; i < history.size(); i++) {
-            CareerRecords.Match m = history.get(i);
-            labels[i] = dates.format(new Date(m.epoch * 1000L)) + "   " +
-                m.gameType() + "  " + m.map + "    " +
-                (m.cooperative() ? m.outcome() : m.kills + "K / " + m.deaths + "D");
-        }
-        new AlertDialog.Builder(activity)
-            .setTitle("COMPLETE MATCH HISTORY")
-            .setItems(labels, (dialog, which) -> new AlertDialog.Builder(activity)
-                .setTitle("MATCH DETAILS")
-                .setMessage(matchDetails(history.get(which)))
-                .setPositiveButton("CLOSE", null)
-                .show())
-            .setNegativeButton("CLOSE", null)
-            .show();
+        MatchHistoryView.show(activity, career);
     }
 
     private static void showMomentTimeline(Activity activity,

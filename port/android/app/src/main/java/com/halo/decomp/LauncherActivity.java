@@ -697,6 +697,7 @@ public class LauncherActivity extends Activity {
         Button advancedToggle = new Button(this);
         advancedToggle.setText("NETWORK OPTIONS");
         hudButton(advancedToggle, false);
+        DisclosureChevron.attach(advancedToggle);
         lanPanel.addView(advancedToggle);
         LinearLayout advanced = new LinearLayout(this);
         advanced.setOrientation(LinearLayout.VERTICAL);
@@ -761,6 +762,7 @@ public class LauncherActivity extends Activity {
         Button killstreakToggle = new Button(this);
         killstreakToggle.setText("KILLSTREAK REWARDS");
         hudButton(killstreakToggle, false);
+        DisclosureChevron.attach(killstreakToggle);
         content.addView(killstreakToggle);
         LinearLayout killstreakPanel = hudPanel();
         killstreakPanel.setVisibility(View.GONE);
@@ -815,6 +817,7 @@ public class LauncherActivity extends Activity {
         Button mapsToggle = new Button(this);
         mapsToggle.setText("MAP REPAIR");
         hudButton(mapsToggle, false);
+        DisclosureChevron.attach(mapsToggle);
         toolsPage.addView(mapsToggle);
         LinearLayout repairPanel = hudPanel();
         repairPanel.setVisibility(View.GONE);
@@ -866,6 +869,7 @@ public class LauncherActivity extends Activity {
         Button mapAdvancedToggle = new Button(this);
         mapAdvancedToggle.setText("SHARE MAPS & BACKUPS");
         hudButton(mapAdvancedToggle, false);
+        DisclosureChevron.attach(mapAdvancedToggle);
         repairPanel.addView(mapAdvancedToggle);
         LinearLayout advancedMaps = hudPanel();
         advancedMaps.setVisibility(View.GONE);
@@ -963,6 +967,7 @@ public class LauncherActivity extends Activity {
         Button customMapsToggle = new Button(this);
         customMapsToggle.setText("CUSTOM MAPS");
         hudButton(customMapsToggle, false);
+        DisclosureChevron.attach(customMapsToggle);
         toolsPage.addView(customMapsToggle);
         LinearLayout customMapsPanel = hudPanel();
         customMapsPanel.setVisibility(View.GONE);
@@ -1055,6 +1060,7 @@ public class LauncherActivity extends Activity {
         Button savesToggle = new Button(this);
         savesToggle.setText("CAMPAIGN SAVES");
         hudButton(savesToggle, false);
+        DisclosureChevron.attach(savesToggle);
         toolsPage.addView(savesToggle);
         LinearLayout campaignSavesPanel = hudPanel();
         campaignSavesPanel.setVisibility(View.GONE);
