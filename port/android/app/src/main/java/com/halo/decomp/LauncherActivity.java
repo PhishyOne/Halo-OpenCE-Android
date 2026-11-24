@@ -303,13 +303,17 @@ public class LauncherActivity extends Activity {
         finish();
     }
 
-    /** A copy is exported to the player's selected Android document; the
-     * private source reel stays intact. No public FileProvider or upload. */
+    /** Explicit SAF export works for both the finished reel and full
+     * original video, keeping the private source intact. No broad storage
+     * permission, no local server, no public FileProvider or upload. */
     void exportReelVideo(File chosen) {
         File directory = new File(dataRoot, ReelSessionIndex.REEL_DIRECTORY);
         if (chosen == null || !directory.equals(chosen.getParentFile()) ||
-                !chosen.isFile() || chosen.length() < 2048 ||
-                !chosen.getName().matches("reel-[0-9a-f]{32}\\.mp4"))
+                !chosen.isFile() ||
+                java.nio.file.Files.isSymbolicLink(chosen.toPath()) ||
+                chosen.length() < 2048 ||
+                chosen.length() > ReelSessionIndex.SOURCE_LIMIT ||
+                !HaloVideoFiles.validName(chosen.getName()))
             return;
         pendingVideoExport = chosen.getName();
         Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT);
@@ -324,8 +328,11 @@ public class LauncherActivity extends Activity {
             boolean saved = false;
             File source = new File(new File(dataRoot,
                 ReelSessionIndex.REEL_DIRECTORY), name);
-            if (source.isFile() && name.matches("reel-[0-9a-f]{32}\\.mp4") &&
-                source.length() < 48L * 1024 * 1024) {
+            if (source.isFile() &&
+                !java.nio.file.Files.isSymbolicLink(source.toPath()) &&
+                HaloVideoFiles.validName(name) &&
+                source.length() >= 2048 &&
+                source.length() <= ReelSessionIndex.SOURCE_LIMIT) {
                 try (InputStream input = new FileInputStream(source);
                      OutputStream output = getContentResolver().openOutputStream(
                          destination, "w")) {

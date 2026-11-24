@@ -240,6 +240,7 @@ jobs:
           python3 tools/test_v51_video_reels.py -v
           python3 tools/test_v52_achievement_details.py -v
           python3 tools/test_v53_lan_rating_board.py -v
+          python3 tools/test_v54_video_diagnostics.py -v
           python3 tools/test_highlight_moments.py -v
           python3 tools/test_v42_highlights_integration.py -v
           python3 tools/test_android_experiment_package.py -v
@@ -278,6 +279,10 @@ jobs:
             tools/lan/LanBoardCoreTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LanBoardCoreTest
           javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" \
+            port/android/app/src/main/java/com/halo/decomp/VideoFrameBrightness.java \
+            tools/lan/VideoFrameBrightnessTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.VideoFrameBrightnessTest
+          javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" \
             port/android/app/src/main/java/com/halo/decomp/MatchHistoryModel.java \
             tools/lan/MatchHistoryModelTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.MatchHistoryModelTest
@@ -291,6 +296,10 @@ jobs:
             port/android/app/src/main/java/com/halo/decomp/ReelSessionIndex.java \
             tools/lan/ReelSessionIndexTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.ReelSessionIndexTest
+          javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" \
+            port/android/app/src/main/java/com/halo/decomp/HaloVideoFiles.java \
+            tools/lan/HaloVideoFilesTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.HaloVideoFilesTest
           javac -d "$RUNNER_TEMP/halo-test-classes" \
             port/android/app/src/main/java/com/halo/decomp/LanConfig.java \
             tools/lan/LanConfigSmokeTest.java
