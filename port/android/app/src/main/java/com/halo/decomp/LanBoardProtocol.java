@@ -19,7 +19,8 @@ final class LanBoardProtocol {
     static final String ROW = "HBR2";
     static final String BOARD = "HBL2";
     static final String FILE = "lan-board-v1.txt";
-    static final long MAX_AGE_MS = 30L * 24 * 3600 * 1000;
+    // Peer snapshots do not expire by age. The bounded local cache is
+    // retained until explicitly cleared or displaced by capacity.
 
     static final class Entry {
         final String id, name;

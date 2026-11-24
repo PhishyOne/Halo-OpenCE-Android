@@ -82,7 +82,7 @@ class LanPeerRatingUiTest(unittest.TestCase):
         self.assertIn("Files.move(",self.storage)
         self.assertIn("old.seenMs < entry.seenMs",self.storage)
         self.assertIn("!entry.id.equals(local.id)",self.storage)
-        self.assertIn("MAX_AGE_MS",self.storage)
+        self.assertNotIn("MAX_AGE_MS",self.storage)
         self.assertIn("SAVE",self.ui.upper())  # UI describes saved local summaries
 
     def test_user_controls_sharing_and_can_refresh_without_host_server(self):
@@ -94,7 +94,14 @@ class LanPeerRatingUiTest(unittest.TestCase):
         self.assertIn("Peer IP (optional)",self.ui)
         self.assertIn("No central server",self.ui)
         self.assertIn("Unverified",self.ui)
-        self.assertIn("Cached peer data",self.ui)
+        self.assertIn("Last synced: ",self.ui)
+        self.assertIn("java.text.DateFormat.MEDIUM",self.ui)
+        self.assertIn("java.text.DateFormat.SHORT",self.ui)
+        self.assertIn("cached on this phone",self.ui)
+        self.assertIn("Local stats refreshed: ",self.ui)
+        self.assertNotIn("Recently seen on LAN",self.ui)
+        self.assertNotIn("MAX_AGE_MS",self.storage)
+        self.assertNotIn("MAX_AGE_MS",self.protocol)
         self.assertIn("getSharedPreferences",self.identity)
         self.assertIn("private static final SecureRandom RNG",self.identity)
         self.assertIn("commit()",self.identity)

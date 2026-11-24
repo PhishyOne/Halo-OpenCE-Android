@@ -170,11 +170,28 @@ public final class LanBoardCoreTest {
                 now+1000);
             check(forgedSelf.stream().anyMatch(e->e.id.equals(me.id) &&
                 e.name.equals("Spartan One")), "remote cannot override local self card");
-            LanBoardProtocol.Entry stale = new LanBoardProtocol.Entry(id(83),
-                "Expired", 2200, 5, 100, 3, 5, 20, 2, 4,
-                now - LanBoardProtocol.MAX_AGE_MS - 10_000);
-            check(LanBoardStore.merge(root.toFile(), me,
-                List.of(stale),now).size()==2,"stale cards filtered");
+            // A player last synchronized months ago remains visible with
+            // the original LAST SYNC date instead of silently expiring.
+            final long oldSyncMs = now - 130L * 24 * 60 * 60 * 1000;
+            LanBoardProtocol.Entry offline = new LanBoardProtocol.Entry(id(83),
+                "Offline Player", 2200, 5, 100, 3, 5, 20, 2, 4, oldSyncMs);
+            List<LanBoardProtocol.Entry> allPlayers = LanBoardStore.merge(
+                root.toFile(), me, List.of(offline), now);
+            check(allPlayers.size() == 3, "offline players kept on standings");
+            check(allPlayers.stream().anyMatch(e ->
+                e.id.equals(id(83)) && e.seenMs == oldSyncMs),
+                "old snapshot timestamp preserved for offline player");
+            List<LanBoardProtocol.Entry> reopened = LanBoardStore.merge(
+                root.toFile(), me, null, now + 7L * 24 * 60 * 60 * 1000);
+            check(reopened.size() == 3 && reopened.stream().anyMatch(e ->
+                e.id.equals(id(83)) && e.seenMs == oldSyncMs),
+                "disconnected player remains after reopen without peer");
+            LanBoardProtocol.Entry future = new LanBoardProtocol.Entry(id(84),
+                "Future Claimed", 1550, 1, 0, 0, 1, 1, 1, 0,
+                now + 2L * 24 * 60 * 60 * 1000);
+            check(LanBoardStore.merge(root.toFile(), me, List.of(future),
+                now).size() == 3,
+                "peer cards with implausible future timestamps ignored");
             Path cache = root.resolve(LanBoardProtocol.FILE);
             byte[] previous = Files.readAllBytes(cache);
             reject(() -> LanBoardStore.merge(root.toFile(), me,

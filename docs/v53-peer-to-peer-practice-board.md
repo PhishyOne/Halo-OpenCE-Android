@@ -79,8 +79,13 @@ UNSC Service Rank and XP are a separate unchanged progression.
   even while others are in gameplay. Newest time-stamped peer data wins;
   the local phone's own card always wins its identity.
 - Cards include K/D and win-rate calculations only using the transmitted
-  aggregate numbers. Stale/offline cards are visibly marked and removed
-  from the local cache after 30 days.
+  aggregate numbers. **Previously synchronized players remain listed
+  after disconnecting**, even weeks or months later, while within the
+  24-player local cache capacity. Each row displays the **absolute date and
+  local time of Last synced** (when their career summary was last received).
+  This date is NOT necessarily when they last played a match. A cached entry
+  also does NOT prove the player is online or offline now. Phones that have
+  never shared their statistics cannot appear automatically.
 - TCP and UDP bind only eligible private LAN/hotspot interfaces, with
   strict private-subnet checks, fixed-size lines, nonce-bound discovery,
   finite I/O timeouts and no arbitrary file requests or Internet DNS.
@@ -93,8 +98,9 @@ another phone's direct request. A separate central host is not required.
 - Pure Java career-rating + protocol/store/discovery fixture checks
   (LanBoardCoreTest) cover eligible vs bot/unclassified/unfinished matches,
   source-data preservation, nonce rejection, bounded parsing, duplicate ID,
-  rename continuity, missing partial records, last-seen ordering, cache
-  atomicity and size caps.
+  rename continuity, missing partial records, last-synced ordering,
+  retention of offline players beyond 130 days, rejection of future-dated
+  gossip, cache atomicity and size caps.
 - Source contract tests check all Android lifecycle hooks, explicit sharing
   opt-in, peer discovery, subnet restrictions, host/guest game support,
   localhost-only file storage and no cloud APIs.

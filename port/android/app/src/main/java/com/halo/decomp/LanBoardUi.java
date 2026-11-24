@@ -220,14 +220,17 @@ final class LanBoardUi {
                 "K %,d  •  D %,d  •  A %,d  •  K/D %s",
                 e.kills, e.deaths, e.assists, kd),
                 11, HaloTheme.MUTED, false));
-            if (!mine) {
-                long ageMinutes = Math.max(0,
-                    (System.currentTimeMillis() - e.seenMs) / 60000);
-                card.addView(text(ageMinutes < 2
-                    ? "Recently seen on LAN"
-                    : "Cached peer data • " + ageMinutes + " min old",
-                    10, HaloTheme.MUTED, false));
-            }
+            // This timestamp is the latest snapshot received by the
+            // LAN mesh, not proof that the player is online right now
+            // or proof of the underlying match's original finish date.
+            String lastSync = java.text.DateFormat.getDateTimeInstance(
+                java.text.DateFormat.MEDIUM,
+                java.text.DateFormat.SHORT, Locale.getDefault())
+                .format(new java.util.Date(e.seenMs));
+            card.addView(text(mine
+                ? "Local stats refreshed: " + lastSync
+                : "Last synced: " + lastSync + " • cached on this phone",
+                10, HaloTheme.MUTED, false));
             LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);

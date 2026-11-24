@@ -85,15 +85,15 @@ final class LanBoardStore {
             throw new IOException("Too many leaderboard peers");
         Map<String, LanBoardProtocol.Entry> byId = new LinkedHashMap<>();
         for (LanBoardProtocol.Entry entry : read(root)) {
-            if (entry.seenMs > now + 86400000L ||
-                entry.seenMs < now - LanBoardProtocol.MAX_AGE_MS) continue;
+            // A disconnected player's last valid data is useful even
+            // months later. Never delete a card merely because it aged.
+            if (entry.seenMs > now + 86400000L) continue;
             if (!entry.id.equals(local.id)) byId.put(entry.id, entry);
         }
         if (received != null) {
             for (LanBoardProtocol.Entry entry : received) {
                 if (entry.id.equals(local.id)) continue;
-                if (entry.seenMs > now + 86400000L ||
-                    entry.seenMs < now - LanBoardProtocol.MAX_AGE_MS) continue;
+                if (entry.seenMs > now + 86400000L) continue;
                 // A stale cached copy from another peer must not
                 // overwrite a fresher snapshot already received.
                 LanBoardProtocol.Entry old = byId.get(entry.id);
