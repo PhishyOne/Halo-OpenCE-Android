@@ -241,6 +241,7 @@ jobs:
           python3 tools/test_v52_achievement_details.py -v
           python3 tools/test_v53_lan_rating_board.py -v
           python3 tools/test_v54_video_diagnostics.py -v
+          python3 tools/test_v55_video_playback.py -v
           python3 tools/test_highlight_moments.py -v
           python3 tools/test_v42_highlights_integration.py -v
           python3 tools/test_android_experiment_package.py -v

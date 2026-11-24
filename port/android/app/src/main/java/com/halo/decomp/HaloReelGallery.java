@@ -5,7 +5,11 @@ import android.app.AlertDialog;
 import android.app.Dialog;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
-import android.widget.MediaController;
+import android.media.MediaPlayer;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
+import android.view.SurfaceHolder;
 import android.net.Uri;
 import android.view.Gravity;
 import android.view.View;
@@ -13,7 +17,8 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
+import android.widget.FrameLayout;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.VideoView;
 
@@ -102,25 +107,53 @@ final class HaloReelGallery {
         HaloTheme.font(note, false);
         body.addView(note);
 
+        // The video SurfaceView must be transparent to its own surface.
+        // Black belongs behind it, not on the VideoView itself.
+        FrameLayout viewport = new FrameLayout(activity);
+        viewport.setBackgroundColor(Color.BLACK);
         VideoView player = new VideoView(activity);
-        player.setBackgroundColor(Color.BLACK);
+        player.setBackground(null);
+        viewport.addView(player, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER));
         LinearLayout.LayoutParams video = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
         video.topMargin = dp(activity, 7);
         video.bottomMargin = dp(activity, 5);
-        body.addView(player, video);
-        MediaController controls = new MediaController(activity);
-        controls.setAnchorView(player);
-        player.setMediaController(controls);
-        // Register callbacks BEFORE setting URI, then start after the
-        // dialog/surface exists. Avoid playback's initial-black-frame race.
-        player.setOnPreparedListener(mp -> {
-            if (dialog.isShowing()) player.start();
-        });
-        player.setOnErrorListener((mp, what, extra) -> {
-            note.setText("This MP4 could not be decoded by the phone.");
-            return true;
-        });
+        body.addView(viewport, video);
+
+        TextView playbackNote = new TextView(activity);
+        playbackNote.setTextColor(HaloTheme.MUTED);
+        playbackNote.setTextSize(11);
+        HaloTheme.font(playbackNote, false);
+        body.addView(playbackNote);
+
+        LinearLayout transport = new LinearLayout(activity);
+        transport.setGravity(Gravity.CENTER_VERTICAL);
+        Button toggle = transportButton(activity, "PAUSE");
+        transport.addView(toggle, new LinearLayout.LayoutParams(
+            dp(activity, 92), dp(activity, 40)));
+        SeekBar seek = new SeekBar(activity);
+        seek.setContentDescription("Video position");
+        transport.addView(seek, new LinearLayout.LayoutParams(
+            0, dp(activity, 40), 1f));
+        TextView time = new TextView(activity);
+        time.setTextColor(HaloTheme.TEXT);
+        time.setTextSize(12);
+        time.setGravity(Gravity.CENTER);
+        HaloTheme.font(time, false);
+        transport.addView(time, new LinearLayout.LayoutParams(
+            dp(activity, 100), dp(activity, 40)));
+        Button fullscreen = transportButton(activity, "FULLSCREEN");
+        transport.addView(fullscreen, new LinearLayout.LayoutParams(
+            dp(activity, 116), dp(activity, 40)));
+        body.addView(transport);
+
+        Playback playback = new Playback(player, toggle, seek, time, playbackNote);
+        player.setOnPreparedListener(playback::prepared);
+        player.setOnInfoListener(playback::info);
+        player.setOnErrorListener(playback::error);
+        player.setOnCompletionListener(mp -> playback.completed());
 
         LinearLayout footer = new LinearLayout(activity);
         footer.setGravity(Gravity.CENTER);
@@ -128,7 +161,10 @@ final class HaloReelGallery {
         export.setText("SAVE A COPY");
         HaloTheme.menuButtonColors(export);
         HaloTheme.font(export, true);
-        export.setOnClickListener(view -> activity.exportReelVideo(clip));
+        export.setOnClickListener(view -> {
+            playback.pauseForExport();
+            activity.exportReelVideo(clip);
+        });
         footer.addView(export, new LinearLayout.LayoutParams(
             0, dp(activity, 43), 1f));
 
@@ -167,18 +203,247 @@ final class HaloReelGallery {
         close.setOnClickListener(view -> dialog.dismiss());
         body.addView(footer);
         dialog.setContentView(body);
-        dialog.setOnDismissListener(unused -> {
-            controls.hide();
-            player.stopPlayback();
-        });
+        dialog.setOnDismissListener(unused -> playback.close());
         dialog.show();
-        player.setVideoURI(Uri.fromFile(clip));
-        player.start(); // queues playback until MediaPlayer prepares surface
         Window w = dialog.getWindow();
         if (w != null) {
-            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            w.setLayout((int)(activity.getResources().getDisplayMetrics().widthPixels * .95),
-                (int)(activity.getResources().getDisplayMetrics().heightPixels * .94));
+            // Use an opaque dialog window so SurfaceView composition does
+            // not depend on a translucent floating window.
+            w.setBackgroundDrawable(new ColorDrawable(HaloTheme.BACKGROUND_BOTTOM));
+            resize(activity, w, false);
+            final int normalSystemUi = w.getDecorView().getSystemUiVisibility();
+            fullscreen.setOnClickListener(view -> {
+                boolean full = !fullscreen.isSelected();
+                fullscreen.setSelected(full);
+                fullscreen.setText(full ? "EXIT FULL" : "FULLSCREEN");
+                title.setVisibility(full ? View.GONE : View.VISIBLE);
+                note.setVisibility(full ? View.GONE : View.VISIBLE);
+                footer.setVisibility(full ? View.GONE : View.VISIBLE);
+                resize(activity, w, full);
+                w.getDecorView().setSystemUiVisibility(full ?
+                    normalSystemUi | View.SYSTEM_UI_FLAG_FULLSCREEN |
+                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY : normalSystemUi);
+            });
+        } else {
+            fullscreen.setEnabled(false);
+        }
+        player.setVideoURI(Uri.fromFile(clip));
+        player.start(); // queues playback until MediaPlayer prepares surface
+        playback.begin();
+    }
+
+    private static Button transportButton(Activity activity, String label) {
+        Button button = new Button(activity);
+        button.setText(label);
+        button.setTextSize(12);
+        button.setPadding(dp(activity, 3), 0, dp(activity, 3), 0);
+        HaloTheme.menuButtonColors(button);
+        HaloTheme.font(button, true);
+        return button;
+    }
+
+    private static void resize(Activity activity, Window window, boolean full) {
+        window.setLayout(full ? WindowManager.LayoutParams.MATCH_PARENT :
+            (int)(activity.getResources().getDisplayMetrics().widthPixels * .95),
+            full ? WindowManager.LayoutParams.MATCH_PARENT :
+            (int)(activity.getResources().getDisplayMetrics().heightPixels * .94));
+    }
+
+    /** All player state and controls stay on the main thread and are
+     * scoped to this one dialog. A recreated surface resumes the last
+     * known position; closing the dialog releases the player and ticker. */
+    private static final class Playback implements SurfaceHolder.Callback {
+        final VideoView player;
+        final Button toggle;
+        final SeekBar seek;
+        final TextView time, status;
+        final Handler handler = new Handler(Looper.getMainLooper());
+        boolean ready, closed, failed, dragging, seeking, ended, rendered;
+        boolean wantsPlay = true;
+        int duration, position;
+        long firstFrameDeadline;
+        final Runnable ticker = new Runnable() {
+            @Override public void run() {
+                if (closed) return;
+                if (ready && !failed) {
+                    if (!ended && !dragging && !seeking) {
+                        int current = player.getCurrentPosition();
+                        position = Math.max(0, Math.min(duration, current));
+                        updateTime(position);
+                    }
+                    if (wantsPlay && !ended && !rendered &&
+                        firstFrameDeadline != 0 &&
+                        SystemClock.elapsedRealtime() >= firstFrameDeadline) {
+                        firstFrameDeadline = 0;
+                        status.setText("No first-frame signal yet. You can save a copy.");
+                    }
+                }
+                handler.postDelayed(this, 250);
+            }
+        };
+
+        Playback(VideoView player, Button toggle, SeekBar seek,
+                 TextView time, TextView status) {
+            this.player = player;
+            this.toggle = toggle;
+            this.seek = seek;
+            this.time = time;
+            this.status = status;
+            toggle.setEnabled(false);
+            seek.setEnabled(false);
+            updateTime(0);
+            status.setText("Preparing video...");
+            player.getHolder().addCallback(this);
+            toggle.setOnClickListener(view -> togglePlay());
+            seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override public void onStartTrackingTouch(SeekBar bar) {
+                    dragging = true;
+                }
+                @Override public void onProgressChanged(SeekBar bar, int value,
+                                                        boolean fromUser) {
+                    if (!fromUser) return;
+                    time.setText(clock(value) + " / " + clock(duration));
+                    if (!dragging) requestSeek(value);
+                }
+                @Override public void onStopTrackingTouch(SeekBar bar) {
+                    dragging = false;
+                    requestSeek(bar.getProgress());
+                }
+            });
+        }
+
+        void begin() {
+            handler.post(ticker);
+        }
+
+        void prepared(MediaPlayer mp) {
+            if (closed || failed) return;
+            duration = Math.max(0, player.getDuration());
+            position = Math.min(duration, position);
+            seek.setMax(Math.max(1, duration));
+            ready = true;
+            rendered = false;
+            toggle.setEnabled(true);
+            seek.setEnabled(duration > 0);
+            mp.setOnSeekCompleteListener(unused -> {
+                if (!closed && ready) seeking = false;
+            });
+            if (position > 0 && !ended) requestSeek(position);
+            updateTime(position);
+            if (wantsPlay && !ended) start();
+            else {
+                player.pause();
+                toggle.setText(ended ? "REPLAY" : "PLAY");
+                status.setText(ended ? "Playback complete" : "Paused");
+            }
+        }
+
+        boolean info(MediaPlayer mp, int what, int extra) {
+            if (closed || failed) return false;
+            if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) {
+                rendered = true;
+                firstFrameDeadline = 0;
+                status.setText(wantsPlay ? "Playing" : "Paused");
+                return true;
+            }
+            return false;
+        }
+
+        boolean error(MediaPlayer mp, int what, int extra) {
+            if (closed) return true;
+            failed = true;
+            ready = false;
+            toggle.setEnabled(false);
+            seek.setEnabled(false);
+            status.setText("Playback error (" + what + "/" + extra +
+                "). Save a copy to try another player.");
+            return true;
+        }
+
+        void start() {
+            wantsPlay = true;
+            player.start();
+            toggle.setText("PAUSE");
+            status.setText(rendered ? "Playing" : "Waiting for first video frame...");
+            firstFrameDeadline = rendered ? 0 :
+                SystemClock.elapsedRealtime() + 4000;
+        }
+
+        void togglePlay() {
+            if (!ready || failed || closed) return;
+            if (wantsPlay && !ended) {
+                wantsPlay = false;
+                player.pause();
+                toggle.setText("PLAY");
+                status.setText("Paused");
+            } else {
+                if (ended) requestSeek(0);
+                start();
+            }
+        }
+
+        void pauseForExport() {
+            if (closed || failed) return;
+            wantsPlay = false;
+            // Also clears VideoView's queued start while still preparing.
+            player.pause();
+            toggle.setText(ended ? "REPLAY" : "PLAY");
+            if (ready) status.setText(ended ? "Playback complete" : "Paused");
+        }
+
+        void requestSeek(int ms) {
+            if (!ready || closed || failed || duration <= 0) return;
+            position = Math.max(0, Math.min(duration, ms));
+            ended = false;
+            seeking = true;
+            player.seekTo(position);
+            if (!wantsPlay) toggle.setText("PLAY");
+            updateTime(position);
+        }
+
+        void completed() {
+            if (closed || failed) return;
+            wantsPlay = false;
+            ended = true;
+            seeking = false;
+            position = duration;
+            updateTime(position);
+            toggle.setText("REPLAY");
+            status.setText("Playback complete");
+        }
+
+        void updateTime(int ms) {
+            if (!dragging) seek.setProgress(ms);
+            time.setText(clock(ms) + " / " + clock(duration));
+        }
+
+        private static String clock(int ms) {
+            int seconds = Math.max(0, ms / 1000);
+            return String.format(Locale.US, "%d:%02d", seconds / 60, seconds % 60);
+        }
+
+        @Override public void surfaceCreated(SurfaceHolder holder) {
+            if (!closed && !failed) status.setText("Preparing video...");
+        }
+        @Override public void surfaceChanged(SurfaceHolder holder, int format,
+                                             int width, int height) { }
+        @Override public void surfaceDestroyed(SurfaceHolder holder) {
+            if (closed || failed) return;
+            ready = false;
+            rendered = false;
+            seeking = false;
+            dragging = false;
+            firstFrameDeadline = 0;
+            toggle.setEnabled(false);
+            seek.setEnabled(false);
+        }
+
+        void close() {
+            closed = true;
+            handler.removeCallbacks(ticker);
+            player.getHolder().removeCallback(this);
+            player.stopPlayback();
         }
     }
 }
