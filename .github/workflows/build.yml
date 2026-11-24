@@ -239,6 +239,7 @@ jobs:
           python3 tools/test_v50_match_history_ui.py -v
           python3 tools/test_v51_video_reels.py -v
           python3 tools/test_v52_achievement_details.py -v
+          python3 tools/test_v53_lan_rating_board.py -v
           python3 tools/test_highlight_moments.py -v
           python3 tools/test_v42_highlights_integration.py -v
           python3 tools/test_android_experiment_package.py -v
@@ -267,6 +268,15 @@ jobs:
             port/android/app/src/main/java/com/halo/decomp/CareerRecords.java \
             tools/lan/CareerRecordsTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.CareerRecordsTest
+          # Pure-JDK peer-to-peer leaderboard and provisional rating tests:
+          # scores, id dedup, nonce framing, stale replies and bounded writes.
+          javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" \
+            port/android/app/src/main/java/com/halo/decomp/LanRating.java \
+            port/android/app/src/main/java/com/halo/decomp/LanBoardProtocol.java \
+            port/android/app/src/main/java/com/halo/decomp/LanBoardStore.java \
+            port/android/app/src/main/java/com/halo/decomp/LanBoardDiscovery.java \
+            tools/lan/LanBoardCoreTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LanBoardCoreTest
           javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" \
             port/android/app/src/main/java/com/halo/decomp/MatchHistoryModel.java \
             tools/lan/MatchHistoryModelTest.java

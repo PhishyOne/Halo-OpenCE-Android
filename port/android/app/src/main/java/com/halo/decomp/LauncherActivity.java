@@ -91,6 +91,7 @@ public class LauncherActivity extends Activity {
     private LinearLayout stockMapResults;
     private LinearLayout dashboardPanel;
     private LanMapRepair lanMapRepair;
+    private LanBoardServer lanBoardServer;
     private ChoiceButton stockCampaignMapChoice;
     private Button stockCampaignAuditButton;
     private Button stockCampaignImportButton;
@@ -258,8 +259,14 @@ public class LauncherActivity extends Activity {
             android.widget.Toast.makeText(this, "Stop map sharing or finish the repair before playing.", android.widget.Toast.LENGTH_LONG).show();
             return;
         }
-        intent.putExtra(HaloActivity.NETWORK_SESSION, "lan".equals(
-            getSharedPreferences("launcher_ui", MODE_PRIVATE).getString("play_mode", "standard")));
+        boolean lanSession = "lan".equals(getSharedPreferences("launcher_ui",
+            MODE_PRIVATE).getString("play_mode", "standard"));
+        intent.putExtra(HaloActivity.NETWORK_SESSION, lanSession);
+        // Any opted-in phone can serve LAN standings, host or guest,
+        // while its native Halo game process is running.
+        intent.putExtra(HaloActivity.LAN_BOARD_HOST,
+            lanSession && getSharedPreferences("launcher_ui",
+                MODE_PRIVATE).getBoolean("lan_board_share", false));
         if (getSharedPreferences("reel_settings", MODE_PRIVATE)
                 .getBoolean("record_opt_in", false)) {
             android.media.projection.MediaProjectionManager projection =
@@ -289,6 +296,9 @@ public class LauncherActivity extends Activity {
     }
 
     private void launchWithoutConsent(Intent intent) {
+        // Transfer the peer listener to :game; do not hold both copies
+        // open on one device or rely on a cloud service.
+        stopBoardSharing();
         startActivity(intent);
         finish();
     }
@@ -426,6 +436,24 @@ public class LauncherActivity extends Activity {
         panel.setBackground(hudSurface(HaloTheme.PANEL_TOP,
             HaloTheme.PANEL_BOTTOM, HUD_BORDER));
         return panel;
+    }
+
+    /** This phone serves a tiny leaderboard card while its launcher is
+     * open and sharing is enabled. The game process takes over after Play. */
+    void refreshBoardSharing() {
+        boolean enabled = getSharedPreferences("launcher_ui", MODE_PRIVATE)
+            .getBoolean("lan_board_share", false);
+        if (enabled && haveData() && lanBoardServer == null)
+            lanBoardServer = LanBoardServer.start(this);
+        else if (!enabled)
+            stopBoardSharing();
+    }
+
+    private void stopBoardSharing() {
+        if (lanBoardServer != null) {
+            lanBoardServer.stop();
+            lanBoardServer = null;
+        }
     }
 
     private void hudButton(Button button, boolean large) {
@@ -679,6 +707,19 @@ public class LauncherActivity extends Activity {
             .getBoolean("lan_update_share", true));
         hudCheck(shareUpdates);
         hostPanel.addView(shareUpdates);
+        // Only the LAN host's phone may publish its career board. Disabled
+        // by default; every guest chooses separately whether to sync.
+        CheckBox shareStandings = new CheckBox(this);
+        shareStandings.setText("SHARE PROVISIONAL LAN LEADERBOARD (OPT-IN)");
+        shareStandings.setChecked(getSharedPreferences("launcher_ui", MODE_PRIVATE)
+            .getBoolean("lan_board_share", false));
+        hudCheck(shareStandings);
+        shareStandings.setOnCheckedChangeListener((view, checked) -> {
+            getSharedPreferences("launcher_ui", MODE_PRIVATE).edit()
+                .putBoolean("lan_board_share", checked).apply();
+            refreshBoardSharing();
+        });
+        hostPanel.addView(shareStandings);
 
         final int[] lanBotCounts = LanConfig.choicesIncluding(
             settings.systemLinkBotCount);
@@ -2091,6 +2132,7 @@ public class LauncherActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        stopBoardSharing();
         if (lanMapRepair != null) lanMapRepair.destroy();
         super.onDestroy();
     }
@@ -2098,6 +2140,7 @@ public class LauncherActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        refreshBoardSharing();
         // The native game may finish a match after the recorder reached its
         // time cap. Reconcile locally saved raw MP4 with durable HLM1 results
         // on return, without blocking the launcher or writing to a server.

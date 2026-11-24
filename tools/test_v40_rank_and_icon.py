@@ -48,9 +48,15 @@ class RankArtAndRatings(unittest.TestCase):
 
     def test_skill_rating_is_unrated_until_verified_host_results(self):
         self.assertIn('"SPARTAN RATING"', self.profile)
-        self.assertGreaterEqual(self.profile.count('"UNRATED"'), 2)
-        self.assertIn('Verified human matches are required', self.profile)
-        self.assertIn('Bot kills and career XP do not affect skill rating.', self.profile)
+        # The v53 Practice SR estimate is explicitly NOT a certified Elo.
+        # Keep the safety assertion on the true competitive rating.
+        self.assertIn('Verified competitive Spartan Rating: UNRATED', self.profile)
+        self.assertIn('PRACTICE SR', self.profile)
+        self.assertIn('Does not prove a bot-free lobby', self.profile)
+        rating = (JAVA / "LanRating.java").read_text()
+        self.assertIn('m.botKills == 0', rating)
+        self.assertIn('m.humanKills == m.kills', rating)
+        self.assertNotIn('career.xp', rating)
         # Never infer skill from legacy aggregate self-reported career games.
         self.assertNotIn('rating = career.xp', self.profile)
         self.assertNotIn('rating = career.kills', self.profile)

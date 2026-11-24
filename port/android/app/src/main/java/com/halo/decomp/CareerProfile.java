@@ -156,10 +156,7 @@ final class CareerProfile {
                     "Real MP4 capture is optional. Older event bookmarks "
                     + "cannot generate missing video frames.", 11, MUTED, false));
                 section(activity, target, "SPARTAN RATING");
-                target.addView(text(activity, "UNRATED", 17, GOLD, true));
-                target.addView(text(activity,
-                    "Verified human matches are required for a skill rating.",
-                    12, MUTED, false));
+                addRatingAndLeaderboard(activity, target, result);
                 if (warning != null)
                     target.addView(text(activity, "Career data: " + warning,
                         12, Color.rgb(255, 184, 136), false));
@@ -355,6 +352,39 @@ final class CareerProfile {
         return row;
     }
 
+    /** Honest split: provisional calculated practice rating today;
+     * verified head-to-head Spartan Rating needs a shared match ID,
+     * signed host receipts and a proven bot-free roster. */
+    private static void addRatingAndLeaderboard(Activity activity,
+            LinearLayout panel, CareerRecords.Career career) {
+        LanRating.Score practice = LanRating.calculate(career);
+        String score = practice.provisional()
+            ? practice.value + "  /  " + practice.tier()
+            : "UNRATED";
+        panel.addView(text(activity, "PRACTICE SR  " + score,
+            17, GOLD, true));
+        panel.addView(text(activity,
+            practice.matches + " qualifying results   •   " +
+            practice.wins + " wins   •   " + practice.losses + " losses",
+            12, TEXT, false));
+        panel.addView(text(activity,
+            "Provisional estimate only: completed classified matches with "
+            + "no recorded bot kills. Does not prove a bot-free lobby.",
+            11, MUTED, false));
+        panel.addView(text(activity,
+            "Verified competitive Spartan Rating: UNRATED",
+            12, HaloTheme.WARNING, false));
+        Button standings = new Button(activity);
+        standings.setText("VIEW / SYNC LAN LEADERBOARD");
+        standings.setAllCaps(false);
+        HaloTheme.font(standings, true);
+        HaloTheme.menuButtonColors(standings);
+        standings.setOnClickListener(view ->
+            LanBoardUi.show(activity, activity.getExternalFilesDir(null)));
+        panel.addView(standings, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(activity, 43)));
+    }
+
     private static void section(Activity activity, LinearLayout layout, String title) {
         TextView label = text(activity, title, 13, GOLD, true);
         label.setPadding(0, dp(activity, 12), 0, dp(activity, 4));
@@ -515,11 +545,7 @@ final class CareerProfile {
         }
 
         section(activity, panel, "SPARTAN RATING");
-        panel.addView(text(activity, "UNRATED", 16, GOLD, true));
-        panel.addView(text(activity,
-            "Competitive rating requires verified human matches. "
-            + "Bot kills and career XP do not affect skill rating.",
-            12, MUTED, false));
+        addRatingAndLeaderboard(activity, panel, career);
 
         section(activity, panel, "CAREER STATISTICS");
         panel.addView(text(activity,

@@ -37,8 +37,10 @@ public class HaloActivity extends SDLActivity {
     static final String OFFLINE_BOT_ARGUMENTS = "com.halo.decomp.OFFLINE_BOT_ARGUMENTS";
     static final String LAN_UPDATE_HOST = "com.halo.decomp.LAN_UPDATE_HOST";
     static final String LAN_DISCOVERY_HOST = "com.halo.decomp.LAN_DISCOVERY_HOST";
+    static final String LAN_BOARD_HOST = "com.halo.decomp.LAN_BOARD_HOST";
     private LanUpdateServer lanUpdateServer;
     private LanDiscoveryServer lanDiscoveryServer;
+    private LanBoardServer lanBoardServer;
     /** lets system link's broadcasts in over Wi-Fi while the game runs */
     private WifiManager.MulticastLock multicastLock;
     /**
@@ -137,6 +139,8 @@ public class HaloActivity extends SDLActivity {
             intent.getBooleanExtra(LAN_DISCOVERY_HOST, false);
         boolean shouldShare = intent != null &&
             intent.getBooleanExtra(LAN_UPDATE_HOST, false);
+        boolean shouldShareBoard = intent != null &&
+            intent.getBooleanExtra(LAN_BOARD_HOST, false);
         // LAN host discovery is independent of opt-in APK sharing.
         if (shouldAdvertise && lanDiscoveryServer == null)
             lanDiscoveryServer = LanDiscoveryServer.start();
@@ -149,6 +153,14 @@ public class HaloActivity extends SDLActivity {
         } else if (!shouldShare && lanUpdateServer != null) {
             lanUpdateServer.stop();
             lanUpdateServer = null;
+        }
+        // Player has to opt in on the host; separate from game traffic,
+        // discovery, APK sharing, and any server on Forge.
+        if (shouldShareBoard && lanBoardServer == null)
+            lanBoardServer = LanBoardServer.start(this);
+        else if (!shouldShareBoard && lanBoardServer != null) {
+            lanBoardServer.stop();
+            lanBoardServer = null;
         }
     }
 
@@ -380,6 +392,10 @@ public class HaloActivity extends SDLActivity {
         if (lanUpdateServer != null) {
             lanUpdateServer.stop();
             lanUpdateServer = null;
+        }
+        if (lanBoardServer != null) {
+            lanBoardServer.stop();
+            lanBoardServer = null;
         }
         rewardActivityResumed = false;
         rewardAudioClosed = true;
