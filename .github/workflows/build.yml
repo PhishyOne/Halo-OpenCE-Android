@@ -158,6 +158,21 @@ jobs:
           path: build/android/third_party
           key: android-third-party-${{ hashFiles('tools/android_build.py', 'port/android/patches/**') }}
 
+      # When musl.libc.org times out on GitHub runners, Debian's upstream
+      # tarball supplies the exact byte-identical pinned musl 1.2.5 source.
+      # Verify SHA-256 before extraction; do not change the pinned version.
+      - name: Restore pinned musl source from verified mirror
+        if: ${{ inputs.android_only }}
+        run: |
+          if [ ! -f build/android/third_party/musl-1.2.5/include/stdio.h ]; then
+            mkdir -p build/android/third_party
+            curl -fL --retry 2 --retry-delay 2 --connect-timeout 12 --max-time 90 -o "$RUNNER_TEMP/musl-1.2.5.tar.gz" https://deb.debian.org/debian/pool/main/m/musl/musl_1.2.5.orig.tar.gz
+            printf '%s\n' "a9a118bbe84d8764da0ea0d28b3ab3fae8477fc7e4085d90102b8596fc7c75e4  $RUNNER_TEMP/musl-1.2.5.tar.gz" | sha256sum -c -
+            tar xzf "$RUNNER_TEMP/musl-1.2.5.tar.gz" -C build/android/third_party
+            rm "$RUNNER_TEMP/musl-1.2.5.tar.gz"
+            test -f build/android/third_party/musl-1.2.5/include/stdio.h
+          fi
+
       - uses: actions/cache@v4
         with:
           path: |

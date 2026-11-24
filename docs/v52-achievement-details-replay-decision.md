@@ -71,3 +71,21 @@ describe current HLM1 timestamps as full replay data.
   remain unchanged. Update in place, not uninstall.
 - Existing v51 APK remains rollback installer; preserve all
   app-scoped game data.
+
+## Hosted build dependency recovery
+
+The first v52 Android-only run (45300692241) passed the source checks
+but failed during native release configuration because the GitHub
+runner could not connect to the original musl.libc.org host. This was
+not an application compilation error.
+
+To avoid repeatedly paying for that same network failure, the Android-only
+workflow now ensures pinned musl 1.2.5 is available from Debian's
+source mirror when the third-party cache lacks it:
+https://deb.debian.org/debian/pool/main/m/musl/musl_1.2.5.orig.tar.gz.
+The archive was retrieved and verified byte-for-byte on Forge against
+a9a118bbe84d8764da0ea0d28b3ab3fae8477fc7e4085d90102b8596fc7c75e4,
+the already-established upstream checksum in tools/android_build.py.
+No change to C library version or native code is involved; CI still
+refuses any mismatching archive. This fallback is limited to opt-in
+Android-only runs, preserving existing regular release behavior.
