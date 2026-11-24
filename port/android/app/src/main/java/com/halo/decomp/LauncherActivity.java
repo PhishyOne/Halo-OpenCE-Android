@@ -71,6 +71,8 @@ public class LauncherActivity extends Activity {
     private static final int PICK_STOCK_MAP_IMPORT = 10;
     private static final int PICK_STOCK_MAP_EXPORT = 11;
     private static final int PICK_ADMIN_CAMPAIGN_ARCHIVE = 12;
+    private static final int PICK_REEL_CONSENT = 13;
+    private static final int PICK_REEL_EXPORT = 14;
     private static final String STATE_STOCK_MAP_TRANSFER = "stock-map-transfer";
     // Halo-style HUD colours. Native Android widgets remain accessible,
     // including the system file picker and LAN diagnostics.
@@ -94,6 +96,8 @@ public class LauncherActivity extends Activity {
     private Button stockCampaignImportButton;
     private Button stockCampaignExportButton;
     private String pendingStockMapTransfer;
+    private Intent pendingVideoLaunch;
+    private String pendingVideoExport;
     private Button customMapImportButton;
     private Button customMapFolderButton;
     private Button customMapZipButton;
@@ -256,8 +260,83 @@ public class LauncherActivity extends Activity {
         }
         intent.putExtra(HaloActivity.NETWORK_SESSION, "lan".equals(
             getSharedPreferences("launcher_ui", MODE_PRIVATE).getString("play_mode", "standard")));
+        if (getSharedPreferences("reel_settings", MODE_PRIVATE)
+                .getBoolean("record_opt_in", false)) {
+            android.media.projection.MediaProjectionManager projection =
+                (android.media.projection.MediaProjectionManager)
+                getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+            if (projection != null) {
+                try {
+                    // A fresh system consent for EVERY session, required by
+                    // Android 14+. The recording is opt-in and local-only.
+                    pendingVideoLaunch = intent;
+                    Intent request = android.os.Build.VERSION.SDK_INT >= 34
+                        ? projection.createScreenCaptureIntent(
+                            android.media.projection.MediaProjectionConfig
+                                .createConfigForDefaultDisplay())
+                        : projection.createScreenCaptureIntent();
+                    startActivityForResult(request, PICK_REEL_CONSENT);
+                    return;
+                } catch (RuntimeException refused) {
+                    pendingVideoLaunch = null;
+                    android.widget.Toast.makeText(this,
+                        "Screen recording unavailable. Starting Halo normally.",
+                        android.widget.Toast.LENGTH_LONG).show();
+                }
+            }
+        }
+        launchWithoutConsent(intent);
+    }
+
+    private void launchWithoutConsent(Intent intent) {
         startActivity(intent);
         finish();
+    }
+
+    /** A copy is exported to the player's selected Android document; the
+     * private source reel stays intact. No public FileProvider or upload. */
+    void exportReelVideo(File chosen) {
+        File directory = new File(dataRoot, ReelSessionIndex.REEL_DIRECTORY);
+        if (chosen == null || !directory.equals(chosen.getParentFile()) ||
+                !chosen.isFile() || chosen.length() < 2048 ||
+                !chosen.getName().matches("reel-[0-9a-f]{32}\\.mp4"))
+            return;
+        pendingVideoExport = chosen.getName();
+        Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        save.addCategory(Intent.CATEGORY_OPENABLE);
+        save.setType("video/mp4");
+        save.putExtra(Intent.EXTRA_TITLE, "Halo-" + chosen.getName());
+        startActivityForResult(save, PICK_REEL_EXPORT);
+    }
+
+    private void exportReelToDocument(Uri destination, String name) {
+        new Thread(() -> {
+            boolean saved = false;
+            File source = new File(new File(dataRoot,
+                ReelSessionIndex.REEL_DIRECTORY), name);
+            if (source.isFile() && name.matches("reel-[0-9a-f]{32}\\.mp4") &&
+                source.length() < 48L * 1024 * 1024) {
+                try (InputStream input = new FileInputStream(source);
+                     OutputStream output = getContentResolver().openOutputStream(
+                         destination, "w")) {
+                    if (output != null) {
+                        byte[] buffer = new byte[65536];
+                        int read;
+                        while ((read = input.read(buffer)) >= 0)
+                            if (read > 0) output.write(buffer, 0, read);
+                        output.flush();
+                        saved = true;
+                    }
+                } catch (Exception problem) {
+                    android.util.Log.w("HaloVideo", "Could not export local reel", problem);
+                }
+            }
+            boolean done = saved;
+            runOnUiThread(() -> android.widget.Toast.makeText(this,
+                done ? "Halo reel saved to your chosen folder." :
+                    "Could not copy reel. Private original kept.",
+                android.widget.Toast.LENGTH_LONG).show());
+        }, "Halo-reel-export").start();
     }
 
     private int dp(float value) {
@@ -1282,6 +1361,16 @@ public class LauncherActivity extends Activity {
                 Uri.parse("package:" + getPackageName()))));
         footer.addView(appSettings);
 
+        CheckBox recordHighlights = new CheckBox(this);
+        recordHighlights.setText("RECORD MATCH VIDEO (OPT-IN • SILENT • 20 MIN MAX)");
+        recordHighlights.setChecked(getSharedPreferences("reel_settings",
+            MODE_PRIVATE).getBoolean("record_opt_in", false));
+        hudCheck(recordHighlights);
+        recordHighlights.setOnCheckedChangeListener((view, checked) ->
+            getSharedPreferences("reel_settings", MODE_PRIVATE).edit()
+                .putBoolean("record_opt_in", checked).apply());
+        footer.addView(recordHighlights);
+
         Button play = new Button(this);
         playButton = play;
         play.setText("PLAY");
@@ -2009,6 +2098,12 @@ public class LauncherActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        // The native game may finish a match after the recorder reached its
+        // time cap. Reconcile locally saved raw MP4 with durable HLM1 results
+        // on return, without blocking the launcher or writing to a server.
+        if (dataRoot != null)
+            new Thread(() -> ReelLibrary.assemble(dataRoot),
+                "Halo-local-reel-recovery").start();
         // data pushed with adb while this screen was open
         if (pick != null && pick.isEnabled() && haveData()) {
             pick = null;
@@ -2021,6 +2116,38 @@ public class LauncherActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == PICK_REEL_CONSENT) {
+            Intent game = pendingVideoLaunch;
+            pendingVideoLaunch = null;
+            if (game == null) return;
+            if (resultCode == RESULT_OK && data != null) {
+                Intent recording = new Intent(this, HaloVideoCaptureService.class)
+                    .setAction(HaloVideoCaptureService.ACTION_START)
+                    .putExtra(HaloVideoCaptureService.EXTRA_CONSENT_CODE, resultCode)
+                    .putExtra(HaloVideoCaptureService.EXTRA_CONSENT_DATA, data);
+                try {
+                    startForegroundService(recording);
+                } catch (RuntimeException unavailable) {
+                    android.widget.Toast.makeText(this,
+                        "Recording unavailable. Halo will still launch.",
+                        android.widget.Toast.LENGTH_LONG).show();
+                }
+            } else {
+                android.widget.Toast.makeText(this,
+                    "Recording skipped; Halo starts normally.",
+                    android.widget.Toast.LENGTH_SHORT).show();
+            }
+            launchWithoutConsent(game);
+            return;
+        }
+        if (requestCode == PICK_REEL_EXPORT) {
+            String name = pendingVideoExport;
+            pendingVideoExport = null;
+            if (resultCode == RESULT_OK && name != null && data != null &&
+                data.getData() != null)
+                exportReelToDocument(data.getData(), name);
+            return;
+        }
         if (requestCode == PICK_STOCK_MAP_IMPORT) {
             if (resultCode == RESULT_OK && data != null) importStockMapRepairs(data);
             return;

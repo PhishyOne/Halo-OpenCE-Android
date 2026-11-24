@@ -368,6 +368,10 @@ public class HaloActivity extends SDLActivity {
 
     @Override
     protected void onDestroy() {
+        // Finalize the opt-in screen recording when gameplay closes.
+        // This is a separate service in the launcher process; normal Halo
+        // shutdown and saved careers do not depend on its availability.
+        stopService(new Intent(this, HaloVideoCaptureService.class));
         stopService(new Intent(this, NetworkSessionService.class));
         if (lanDiscoveryServer != null) {
             lanDiscoveryServer.stop();

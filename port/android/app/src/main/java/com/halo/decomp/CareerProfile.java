@@ -140,6 +140,21 @@ final class CareerProfile {
                     target.addView(timeline, new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT, dp(activity, 40)));
                 }
+                section(activity, target, "VIDEO REELS");
+                Button videoReels = new Button(activity);
+                videoReels.setText("WATCH / SAVE LOCAL VIDEO HIGHLIGHTS");
+                videoReels.setAllCaps(false);
+                HaloTheme.font(videoReels, true);
+                HaloTheme.menuButtonColors(videoReels);
+                videoReels.setOnClickListener(view -> {
+                    if (activity instanceof LauncherActivity)
+                        HaloReelGallery.show((LauncherActivity)activity, appDirectory);
+                });
+                target.addView(videoReels, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, dp(activity, 43)));
+                target.addView(text(activity,
+                    "Real MP4 capture is optional. Older event bookmarks "
+                    + "cannot generate missing video frames.", 11, MUTED, false));
                 section(activity, target, "SPARTAN RATING");
                 target.addView(text(activity, "UNRATED", 17, GOLD, true));
                 target.addView(text(activity,

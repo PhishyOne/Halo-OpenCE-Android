@@ -13,6 +13,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- Optional user-approved gameplay video capture; never enabled silently. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <!-- system link multiplayer on the local network -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -90,6 +92,12 @@
         <service android:name=".NetworkSessionService" android:process=":game"
             android:exported="false" android:stopWithTask="true"
             android:foregroundServiceType="connectedDevice" />
+
+        <!-- Recorder remains in the launcher process, outside the large
+             fixed-address native game process; requires explicit OS consent. -->
+        <service android:name=".HaloVideoCaptureService"
+            android:exported="false" android:stopWithTask="false"
+            android:foregroundServiceType="mediaProjection" />
 
         <!-- the downloaded new version, for the package installer (Updater) -->
         <provider
