@@ -242,6 +242,62 @@ final class CareerProfile {
         return row;
     }
 
+    /** The detail popup reads the actual achievement definition; no guessed
+     * progress and no locked/secret achievements are revealed early. */
+    private static void showAchievementDetails(Activity activity,
+            CareerRecords.Achievement medal, int slot) {
+        if (activity.isFinishing() || activity.isDestroyed()) return;
+        if (medal == null || !medal.earned) {
+            new AlertDialog.Builder(activity)
+                .setTitle("ACHIEVEMENT SLOT " + slot)
+                .setMessage("Not earned yet. Complete more matches and "
+                    + "objectives to unlock an achievement for this slot.")
+                .setPositiveButton("CLOSE", null)
+                .show();
+            return;
+        }
+        LinearLayout details = new LinearLayout(activity);
+        details.setOrientation(LinearLayout.VERTICAL);
+        details.setGravity(Gravity.CENTER_HORIZONTAL);
+        details.setPadding(dp(activity, 18), dp(activity, 13),
+            dp(activity, 18), dp(activity, 15));
+        details.setBackground(HaloTheme.surface(HaloTheme.PANEL_TOP,
+            HaloTheme.PANEL_BOTTOM, HaloTheme.BORDER, 6,
+            activity.getResources().getDisplayMetrics().density));
+        AchievementMedal enlarged = new AchievementMedal(activity, medal.rarity);
+        details.addView(enlarged, new LinearLayout.LayoutParams(
+            dp(activity, 64), dp(activity, 64)));
+
+        TextView name = text(activity, medal.title, 19, TEXT, true);
+        name.setGravity(Gravity.CENTER);
+        details.addView(name);
+        TextView tier = text(activity, medal.rarity + "  •  UNLOCKED",
+            13, rarityColor(medal.rarity), true);
+        tier.setGravity(Gravity.CENTER);
+        details.addView(tier);
+
+        TextView requirementLabel = text(activity,
+            "UNLOCK REQUIREMENT", 11, GOLD, true);
+        requirementLabel.setGravity(Gravity.CENTER);
+        requirementLabel.setPadding(0, dp(activity, 12), 0, 0);
+        details.addView(requirementLabel);
+        TextView requirement = text(activity, medal.description,
+            14, TEXT, false);
+        requirement.setGravity(Gravity.CENTER);
+        details.addView(requirement);
+
+        // Landscape phone screens have little vertical space. Keep
+        // descriptions readable without clipping the bottom of the dialog.
+        ScrollView scroll = new ScrollView(activity);
+        scroll.setFillViewport(true);
+        scroll.addView(details);
+        new AlertDialog.Builder(activity)
+            .setTitle("SPARTAN ACHIEVEMENT")
+            .setView(scroll)
+            .setPositiveButton("CLOSE", null)
+            .show();
+    }
+
     /** The three best earned medals, never unreleased rank insignias.
      * Locked placeholders occupy empty slots without implying an award. */
     private static LinearLayout threeMedals(Activity activity,
@@ -281,6 +337,19 @@ final class CareerProfile {
             LinearLayout.LayoutParams cell = new LinearLayout.LayoutParams(
                 0, dp(activity, 110), 1f);
             if (index > 0) cell.leftMargin = dp(activity, 6);
+            // The whole medal tile is tappable, not only its 43dp icon.
+            final int slot = index + 1;
+            tile.setClickable(true);
+            tile.setFocusable(true);
+            tile.setContentDescription(medal == null ?
+                "Achievement slot " + slot + ", locked. Tap for details." :
+                medal.title + ", " + medal.rarity +
+                " achievement, unlocked. Tap for details.");
+            tile.setForeground(new android.graphics.drawable.RippleDrawable(
+                ColorStateList.valueOf(0x28FFFFFF), null,
+                new android.graphics.drawable.ColorDrawable(Color.WHITE)));
+            tile.setOnClickListener(view ->
+                showAchievementDetails(activity, medal, slot));
             row.addView(tile, cell);
         }
         return row;

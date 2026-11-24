@@ -223,6 +223,7 @@ jobs:
           python3 tools/test_v41_admin_profile_history.py -v
           python3 tools/test_v50_match_history_ui.py -v
           python3 tools/test_v51_video_reels.py -v
+          python3 tools/test_v52_achievement_details.py -v
           python3 tools/test_highlight_moments.py -v
           python3 tools/test_v42_highlights_integration.py -v
           python3 tools/test_android_experiment_package.py -v
