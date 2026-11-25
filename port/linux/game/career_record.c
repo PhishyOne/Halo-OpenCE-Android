@@ -109,16 +109,30 @@ static int video_foreground_token(const char *root, char token[33])
     return 1;
 }
 
+/* The strict game translation units intentionally hide POSIX time APIs.
+ * The guest runtime is compiled with POSIX/GNU declarations enabled.
+ * Host-side fixtures use their native libc for the same clock. */
+#ifdef HALO_ARM64_GUEST
+extern long long halo_android_monotonic_millis(void);
+#else
+static long long halo_android_monotonic_millis(void)
+{
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return -1;
+    return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+#endif
+
 void career_video_state(int playing_multiplayer, long tick)
 {
     const char *root = getenv("HALO_DATA_ROOT");
-    struct timespec ts;
     long long now;
     char token[33], path[1024], tmp[1024], row[160];
     FILE *out;
     int size, ok;
-    if (!root || !*root || clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return;
-    now = (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    if (!root || !*root) return;
+    now = halo_android_monotonic_millis();
+    if (now < 0) return;
     if (playing_multiplayer && (tick < 0 || tick > 8640000)) return;
     /* Immediate transition to idle, otherwise at most two updates/sec. */
     if (playing_multiplayer && now >= video_last_ms && now - video_last_ms < 500) return;

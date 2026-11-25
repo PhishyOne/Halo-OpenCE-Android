@@ -20,6 +20,13 @@ class MatchVideoTests(unittest.TestCase):
         self.assertIn("game_engine_globals.postgame_state == game_engine_mode_active", self.engine)
         self.assertIn("career_video_state(0, 0)", self.engine)
         self.assertIn("CLOCK_MONOTONIC", self.native)
+        self.assertIn("now = halo_android_monotonic_millis();", self.native)
+        clock = (ROOT / "port/android/guest/runtime/guest_clock.c").read_text()
+        self.assertIn("clock_gettime(CLOCK_MONOTONIC, &ts)", clock)
+        self.assertIn("(long long)ts.tv_sec * 1000", clock)
+        self.assertIn("return -1;", clock)
+        build = (ROOT / "tools/android_build.py").read_text()
+        self.assertIn('runtime_dir.glob("*.c")', build)
         self.assertIn("video_foreground_token(root, token)", self.native)
         self.assertIn("career_match_id(career_id, sizeof(career_id))", self.native)
 
