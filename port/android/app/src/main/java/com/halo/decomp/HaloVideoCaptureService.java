@@ -6,10 +6,11 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ServiceInfo;
 import android.content.Context;
-import android.graphics.PixelFormat;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
 import android.media.MediaRecorder;
@@ -24,19 +25,20 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.Surface;
 import android.view.WindowManager;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.LinkOption;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-/** Opt-in real H.264 gameplay footage, using a single Android-approved
- * MediaProjection and hardware encoder. No camera, mic, network or upload.
- * The original MP4 is kept while the bounded highlight reel is cut.
- *
- * This foreground service belongs to the launcher process, never :game,
- * to avoid bloating Halo's native emulator heap. */
+/** One explicitly consented MediaProjection per Halo launch. No encoder
+ * or video file outside an active, visible competitive multiplayer match.
+ * Recorder surfaces are replaced on the same virtual display; the Android
+ * 14+ single-use consent token is never reused. All footage stays local. */
 public final class HaloVideoCaptureService extends Service {
     static final String ACTION_START = "com.halo.decomp.RECORD_SCREEN";
     static final String ACTION_STOP = "com.halo.decomp.STOP_SCREEN_RECORDING";
@@ -50,85 +52,121 @@ public final class HaloVideoCaptureService extends Service {
     private static final int FRAME_RATE = 20;
     private static final int WIDTH = 640;
     private static final long MIN_FREE = 500L * 1024 * 1024;
+    private static final long MAX_RAW_BYTES = 512L * 1024 * 1024;
+    private static final long POLL_MS = 250;
 
     private MediaProjection projection;
     private MediaProjection.Callback projectionCallback;
     private VirtualDisplay virtualDisplay;
     private MediaRecorder recorder;
-    private File pending;
-    private File completed;
+    private Surface recorderSurface;
+    private File pending, completed, root, reels;
     private Handler main;
-    private long startedWallMs;
-    private long startedUptime;
-    private int capturedWidth, capturedHeight;
-    private boolean active, stopping, gameObserved;
-    private int emptyGameChecks;
+    private ExecutorService worker;
+    private String token, attemptedMatch, activeMatch;
+    private MatchVideoTimeline.Builder timeline;
+    private long armedAt, captureStarted, lastProcessCheck, retryUntil, lastAssembly;
+    private int capturedWidth, capturedHeight, densityDpi, emptyGameChecks;
+    private boolean armed, stopping, active, gameObserved, keepFull, visibilityBlocked;
+    private boolean assemblyBusy, receiverRegistered;
+    private final Runnable pollTask = this::poll;
+    private final BroadcastReceiver visibility = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent intent) {
+            if (!armed || !MatchVideoState.VISIBILITY.equals(intent.getAction()) ||
+                !token.equals(intent.getStringExtra(MatchVideoState.TOKEN))) return;
+            visibilityBlocked = !intent.getBooleanExtra("visible", false);
+            if (visibilityBlocked && active) finishCapture(false);
+            main.removeCallbacks(pollTask);
+            poll();
+        }
+    };
 
     @Override public void onCreate() {
         super.onCreate();
         main = new Handler(Looper.getMainLooper());
+        worker = Executors.newSingleThreadExecutor(r -> new Thread(r, "Halo-local-reel-muxer"));
+        IntentFilter filter = new IntentFilter(MatchVideoState.VISIBILITY);
+        if (Build.VERSION.SDK_INT >= 33)
+            registerReceiver(visibility, filter, Context.RECEIVER_NOT_EXPORTED);
+        else registerReceiver(visibility, filter);
+        receiverRegistered = true;
     }
 
     @Override public int onStartCommand(Intent command, int flags, int startId) {
-        if (command == null) { stopSelf(); return START_NOT_STICKY; }
+        if (command == null) { stopSession(); return START_NOT_STICKY; }
         if (ACTION_STOP.equals(command.getAction())) {
-            stopRecording();
+            stopSession();
             return START_NOT_STICKY;
         }
-        if (!ACTION_START.equals(command.getAction()) || active || stopping) {
-            if (!active) stopSelf();
+        if (!ACTION_START.equals(command.getAction()) || stopping) {
+            if (!armed) stopSession();
             return START_NOT_STICKY;
         }
         int resultCode = command.getIntExtra(EXTRA_CONSENT_CODE, 0);
         Intent consent = command.getParcelableExtra(EXTRA_CONSENT_DATA);
-        if (resultCode != android.app.Activity.RESULT_OK || consent == null) {
-            stopSelf();
+        String nextToken = command.getStringExtra(MatchVideoState.TOKEN);
+        if (resultCode != android.app.Activity.RESULT_OK || consent == null ||
+            !MatchVideoState.id(nextToken)) {
+            if (!armed) stopSession();
             return START_NOT_STICKY;
         }
+        if (armed && nextToken.equals(token)) return START_NOT_STICKY;
         try {
+            // A new consented launch may replace an older session, but must
+            // not reuse its projection token or abandon its active MP4.
+            releaseProjection();
+            token = nextToken;
             startForegroundCapture();
-            beginRecording(resultCode, consent);
-            main.postDelayed(this::checkGameActivity, 15_000);
+            armProjection(resultCode, consent);
+            main.post(pollTask);
         } catch (Exception error) {
             Log.e(TAG, "Screen recording unavailable; Halo continues normally", error);
-            stopRecording();
+            stopSession();
         }
         return START_NOT_STICKY;
+    }
+
+    private Notification notification(String title, String detail) {
+        Intent stop = new Intent(this, HaloVideoCaptureService.class).setAction(ACTION_STOP);
+        PendingIntent stopAction = PendingIntent.getService(this, 51, stop,
+            PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        return new Notification.Builder(this, CHANNEL)
+            .setSmallIcon(android.R.drawable.stat_sys_upload)
+            .setContentTitle(title)
+            .setContentText(detail)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .addAction(new Notification.Action.Builder(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                "STOP RECORDING", stopAction).build())
+            .build();
     }
 
     private void startForegroundCapture() {
         NotificationManager manager = getSystemService(NotificationManager.class);
         manager.createNotificationChannel(new NotificationChannel(CHANNEL,
             "Halo video highlights", NotificationManager.IMPORTANCE_LOW));
-        Intent stop = new Intent(this, HaloVideoCaptureService.class)
-            .setAction(ACTION_STOP);
-        PendingIntent stopAction = PendingIntent.getService(this, 51, stop,
-            PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        Notification n = new Notification.Builder(this, CHANNEL)
-            .setSmallIcon(android.R.drawable.stat_sys_upload)
-            .setContentTitle("Halo is recording gameplay video")
-            .setContentText("Opt-in, silent capture. Max 20 min / 160 MB.")
-            .setOngoing(true)
-            .addAction(new Notification.Action.Builder(
-                android.R.drawable.ic_menu_close_clear_cancel,
-                "STOP RECORDING", stopAction).build())
-            .build();
+        Notification n = notification("Halo match recording armed",
+            "Waiting for multiplayer. Campaign and lobby are not recorded.");
         if (Build.VERSION.SDK_INT >= 29)
             startForeground(NOTIFICATION_ID, n,
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
         else startForeground(NOTIFICATION_ID, n);
     }
 
-    private void beginRecording(int permissionCode, Intent consent) throws IOException {
-        File reels = ReelLibrary.directory(this);
-        if (reels.getUsableSpace() < MIN_FREE)
-            throw new IOException("Insufficient free space for optional video recording");
-        File[] older = reels.listFiles(file -> file.isFile() &&
-            ReelSessionIndex.safeFileName(file.getName()));
-        if (older != null && older.length >= 2 &&
-            ReelLibrary.finishedReels(getExternalFilesDir(null)).length == 0)
-            throw new IOException("Two raw captures already exist; export a reel "
-                + "or clear old recordings before recording another");
+    private void updateNotification(String title, String detail) {
+        if (!armed) return;
+        try {
+            getSystemService(NotificationManager.class).notify(NOTIFICATION_ID,
+                notification(title, detail));
+        } catch (RuntimeException ignored) { }
+    }
+
+    private void armProjection(int permissionCode, Intent consent) throws IOException {
+        root = getExternalFilesDir(null);
+        if (root == null) throw new IOException("Halo storage unavailable");
+        reels = ReelLibrary.directory(this);
+        recoverAbandonedCaptures();
         WindowManager manager = (WindowManager) getSystemService(WINDOW_SERVICE);
         DisplayMetrics metrics = new DisplayMetrics();
         manager.getDefaultDisplay().getRealMetrics(metrics);
@@ -137,12 +175,131 @@ public final class HaloVideoCaptureService extends Service {
         capturedWidth = WIDTH;
         capturedHeight = Math.max(240, 16 * Math.round(
             (WIDTH * (float)h / Math.max(1, w)) / 16f));
+        densityDpi = metrics.densityDpi;
+        keepFull = getSharedPreferences("reel_settings", MODE_PRIVATE)
+            .getBoolean("keep_full_match", false);
+        MediaProjectionManager projectionManager =
+            (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+        projection = projectionManager.getMediaProjection(permissionCode, consent);
+        if (projection == null) throw new IOException("Screen capture permission unavailable");
+        final MediaProjection current = projection;
+        projectionCallback = new MediaProjection.Callback() {
+            @Override public void onStop() {
+                if (projection == current) stopSession();
+            }
+        };
+        projection.registerCallback(projectionCallback, main);
+        // Exactly one createVirtualDisplay call for each fresh consent.
+        // The documented null surface leaves capture idle until a match.
+        virtualDisplay = projection.createVirtualDisplay("Halo Gameplay",
+            capturedWidth, capturedHeight, densityDpi,
+            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+            null, null, main);
+        if (virtualDisplay == null) throw new IOException("Cannot create video display");
+        armedAt = SystemClock.uptimeMillis();
+        armed = true;
+        stopping = false;
+        attemptedMatch = null;
+        activeMatch = null;
+        visibilityBlocked = false;
+        gameObserved = false;
+        emptyGameChecks = 0;
+        lastProcessCheck = 0;
+        retryUntil = armedAt + 30000;
+        Log.i(TAG, "Armed for actual competitive multiplayer matches");
+    }
+
+    /** Preserve files left by an interrupted recorder. No recorder is
+     * active when arming; expose recognized orphans through Manage Videos. */
+    private void recoverAbandonedCaptures() {
+        File[] abandoned = reels.listFiles(f -> {
+            String name = f.getName();
+            return name.endsWith(".pending") &&
+                ReelSessionIndex.safeFileName(name.substring(0, name.length() - 8)) &&
+                Files.isRegularFile(f.toPath(), LinkOption.NOFOLLOW_LINKS);
+        });
+        if (abandoned == null) return;
+        for (File part : abandoned) {
+            File raw = new File(reels, part.getName().substring(0, part.getName().length() - 8));
+            if (raw.exists()) continue;
+            try { Files.move(part.toPath(), raw.toPath()); }
+            catch (IOException ignored) { Log.w(TAG, "Interrupted capture retained"); }
+        }
+    }
+
+    private boolean hasRecordingSpace() {
+        if (reels.getUsableSpace() < MIN_FREE) return false;
+        File[] raw = reels.listFiles(file -> {
+            String name = file.getName();
+            return Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS) &&
+                (ReelSessionIndex.safeFileName(name) || (name.endsWith(".pending") &&
+                    ReelSessionIndex.safeFileName(name.substring(0, name.length() - 8))));
+        });
+        if (raw == null) return false;
+        long total = 0;
+        for (File file : raw) {
+            total += file.length();
+            if (total > MAX_RAW_BYTES - ReelSessionIndex.SOURCE_LIMIT) return false;
+        }
+        return true;
+    }
+
+    private boolean visible() {
+        return !visibilityBlocked && MatchVideoState.foreground(root, token);
+    }
+
+    private void poll() {
+        if (!armed || stopping) return;
+        long now = SystemClock.uptimeMillis();
+        if (now - lastProcessCheck >= 5000 || lastProcessCheck == 0) {
+            lastProcessCheck = now;
+            if (!checkGameActivity(now)) { stopSession(); return; }
+        }
+        MatchVideoState state = MatchVideoState.read(root);
+        boolean fresh = state != null && state.fresh(token, now, armedAt);
+        boolean foreground = visible();
+        if (active) {
+            if (fresh && activeMatch.equals(state.id)) {
+                timeline.observe(state);
+                if (!state.active && foreground) finishCapture(true);
+                else if (!foreground) finishCapture(false);
+            } else finishCapture(false);
+            if (active && (now - captureStarted >= MAX_MINUTES * 60000L ||
+                    reels.getUsableSpace() < 200L * 1024 * 1024)) {
+                finishCapture(false);
+            }
+        }
+        if (!active && foreground && fresh && state.active &&
+            !state.id.equals(attemptedMatch)) {
+            attemptedMatch = state.id; // do not start repeatedly on a failed/capped match
+            if (!hasRecordingSpace()) {
+                Log.w(TAG, "Match recording skipped; insufficient reserved video space");
+                updateNotification("Halo recording paused",
+                    "Storage limit reached. Delete old recordings in Profile.");
+            } else {
+                try { beginRecording(state); }
+                catch (Exception unavailable) {
+                    Log.e(TAG, "Could not start this match recording", unavailable);
+                    finishCapture(false);
+                    updateNotification("Halo recording unavailable",
+                        "This match skipped. Will try the next multiplayer match.");
+                }
+            }
+        }
+        if (!active && now <= retryUntil && now - lastAssembly >= 5000) requestAssembly(false);
+        main.postDelayed(pollTask, POLL_MS);
+    }
+
+    /** Keep one encoder per match and do not consume a second consent. */
+    private void beginRecording(MatchVideoState state) throws IOException {
         long proposed = System.currentTimeMillis();
         completed = new File(reels, "session-" + proposed + ".mp4");
         pending = new File(reels, "session-" + proposed + ".mp4.pending");
-        if (completed.exists() || pending.exists())
-            throw new IOException("A recording with this timestamp already exists");
-
+        if (completed.exists() || pending.exists() ||
+            MatchVideoTimeline.metadata(completed).exists()) {
+            pending = completed = null;
+            throw new IOException("A recording with this timestamp exists");
+        }
         recorder = new MediaRecorder();
         recorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
         recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
@@ -153,46 +310,38 @@ public final class HaloVideoCaptureService extends Service {
         recorder.setMaxDuration(MAX_MINUTES * 60_000);
         recorder.setMaxFileSize(ReelSessionIndex.SOURCE_LIMIT);
         recorder.setOutputFile(pending.getAbsolutePath());
+        final MediaRecorder current = recorder;
         recorder.setOnInfoListener((source, what, extra) -> {
             if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED ||
                 what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED)
-                main.post(this::stopRecording);
+                main.post(() -> { if (recorder == current) finishCapture(false); });
         });
         recorder.setOnErrorListener((source, what, extra) ->
-            main.post(this::stopRecording));
+            main.post(() -> { if (recorder == current) finishCapture(false); }));
         recorder.prepare();
-
-        MediaProjectionManager projectionManager =
-            (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
-        projection = projectionManager.getMediaProjection(permissionCode, consent);
-        if (projection == null) throw new IOException("Screen capture permission unavailable");
-        projectionCallback = new MediaProjection.Callback() {
-            @Override public void onStop() {
-                main.post(HaloVideoCaptureService.this::stopRecording);
-            }
-        };
-        projection.registerCallback(projectionCallback, main);
-        virtualDisplay = projection.createVirtualDisplay("Halo Gameplay",
-            capturedWidth, capturedHeight, metrics.densityDpi,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            recorder.getSurface(), null, main);
-        if (virtualDisplay == null)
-            throw new IOException("Cannot create video capture display");
+        MatchVideoState latest = MatchVideoState.read(root);
+        long now = SystemClock.uptimeMillis();
+        if (!armed || !visible() || latest == null || !latest.active ||
+            !latest.id.equals(state.id) || !latest.fresh(token, now, armedAt))
+            throw new IOException("Match changed during encoder preparation");
+        recorderSurface = recorder.getSurface();
+        virtualDisplay.setSurface(recorderSurface);
         recorder.start();
-        startedWallMs = System.currentTimeMillis();
-        startedUptime = SystemClock.elapsedRealtime();
+        captureStarted = SystemClock.uptimeMillis();
+        activeMatch = state.id;
+        timeline = new MatchVideoTimeline.Builder(activeMatch, keepFull, captureStarted);
+        timeline.observe(state);
+        timeline.observe(latest);
         active = true;
-        Log.i(TAG, "Recording actual screen frames with hardware H.264 encoder");
+        updateNotification("Halo is recording a multiplayer match",
+            "Local silent video. Max 20 minutes / 160 MB per match.");
+        Log.i(TAG, "Recording actual multiplayer match " + activeMatch);
     }
 
-    /** A game can terminate its native process without a normal Activity
-     * onDestroy. Stop recording after it is no longer running. */
-    private void checkGameActivity() {
-        if (!active || stopping) return;
+    private boolean checkGameActivity(long now) {
         boolean present = false, known = false;
         try {
-            ActivityManager manager =
-                (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+            ActivityManager manager = getSystemService(ActivityManager.class);
             java.util.List<ActivityManager.RunningAppProcessInfo> processes =
                 manager == null ? null : manager.getRunningAppProcesses();
             if (processes != null) {
@@ -203,98 +352,137 @@ public final class HaloVideoCaptureService extends Service {
                         present = true; break;
                     }
             }
-        } catch (RuntimeException ignored) {
-            // Process listing is not guaranteed. The hard duration cap
-            // still stops the recording if Android hides process state.
-        }
-        if (known) {
-            if (present) { gameObserved = true; emptyGameChecks = 0; }
-            else if (++emptyGameChecks >= 2 &&
-                (gameObserved ||
-                SystemClock.elapsedRealtime() - startedUptime > 30000L)) {
-                // Also stop an early crash before our first 15s process poll.
-                stopRecording();
-                return;
-            }
-        }
-        if (SystemClock.elapsedRealtime() - startedUptime >
-                MAX_MINUTES * 60_000L + 3000L) {
-            stopRecording();
-            return;
-        }
-        main.postDelayed(this::checkGameActivity, 5000L);
+        } catch (RuntimeException ignored) { }
+        if (!known) return true;
+        if (present) { gameObserved = true; emptyGameChecks = 0; }
+        else if (++emptyGameChecks >= 2 &&
+            (gameObserved || now - armedAt > 30000L)) return false;
+        return true;
     }
 
-    private void stopRecording() {
-        if (stopping) return;
-        stopping = true;
-        active = false;
-        boolean sound = false;
+    private long videoDuration(File source) throws IOException {
+        MediaExtractor extractor = new MediaExtractor();
         try {
-            if (recorder != null && startedWallMs > 0) {
-                try {
-                    recorder.stop();
-                    sound = true;
-                } catch (RuntimeException incomplete) {
-                    Log.w(TAG, "Could not finalize screen video", incomplete);
+            extractor.setDataSource(source.getAbsolutePath());
+            for (int i = 0; i < extractor.getTrackCount(); i++) {
+                MediaFormat format = extractor.getTrackFormat(i);
+                String mime = format.getString(MediaFormat.KEY_MIME);
+                if (mime != null && mime.startsWith("video/") &&
+                    format.containsKey(MediaFormat.KEY_DURATION))
+                    return format.getLong(MediaFormat.KEY_DURATION) / 1000;
+            }
+            throw new IOException("Recorded MP4 has no timed video track");
+        } finally { extractor.release(); }
+    }
+
+    private void finishCapture(boolean normal) {
+        if (recorder == null && pending == null) return;
+        boolean wasActive = active;
+        long elapsed = wasActive ? SystemClock.uptimeMillis() - captureStarted : 0;
+        active = false;
+        boolean finalized = false;
+        try {
+            if (virtualDisplay != null) {
+                try { virtualDisplay.setSurface(null); }
+                catch (RuntimeException detached) { normal = false; }
+            }
+            if (recorder != null && wasActive) {
+                try { recorder.stop(); finalized = true; }
+                catch (RuntimeException incomplete) {
+                    Log.w(TAG, "Could not finalize full match; keeping file", incomplete);
                 }
             }
         } finally {
             if (recorder != null) {
-                recorder.reset();
-                recorder.release();
+                try { recorder.reset(); } catch (RuntimeException ignored) { }
+                try { recorder.release(); } catch (RuntimeException ignored) { }
                 recorder = null;
             }
-            if (virtualDisplay != null) { virtualDisplay.release(); virtualDisplay = null; }
-            if (projection != null) {
-                MediaProjection old = projection;
-                projection = null;
-                try { old.stop(); } catch (RuntimeException ignored) { }
+            if (recorderSurface != null) {
+                recorderSurface.release();
+                recorderSurface = null;
             }
         }
-        File source = pending;
-        pending = null;
-        File output = completed;
-        completed = null;
-        if (!sound || source == null || !source.isFile() ||
-            source.length() < 4096 || source.length() > ReelSessionIndex.SOURCE_LIMIT) {
-            if (source != null) source.delete();
-            stopSelf();
-            return;
-        }
-        try {
-            // Valid MP4 parsing is required before moving into the library.
-            MediaExtractor extractor = new MediaExtractor();
+        File source = pending, output = completed;
+        MatchVideoTimeline.Builder finished = timeline;
+        pending = null; completed = null; timeline = null; activeMatch = null;
+        // Even failed/non-playable captures are preserved and exposed for
+        // manual deletion. Never delete a source simply because muxing failed.
+        if (source != null && output != null && source.isFile() && !output.exists()) {
             try {
-                extractor.setDataSource(source.getAbsolutePath());
-                if (extractor.getTrackCount() == 0)
-                    throw new IOException("Recorded MP4 has no video tracks");
-            } finally { extractor.release(); }
-            Files.move(source.toPath(), output.toPath(),
-                StandardCopyOption.REPLACE_EXISTING);
-            ReelSessionIndex.Session session = new ReelSessionIndex.Session(
-                output.getName(), startedWallMs,
-                Math.min(System.currentTimeMillis(),
-                    startedWallMs + ReelSessionIndex.MAX_RECORDING_MS),
-                capturedWidth, capturedHeight);
-            ReelLibrary.addSession(getExternalFilesDir(null), session);
-        } catch (Exception invalid) {
-            Log.e(TAG, "Video finalization failed; source kept for inspection", invalid);
-            stopSelf();
-            return;
-        }
-        new Thread(() -> {
-            try {
-                int reels = ReelLibrary.assemble(getExternalFilesDir(null));
-                Log.i(TAG, "Rendered " + reels + " new local video reels");
-            } finally {
-                main.post(this::stopSelf);
+                Files.move(source.toPath(), output.toPath());
+                if (finalized && output.length() >= 2048 &&
+                    output.length() <= ReelSessionIndex.SOURCE_LIMIT && finished != null) {
+                    long duration = videoDuration(output);
+                    boolean trustworthy = normal && Math.abs(duration - elapsed) <= 2000;
+                    finished.finish(output, duration, trustworthy).write(output);
+                }
+            } catch (IOException | RuntimeException invalid) {
+                Log.w(TAG, "Original kept; match metadata or validation failed", invalid);
             }
-        }, "Halo-local-reel-muxer").start();
+        }
+        retryUntil = SystemClock.uptimeMillis() + 45000;
+        lastAssembly = 0;
+        updateNotification("Halo match recording armed",
+            normal ? "Processing highlights. Waiting for the next match."
+                : "Recording retained if incomplete. Waiting for the next match.");
+        requestAssembly(false);
+    }
+
+    private void requestAssembly(boolean finalPass) {
+        if (root == null || worker == null || worker.isShutdown() ||
+            (!finalPass && assemblyBusy)) return;
+        File data = root;
+        assemblyBusy = true;
+        lastAssembly = SystemClock.uptimeMillis();
+        worker.execute(() -> {
+            try {
+                int count = ReelLibrary.assemble(data);
+                if (count > 0) Log.i(TAG, "Rendered " + count + " new local video reels");
+            } finally { main.post(() -> assemblyBusy = false); }
+        });
+    }
+
+    private void releaseProjection() {
+        armed = false;
+        main.removeCallbacks(pollTask);
+        finishCapture(false);
+        if (virtualDisplay != null) {
+            virtualDisplay.release();
+            virtualDisplay = null;
+        }
+        if (projection != null) {
+            MediaProjection old = projection;
+            projection = null;
+            if (projectionCallback != null) {
+                try { old.unregisterCallback(projectionCallback); }
+                catch (RuntimeException ignored) { }
+            }
+            projectionCallback = null;
+            try { old.stop(); } catch (RuntimeException ignored) { }
+        }
+    }
+
+    private void stopSession() {
+        if (stopping) return;
+        stopping = true;
+        releaseProjection();
+        requestAssembly(true);
+        stopForeground(STOP_FOREGROUND_REMOVE);
+        stopSelf();
     }
 
     @Override public void onDestroy() {
-        if (!stopping) stopRecording();
+        if (!stopping) {
+            stopping = true;
+            releaseProjection();
+            requestAssembly(true);
+        }
+        if (receiverRegistered) {
+            unregisterReceiver(visibility);
+            receiverRegistered = false;
+        }
+        worker.shutdown();
         super.onDestroy();
     }
 

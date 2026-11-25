@@ -86,9 +86,15 @@ static int count_records(void) {
     return n;
 }
 int main(int argc, char **argv) {
+    char visibility_path[512], video_path[512], first_id[33], row[200];
+    FILE *marker;
     assert(argc == 2);
     test_root = argv[1];
     assert(setenv("HALO_DATA_ROOT", test_root, 1) == 0);
+    snprintf(visibility_path, sizeof(visibility_path), "%s/video-foreground-v1.txt", test_root);
+    snprintf(video_path, sizeof(video_path), "%s/video-match-state-v1.txt", test_root);
+    career_video_state(1, 30);
+    assert(access(video_path, F_OK) != 0); /* never armed */
     memset(players,0,sizeof(players));
     players[0].local_player_index=0;
     players[1].local_player_index=-1; /* host's bot / remote guest */
@@ -96,11 +102,28 @@ int main(int argc, char **argv) {
     players[0].statistics.assists[0]=1;
     players[0].statistics.deaths=2;
     reset_snapshot(); career_record_start();
+    marker = fopen(visibility_path, "wb"); assert(marker);
+    assert(fputs("FG1|0123456789abcdef0123456789abcdef|1\n", marker) >= 0);
+    assert(fclose(marker) == 0);
+    career_video_state(1, 30);
+    marker = fopen(video_path, "rb"); assert(marker);
+    assert(fgets(row, sizeof(row), marker)); fclose(marker);
+    assert(!strncmp(row, "VM1|0123456789abcdef0123456789abcdef|", 37));
+    memcpy(first_id, career_id, 33);
+    assert(strlen(first_id) == 32);
+    assert(strstr(row, "|A|30|"));
+    career_video_state(0, 60);
+    marker = fopen(video_path, "rb"); assert(marker);
+    assert(fgets(row, sizeof(row), marker)); fclose(marker);
+    assert(strstr(row, "|I|60|"));
+    assert(strstr(row, first_id));
+    unlink(visibility_path);
     observed_kill(0,1,1);
     observed_kill(0,0,2);
     observed_kill(0,0,3);
     career_record_postgame(game_engine_slayer,"levels\\test\\bloodgulch");
     assert(count_records()==1);
+    assert(!strcmp(first_id, career_id)); /* HC3 uses the same ID */
     career_record_postgame(game_engine_slayer,"levels\\test\\bloodgulch");
     assert(count_records()==1); /* exactly one per real postgame */
     reset_snapshot(); career_record_start(); /* next match */

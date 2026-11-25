@@ -4362,6 +4362,10 @@ static void game_engine_build_lighting(
 void game_engine_dispose_from_old_map(
 	void)
 {
+#ifdef HALO_ANDROID
+    /* port: close match capture even on a quit, abort or map transition. */
+    career_video_state(0, 0);
+#endif
 	if (game_engine && game_engine->dispose_from_old_map)
 		game_engine->dispose_from_old_map();
 
@@ -5356,6 +5360,11 @@ void game_engine_update_non_deterministic(
 	real delta_seconds)
 {
 #ifdef HALO_ANDROID
+    /* port: local match capture is armed only for real multiplayer.
+     * Co-op and campaign have no competitive game engine. No wire changes. */
+    career_video_state(game_engine != NULL && !network_coop_active() &&
+        game_engine_globals.postgame_state == game_engine_mode_active,
+        game_time_get());
     /* port: a final receipt can arrive after simulation has stopped. */
     if (game_engine || network_coop_active())
         career_record_update(game_engine ? global_variant.game_engine_index : game_engine_none,

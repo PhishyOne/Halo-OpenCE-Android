@@ -12,9 +12,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-/** Private MP4 library. Retains the most recent recording for re-editing,
- * three rendered reels, and no network uploads. A failed reel never erases
- * the original recording. */
+/** Private MP4 library. New match-scoped originals may be discarded
+ * only after a verified matching reel. Old recordings and all reels stay
+ * until the user deletes them; failures never trigger automatic trimming. */
 final class ReelLibrary {
     private static final String TAG = "HaloVideo";
     private static final long REEL_BYTES_LIMIT = 48L * 1024 * 1024;
@@ -60,20 +60,20 @@ final class ReelLibrary {
         }
     }
 
-    /** The most recent completed source stays intact even when a clip
-     * is generated. Earlier sources are deleted only after the latest
-     * reel exists, capping privacy exposure and phone storage. */
+    /** Match-scoped sources are processed first. Legacy sources remain
+     * recoverable using their original approximate wall-clock index. */
     static synchronized int assemble(File appRoot) {
         if (appRoot == null || !appRoot.isDirectory()) return 0;
         int complete = 0;
         try {
-            List<ReelSessionIndex.Session> sessions = ReelSessionIndex.load(appRoot);
-            if (sessions.isEmpty()) return 0;
             CareerRecords.Career career = CareerRecords.load(appRoot);
             List<MatchHighlights.Moment> moments = MatchHighlights.load(appRoot);
+            complete += assembleMatched(appRoot, career, moments);
+            // A damaged or oversized legacy index cannot block new match reels.
+            List<ReelSessionIndex.Session> sessions = ReelSessionIndex.load(appRoot);
             for (ReelSessionIndex.Session session : sessions) {
                 File source = session.source(appRoot);
-                if (!source.isFile()) continue;
+                if (!source.isFile() || MatchVideoTimeline.metadata(source).exists()) continue;
                 for (CareerRecords.Match match : career.matches) {
                     if (match.cooperative() || match.incomplete) continue;
                     File out = new File(source.getParentFile(),
@@ -92,8 +92,6 @@ final class ReelLibrary {
                     }
                 }
             }
-            trimFinished(appRoot);
-            trimSources(appRoot);
         } catch (IOException failed) {
             Log.w(TAG, "Could not read local match video metadata", failed);
         }
@@ -107,28 +105,55 @@ final class ReelLibrary {
         return HaloVideoFiles.delete(appRoot, confirmed);
     }
 
-    private static void trimFinished(File root) {
-        File[] reels = finishedReels(root);
-        for (int i = ReelSessionIndex.RETAIN_REELS; i < reels.length; i++)
-            if (!reels[i].delete())
-                Log.w(TAG, "Old reel was not removed: " + reels[i].getName());
-    }
-
-    private static void trimSources(File root) {
-        File parent = new File(root, ReelSessionIndex.REEL_DIRECTORY);
-        File[] sources = parent.listFiles(file -> file.isFile() &&
-            ReelSessionIndex.safeFileName(file.getName()));
-        if (sources == null || sources.length <= 1) return;
-        java.util.Arrays.sort(sources,
-            (a,b) -> Long.compare(b.lastModified(), a.lastModified()));
-        // Preserve the two latest source recordings for correction of
-        // inaccurate game-time alignment. Never delete earlier source files
-        // unless a real reel has been rendered. Total raw storage is capped
-        // separately before starting another capture.
-        if (finishedReels(root).length == 0) return;
-        for (int i = 2; i < sources.length; i++) {
-            if (!sources[i].delete())
-                Log.w(TAG, "Old raw recording retained: " + sources[i].getName());
+    private static int assembleMatched(File root, CareerRecords.Career career,
+                                       List<MatchHighlights.Moment> moments) {
+        int built = 0;
+        for (File raw : HaloVideoFiles.rawRecordings(root)) {
+            try {
+                MatchVideoTimeline timeline = MatchVideoTimeline.read(raw);
+                if (timeline == null) continue;
+                CareerRecords.Match match = null;
+                for (CareerRecords.Match candidate : career.matches)
+                    if (timeline.id.equals(candidate.id)) { match = candidate; break; }
+                if (match == null || match.cooperative() || match.incomplete) continue;
+                File reel = new File(raw.getParentFile(), ReelSessionIndex.reelName(match));
+                if (HaloVideoFiles.suppressed(root, reel.getName()) || reel.exists()) continue;
+                MatchVideoTimeline.Plan plan = timeline.plan(match,
+                    MatchHighlights.forMatch(match, moments));
+                if (plan.windows.isEmpty()) continue;
+                // Only a newly muxed, fully covered, verified reel can authorize
+                // automatic cleanup. Existing reels never authorize deletion.
+                if (!ReelVideoMuxer.build(raw, reel, plan.windows, true)) continue;
+                VideoCaptureDiagnostic.Result check = VideoCaptureDiagnostic.inspect(reel);
+                if (!"PICTURE DETECTED".equals(check.status) || check.decoded < 3 ||
+                    check.decoded - check.black < 3) {
+                    Log.w(TAG, "Reel picture verification failed; original retained");
+                    continue;
+                }
+                long plannedUs = 0;
+                for (ReelSessionIndex.Clip clip : plan.windows)
+                    plannedUs += clip.endUs - clip.startUs;
+                if ((check.durationSeconds + 2L) * 1000000L < plannedUs) {
+                    Log.w(TAG, "Reel shorter than requested; original retained");
+                    continue;
+                }
+                built++;
+                if (plan.mayDiscard(timeline) && timeline.stillSame(raw)) {
+                    // Sync the completed reel again after its atomic rename.
+                    // If any durability check fails, the original is retained.
+                    try (java.io.RandomAccessFile synced = new java.io.RandomAccessFile(reel, "rw")) {
+                        synced.getFD().sync();
+                    }
+                    Files.delete(raw.toPath());
+                    File metadata = MatchVideoTimeline.metadata(raw);
+                    if (Files.isRegularFile(metadata.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS))
+                        Files.deleteIfExists(metadata.toPath());
+                    Log.i(TAG, "Verified match reel retained; full recording removed");
+                }
+            } catch (IOException | RuntimeException failed) {
+                Log.w(TAG, "Match-scoped reel not safely completed; keeping available original", failed);
+            }
         }
+        return built;
     }
 }

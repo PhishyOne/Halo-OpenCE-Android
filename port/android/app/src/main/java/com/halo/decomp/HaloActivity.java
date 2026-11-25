@@ -119,7 +119,9 @@ public class HaloActivity extends SDLActivity {
     public void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         if ("com.halo.decomp.RESUME_SESSION".equals(intent.getAction())) return;
+        publishVideoVisibility(false);
         setIntent(intent);
+        if (rewardActivityResumed) publishVideoVisibility(getWindow().getDecorView().hasWindowFocus());
         /* The previous server may exist but have failed initial hotspot
          * binding. Every explicit new LAN launch is a fresh opportunity
          * to bind the currently active interface. */
@@ -339,9 +341,27 @@ public class HaloActivity extends SDLActivity {
             .show();
     }
 
+    private void publishVideoVisibility(boolean visible) {
+        String token = getIntent().getStringExtra(MatchVideoState.TOKEN);
+        if (!MatchVideoState.id(token)) return;
+        try {
+            MatchVideoState.writeForeground(getExternalFilesDir(null), token, visible);
+        } catch (IOException | RuntimeException failure) {
+            Log.w("HaloVideo", "Could not publish game visibility", failure);
+        }
+        try {
+            sendBroadcast(new Intent(MatchVideoState.VISIBILITY)
+                .setPackage(getPackageName()).putExtra(MatchVideoState.TOKEN, token)
+                .putExtra("visible", visible));
+        } catch (RuntimeException failure) {
+            Log.w("HaloVideo", "Could not notify recorder of game visibility", failure);
+        }
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
+        publishVideoVisibility(getWindow().getDecorView().hasWindowFocus());
         if (getIntent().getBooleanExtra(NETWORK_SESSION, false)) {
             try { startForegroundService(new Intent(this, NetworkSessionService.class)); }
             catch (RuntimeException failure) {
@@ -357,6 +377,7 @@ public class HaloActivity extends SDLActivity {
 
     @Override
     protected void onPause() {
+        publishVideoVisibility(false);
         rewardActivityResumed = false;
         if (touchControls != null)
             touchControls.stopDeviceInput();
@@ -369,6 +390,7 @@ public class HaloActivity extends SDLActivity {
 
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
+        if (rewardActivityResumed) publishVideoVisibility(hasFocus);
         if (touchControls != null) {
             if (hasFocus)
                 touchControls.startDeviceInput();
@@ -380,6 +402,7 @@ public class HaloActivity extends SDLActivity {
 
     @Override
     protected void onDestroy() {
+        publishVideoVisibility(false);
         // Finalize the opt-in screen recording when gameplay closes.
         // This is a separate service in the launcher process; normal Halo
         // shutdown and saved careers do not depend on its availability.

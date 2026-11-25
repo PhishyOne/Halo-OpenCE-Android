@@ -108,6 +108,14 @@ final class HaloVideoFiles {
                 Files.delete(target.toPath());
                 result.removed++;
                 result.bytes += entry.bytes;
+                if (entry.original()) {
+                    // This metadata belongs only to the explicitly removed raw.
+                    File metadata = new File(folder, entry.name + ".match");
+                    try {
+                        if (Files.isRegularFile(metadata.toPath(), LinkOption.NOFOLLOW_LINKS))
+                            Files.deleteIfExists(metadata.toPath());
+                    } catch (IOException ignored) { /* video itself was removed */ }
+                }
             } catch (IOException | SecurityException problem) {
                 result.skipped++;
             }

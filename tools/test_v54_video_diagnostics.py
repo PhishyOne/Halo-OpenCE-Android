@@ -62,8 +62,8 @@ class VideoDiagnosticsTest(unittest.TestCase):
         self.assertNotIn("source.delete()", self.launcher.split(
             'private void exportReelToDocument(', 1)[1].split(
                 'private int dp(', 1)[0])
-        self.assertIn("ReelSessionIndex.safeFileName(file.getName())",
-            self.reel_library)
+        self.assertIn("HaloVideoFiles.rawRecordings(root)", self.reel_library)
+        self.assertIn("MatchVideoTimeline.read(raw)", self.reel_library)
 
     def test_capture_and_game_career_files_remain_untouched(self):
         for filename in ("HaloVideoCaptureService.java", "ReelSessionIndex.java",

@@ -33,9 +33,22 @@ static int recorded;
 static char career_id[33];
 static long career_attempted_tick;
 static int career_recover_pending(void);
+static int career_match_id(char *hex, size_t capacity);
+static long long video_last_ms;
+static int video_active;
+static long video_last_tick;
+static char video_token[33];
+
+void career_video_state(int playing_multiplayer, long tick);
 
 void career_record_start(void)
 {
+    /* Close any previous map's local recording state before resetting ID. */
+    career_video_state(0, video_last_tick);
+    video_last_ms = 0;
+    video_active = 0;
+    video_last_tick = 0;
+    video_token[0] = 0;
     halo_highlights_start();
     recorded = !career_recover_pending();
     if (recorded) platform_log("career: could not recover pending record");
@@ -68,6 +81,79 @@ static int career_match_id(char *hex, size_t capacity)
     }
     hex[32] = 0;
     return 1;
+}
+
+/* The Activity's consent-scoped foreground marker is only present for
+ * an opted-in launch. Heartbeat writes are local, bounded, and throttled.
+ * CLOCK_MONOTONIC matches Android SystemClock.uptimeMillis(). */
+static int video_foreground_token(const char *root, char token[33])
+{
+    char path[1024], row[80];
+    FILE *in;
+    size_t n;
+    int i;
+    if (snprintf(path, sizeof(path), "%s/video-foreground-v1.txt", root) >= (int)sizeof(path))
+        return 0;
+    in = fopen(path, "rb");
+    if (!in) return 0;
+    n = fread(row, 1, sizeof(row), in);
+    fclose(in);
+    if (n != 39 || memcmp(row, "FG1|", 4) ||
+        memcmp(row + 36, "|1\n", 3)) return 0;
+    for (i = 0; i < 32; i++) {
+        char c = row[4 + i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return 0;
+        token[i] = c;
+    }
+    token[32] = 0;
+    return 1;
+}
+
+void career_video_state(int playing_multiplayer, long tick)
+{
+    const char *root = getenv("HALO_DATA_ROOT");
+    struct timespec ts;
+    long long now;
+    char token[33], path[1024], tmp[1024], row[160];
+    FILE *out;
+    int size, ok;
+    if (!root || !*root || clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return;
+    now = (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    if (playing_multiplayer && (tick < 0 || tick > 8640000)) return;
+    /* Immediate transition to idle, otherwise at most two updates/sec. */
+    if (playing_multiplayer && now >= video_last_ms && now - video_last_ms < 500) return;
+    if (!playing_multiplayer && !video_active) return;
+    video_last_ms = now;
+    if (!video_foreground_token(root, token)) {
+        video_active = 0;
+        return;
+    }
+    if (!playing_multiplayer && (!video_active || strcmp(token, video_token))) {
+        video_active = 0;
+        return;
+    }
+    /* The exact same local match ID will be written to HC3 and HLM1. */
+    if (!career_id[0] && !career_match_id(career_id, sizeof(career_id))) return;
+    if (playing_multiplayer) {
+        video_last_tick = tick;
+    } else if (tick < video_last_tick) {
+        tick = video_last_tick;
+    }
+    if (snprintf(path, sizeof(path), "%s/video-match-state-v1.txt", root) >= (int)sizeof(path) ||
+        snprintf(tmp, sizeof(tmp), "%s/video-match-state-v1.tmp", root) >= (int)sizeof(tmp)) return;
+    size = snprintf(row, sizeof(row), "VM1|%s|%s|%c|%ld|%lld\n",
+        token, career_id, playing_multiplayer ? 'A' : 'I', tick, now);
+    if (size <= 0 || size >= (int)sizeof(row)) return;
+    out = fopen(tmp, "wb");
+    if (!out) return;
+    ok = fwrite(row, 1, (size_t)size, out) == (size_t)size && fflush(out) == 0;
+    if (fclose(out) != 0) ok = 0;
+    if (ok && rename(tmp, path) == 0) {
+        video_active = playing_multiplayer;
+        memcpy(video_token, token, sizeof(video_token));
+    } else {
+        unlink(tmp);
+    }
 }
 
 static int career_recover_pending(void)

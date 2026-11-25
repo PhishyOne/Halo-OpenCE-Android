@@ -1410,14 +1410,27 @@ public class LauncherActivity extends Activity {
         footer.addView(appSettings);
 
         CheckBox recordHighlights = new CheckBox(this);
-        recordHighlights.setText("RECORD MATCH VIDEO (OPT-IN • SILENT • 20 MIN MAX)");
+        recordHighlights.setText("RECORD MULTIPLAYER MATCHES (OPT-IN • SILENT)");
         recordHighlights.setChecked(getSharedPreferences("reel_settings",
             MODE_PRIVATE).getBoolean("record_opt_in", false));
         hudCheck(recordHighlights);
-        recordHighlights.setOnCheckedChangeListener((view, checked) ->
-            getSharedPreferences("reel_settings", MODE_PRIVATE).edit()
-                .putBoolean("record_opt_in", checked).apply());
         footer.addView(recordHighlights);
+
+        CheckBox keepFullVideo = new CheckBox(this);
+        keepFullVideo.setText("KEEP FULL MATCH RECORDINGS");
+        keepFullVideo.setChecked(getSharedPreferences("reel_settings", MODE_PRIVATE)
+            .getBoolean("keep_full_match", false));
+        hudCheck(keepFullVideo);
+        keepFullVideo.setOnCheckedChangeListener((view, checked) ->
+            getSharedPreferences("reel_settings", MODE_PRIVATE).edit()
+                .putBoolean("keep_full_match", checked).apply());
+        footer.addView(keepFullVideo);
+        keepFullVideo.setVisibility(recordHighlights.isChecked() ? View.VISIBLE : View.GONE);
+        recordHighlights.setOnCheckedChangeListener((view, checked) -> {
+            getSharedPreferences("reel_settings", MODE_PRIVATE).edit()
+                .putBoolean("record_opt_in", checked).apply();
+            keepFullVideo.setVisibility(checked ? View.VISIBLE : View.GONE);
+        });
 
         Button play = new Button(this);
         playButton = play;
@@ -2171,13 +2184,17 @@ public class LauncherActivity extends Activity {
             pendingVideoLaunch = null;
             if (game == null) return;
             if (resultCode == RESULT_OK && data != null) {
+                String videoToken = java.util.UUID.randomUUID().toString().replace("-", "");
+                game.putExtra(MatchVideoState.TOKEN, videoToken);
                 Intent recording = new Intent(this, HaloVideoCaptureService.class)
+                    .putExtra(MatchVideoState.TOKEN, videoToken)
                     .setAction(HaloVideoCaptureService.ACTION_START)
                     .putExtra(HaloVideoCaptureService.EXTRA_CONSENT_CODE, resultCode)
                     .putExtra(HaloVideoCaptureService.EXTRA_CONSENT_DATA, data);
                 try {
                     startForegroundService(recording);
                 } catch (RuntimeException unavailable) {
+                    game.removeExtra(MatchVideoState.TOKEN);
                     android.widget.Toast.makeText(this,
                         "Recording unavailable. Halo will still launch.",
                         android.widget.Toast.LENGTH_LONG).show();

@@ -22,6 +22,13 @@ final class ReelVideoMuxer {
 
     static boolean build(File source, File destination,
                          List<ReelSessionIndex.Clip> windows) throws IOException {
+        return build(source, destination, windows, false);
+    }
+
+    /** Strict mode used before automatic raw deletion: every requested
+     * interval must actually be covered by encoded source samples. */
+    static boolean build(File source, File destination,
+                         List<ReelSessionIndex.Clip> windows, boolean strict) throws IOException {
         if (source == null || !source.isFile() || source.length() > ReelSessionIndex.SOURCE_LIMIT ||
             windows == null || windows.isEmpty())
             return false;
@@ -38,6 +45,7 @@ final class ReelVideoMuxer {
         boolean started = false, success = false;
         long lastPts = -1, outputStartUs = 0;
         int frameCount = 0;
+        boolean allWindows = true;
         try {
             extractor.setDataSource(source.getAbsolutePath());
             int inputTrack = -1;
@@ -62,10 +70,11 @@ final class ReelVideoMuxer {
             ByteBuffer buffer = ByteBuffer.allocateDirect(MAX_SAMPLE);
             MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
             for (ReelSessionIndex.Clip window : windows) {
-                if (window.endUs <= window.startUs) continue;
+                if (window.endUs <= window.startUs) { allWindows = false; continue; }
                 extractor.seekTo(window.startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
                 long clipFirstUs = -1;
-                long clipLastUs = -1;
+                long clipLastUs = -1, lastSourceUs = -1;
+                int clipFrames = 0;
                 for (;;) {
                     long sampleTime = extractor.getSampleTime();
                     if (sampleTime < 0 || sampleTime > window.endUs) break;
@@ -98,11 +107,15 @@ final class ReelVideoMuxer {
                     muxer.writeSampleData(outputTrack, buffer, info);
                     lastPts = clipLastUs = pts;
                     frameCount++;
+                    clipFrames++;
+                    lastSourceUs = sampleTime;
                     if (!extractor.advance()) break;
                 }
                 if (clipLastUs >= 0) outputStartUs = clipLastUs + 50_000L;
+                if (clipFrames < 8 || clipFirstUs > window.startUs + 250000L ||
+                    lastSourceUs < window.endUs - 350000L) allWindows = false;
             }
-            success = frameCount >= 8;
+            success = frameCount >= 8 && (!strict || allWindows);
         } catch (RuntimeException error) {
             throw new IOException("Reel muxing failed", error);
         } finally {
@@ -130,6 +143,9 @@ final class ReelVideoMuxer {
                 throw new IOException("Reel has no media tracks");
         } finally {
             check.release();
+        }
+        try (java.io.RandomAccessFile synced = new java.io.RandomAccessFile(partial, "rw")) {
+            synced.getFD().sync();
         }
         try {
             Files.move(partial.toPath(), destination.toPath(),
