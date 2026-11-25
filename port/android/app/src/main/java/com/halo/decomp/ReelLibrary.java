@@ -32,7 +32,7 @@ final class ReelLibrary {
 
     static File[] finishedReels(File appRoot) {
         File root = new File(appRoot, ReelSessionIndex.REEL_DIRECTORY);
-        File[] files = root.listFiles(file -> file.isFile() &&
+        File[] files = root.listFiles(file -> file.isFile() && !Files.isSymbolicLink(file.toPath()) &&
             file.getName().matches("reel-[0-9a-f]{32}\\.mp4") &&
             file.length() > 2048 && file.length() <= REEL_BYTES_LIMIT);
         if (files == null) return new File[0];
@@ -78,6 +78,7 @@ final class ReelLibrary {
                     if (match.cooperative() || match.incomplete) continue;
                     File out = new File(source.getParentFile(),
                         ReelSessionIndex.reelName(match));
+                    if (HaloVideoFiles.suppressed(appRoot, out.getName())) continue;
                     if (out.isFile() && out.length() > 2048) continue;
                     List<ReelSessionIndex.Clip> windows =
                         ReelSessionIndex.windows(session, match,
@@ -97,6 +98,13 @@ final class ReelLibrary {
             Log.w(TAG, "Could not read local match video metadata", failed);
         }
         return complete;
+    }
+
+    /** Shares the assembly lock, so a user-confirmed deletion cannot race
+     * the muxer rebuilding or trimming the same completed files. */
+    static synchronized HaloVideoFiles.DeleteResult deleteVideos(
+            File appRoot, HaloVideoFiles.Entry[] confirmed) {
+        return HaloVideoFiles.delete(appRoot, confirmed);
     }
 
     private static void trimFinished(File root) {

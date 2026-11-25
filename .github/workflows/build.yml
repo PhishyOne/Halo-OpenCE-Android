@@ -242,6 +242,7 @@ jobs:
           python3 tools/test_v53_lan_rating_board.py -v
           python3 tools/test_v54_video_diagnostics.py -v
           python3 tools/test_v55_video_playback.py -v
+          python3 tools/test_v56_video_storage.py -v
           python3 tools/test_highlight_moments.py -v
           python3 tools/test_v42_highlights_integration.py -v
           python3 tools/test_android_experiment_package.py -v
@@ -301,6 +302,8 @@ jobs:
             port/android/app/src/main/java/com/halo/decomp/HaloVideoFiles.java \
             tools/lan/HaloVideoFilesTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.HaloVideoFilesTest
+          javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" tools/lan/HaloVideoDeletionTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.HaloVideoDeletionTest
           javac -d "$RUNNER_TEMP/halo-test-classes" \
             port/android/app/src/main/java/com/halo/decomp/LanConfig.java \
             tools/lan/LanConfigSmokeTest.java

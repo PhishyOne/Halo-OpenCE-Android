@@ -24,6 +24,8 @@ import android.widget.VideoView;
 
 import java.io.File;
 import java.util.Locale;
+import java.util.ArrayList;
+import java.util.List;
 
 /** In-app player for finished, local MP4 reels. Never sends footage online. */
 final class HaloReelGallery {
@@ -35,6 +37,7 @@ final class HaloReelGallery {
     }
 
     static void show(LauncherActivity activity, File appRoot) {
+        if (appRoot == null) return;
         File[] reels = ReelLibrary.finishedReels(appRoot);
         // The full original MP4 is the evidence we need when a reel is
         // black or mistimed. Never hide it behind Android/data permissions.
@@ -48,6 +51,7 @@ final class HaloReelGallery {
                     + "match with highlight moments, then return here.\n\n"
                     + "Videos are local, silent during this first version, "
                     + "and are never uploaded.")
+                .setNeutralButton("MANAGE VIDEOS", (d, which) -> manage(activity, appRoot))
                 .setPositiveButton("CLOSE", null)
                 .show();
             return;
@@ -73,8 +77,99 @@ final class HaloReelGallery {
             .setTitle("REELS + ORIGINAL RECORDINGS")
             .setItems(titles, (dialog, which) ->
                 play(activity, shown[which]))
+            .setNeutralButton("MANAGE VIDEOS", (d, which) -> manage(activity, appRoot))
             .setNegativeButton("CLOSE", null)
             .show();
+    }
+
+    private static String size(long bytes) {
+        return String.format(Locale.US, "%.1f MB", bytes / 1048576.0);
+    }
+
+    private static void manage(LauncherActivity activity, File appRoot) {
+        HaloVideoFiles.Entry[] entries = HaloVideoFiles.deletable(appRoot);
+        if (entries.length == 0) {
+            new AlertDialog.Builder(activity)
+                .setTitle("MANAGE VIDEOS")
+                .setMessage("No completed local recordings to delete.")
+                .setPositiveButton("CLOSE", null).show();
+            return;
+        }
+        String[] labels = new String[entries.length];
+        boolean[] checked = new boolean[entries.length];
+        long total = 0;
+        for (int i = 0; i < entries.length; i++) {
+            HaloVideoFiles.Entry entry = entries[i];
+            total += entry.bytes;
+            labels[i] = (entry.original() ? "ORIGINAL RECORDING" : "HIGHLIGHT REEL")
+                + "  •  " + size(entry.bytes) + "\n"
+                + java.text.DateFormat.getDateTimeInstance(
+                    java.text.DateFormat.SHORT, java.text.DateFormat.SHORT)
+                    .format(new java.util.Date(entry.modified));
+        }
+        AlertDialog manager = new AlertDialog.Builder(activity)
+            .setTitle("MANAGE VIDEOS  •  " + size(total))
+            .setMultiChoiceItems(labels, checked, (d, which, selected) ->
+                checked[which] = selected)
+            .setPositiveButton("DELETE SELECTED", null)
+            .setNeutralButton("DELETE ALL", null)
+            .setNegativeButton("CANCEL", null)
+            .create();
+        manager.show();
+        Button selectedButton = manager.getButton(AlertDialog.BUTTON_POSITIVE);
+        selectedButton.setOnClickListener(view -> {
+            List<HaloVideoFiles.Entry> selected = new ArrayList<>();
+            for (int i = 0; i < entries.length; i++)
+                if (checked[i]) selected.add(entries[i]);
+            if (selected.isEmpty()) {
+                android.widget.Toast.makeText(activity, "Select at least one video.",
+                    android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
+            confirmDelete(activity, appRoot, manager,
+                selected.toArray(new HaloVideoFiles.Entry[0]));
+        });
+        manager.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(view ->
+            confirmDelete(activity, appRoot, manager, entries));
+    }
+
+    private static void confirmDelete(LauncherActivity activity, File appRoot,
+            AlertDialog manager, HaloVideoFiles.Entry[] confirmed) {
+        long bytes = 0;
+        boolean originals = false;
+        for (HaloVideoFiles.Entry entry : confirmed) {
+            bytes += entry.bytes;
+            originals |= entry.original();
+        }
+        new AlertDialog.Builder(activity)
+            .setTitle("PERMANENTLY DELETE " + confirmed.length + " VIDEO(S)?")
+            .setMessage("Recover up to " + size(bytes) + ".\n\n"
+                + (originals ? "Deleted full recordings cannot be used to create more reels.\n" : "")
+                + "Existing unselected videos, career stats, maps and exported copies are kept. "
+                + "Deleted reels will not be automatically rebuilt.")
+            .setNegativeButton("CANCEL", null)
+            .setPositiveButton("DELETE", (d, which) -> {
+                manager.dismiss();
+                AlertDialog working = new AlertDialog.Builder(activity)
+                    .setMessage("Removing selected local videos...")
+                    .setCancelable(false).create();
+                working.show();
+                new Thread(() -> {
+                    HaloVideoFiles.DeleteResult result = ReelLibrary.deleteVideos(appRoot, confirmed);
+                    activity.runOnUiThread(() -> {
+                        if (activity.isFinishing() || activity.isDestroyed()) return;
+                        working.dismiss();
+                        new AlertDialog.Builder(activity)
+                            .setTitle("VIDEO STORAGE")
+                            .setMessage("Deleted " + result.removed + " video(s). Freed "
+                                + size(result.bytes) + "."
+                                + (result.skipped > 0 ? "\n" + result.skipped
+                                    + " file(s) could not be deleted or changed. Refresh and try again." : ""))
+                            .setPositiveButton("DONE", (dialog, button) -> show(activity, appRoot))
+                            .show();
+                    });
+                }, "Halo-delete-local-videos").start();
+            }).show();
     }
 
     private static void play(LauncherActivity activity, File clip) {

@@ -142,7 +142,7 @@ final class CareerProfile {
                 }
                 section(activity, target, "VIDEO REELS");
                 Button videoReels = new Button(activity);
-                videoReels.setText("WATCH / SAVE LOCAL VIDEO HIGHLIGHTS");
+                videoReels.setText("WATCH / SAVE / DELETE LOCAL VIDEOS");
                 videoReels.setAllCaps(false);
                 HaloTheme.font(videoReels, true);
                 HaloTheme.menuButtonColors(videoReels);
