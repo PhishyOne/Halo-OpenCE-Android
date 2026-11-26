@@ -45,14 +45,10 @@ class CampaignSaveBackupTest(unittest.TestCase):
         for item in (
             'if (repairBusy)',
             'if (gameProcessStatus() != 0)',
-            'repairBusy = true',
-            'playButton.setEnabled(false)',
-            'campaignBackupButton.setEnabled(false)',
-            'campaignRestoreButton.setEnabled(false)',
+            'setMapToolsBusy(true)',
             'CampaignSaveArchive.exportTo',
             'CampaignSaveArchive.restoreFrom',
-            'repairBusy = false',
-            'playButton.setEnabled(true)',
+            'setMapToolsBusy(false)',
         ):
             self.assertIn(item, backup, item)
         self.assertIn('if (repairBusy) {', s)

@@ -87,6 +87,8 @@ public class LauncherActivity extends Activity {
     private ProgressBar progress;
     private Button pick;
     private TextView repairStatus;
+    private ProgressBar mapAuditProgress;
+    private Button shareMapsButton, receiveMapsButton, repairHostButton;
     private LinearLayout stockMapResults;
     private LinearLayout dashboardPanel;
     private LanBoardUi socialUi;
@@ -609,6 +611,27 @@ public class LauncherActivity extends Activity {
         return grid;
     }
 
+    private void toolsPair(LinearLayout parent, Button first, Button second) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, dp(44), 1f);
+        left.rightMargin = dp(7);
+        row.addView(first, left);
+        row.addView(second, new LinearLayout.LayoutParams(0, dp(44), 1f));
+        parent.addView(row);
+    }
+
+    private void revealStatus(TextView view) {
+        view.setVisibility(view.length() == 0 ? View.GONE : View.VISIBLE);
+        view.addTextChangedListener(new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence text, int start, int count, int after) { }
+            public void onTextChanged(CharSequence text, int start, int before, int count) {
+                view.setVisibility(text.length() == 0 ? View.GONE : View.VISIBLE);
+            }
+            public void afterTextChanged(android.text.Editable text) { }
+        });
+    }
+
     /** A shared panel is reparented, never cloned: values survive tab changes. */
     private void attachSetupPanel(LinearLayout parent, View view) {
         if (view.getParent() == parent) return;
@@ -766,9 +789,7 @@ public class LauncherActivity extends Activity {
         toolsPage.setOrientation(LinearLayout.VERTICAL);
         toolsPage.setVisibility(View.GONE);
         content.addView(toolsPage);
-        LinearLayout toolsLeft = setupColumn();
-        LinearLayout toolsRight = setupColumn();
-        setupGrid(toolsPage, toolsLeft, toolsRight);
+
         dashboardPanel = hudPanel();
         dashboardPanel.setVisibility(View.GONE);
         content.addView(dashboardPanel);
@@ -808,8 +829,8 @@ public class LauncherActivity extends Activity {
         LinearLayout hostPanel = new LinearLayout(this);
         hostPanel.setOrientation(LinearLayout.VERTICAL);
         TextView hostAddress = lanText(ips.isEmpty()
-            ? "HOST IP: NOT DETECTED"
-            : "HOST IP: " + android.text.TextUtils.join(" / ", ips), 14);
+            ? "YOUR IP: NOT DETECTED"
+            : "YOUR IP: " + android.text.TextUtils.join(" / ", ips), 14);
         hostAddress.setTextColor(HUD_ACCENT);
         HaloTheme.font(hostAddress, true);
         hostAddress.setPadding(dp(5), dp(3), dp(5), dp(3));
@@ -874,13 +895,14 @@ public class LauncherActivity extends Activity {
         EditText hostIp = new EditText(this);
         hostIp.setSingleLine(true);
         hostIp.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        hostIp.setHint("Example: 10.28.111.42");
+        hostIp.setHint("Copy from host's screen");
+        hostIp.setContentDescription("Host's IP address. Copy the address displayed on the phone hosting Halo.");
         String previousHost = getSharedPreferences("launcher_ui", MODE_PRIVATE)
             .getString("last_host", "");
         hostIp.setText(settings.peer.isEmpty() ? previousHost : settings.peer);
         hostIp.setSelectAllOnFocus(true);
         hudInput(hostIp);
-        setupInput(manualHostPanel, "HOST IP", hostIp);
+        setupInput(manualHostPanel, "HOST'S IP ADDRESS", hostIp);
         joinPanel.addView(manualHostPanel);
         LanHostPicker hostPicker = new LanHostPicker(
             this, hostIp, discoveryStatus, findHosts, manualHostPanel);
@@ -949,10 +971,11 @@ public class LauncherActivity extends Activity {
         EditText local = new EditText(this);
         local.setSingleLine(true);
         local.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        local.setHint("Automatic");
+        local.setHint("Leave blank for auto");
+        local.setContentDescription("Your IP address, optional. Leave blank unless automatic network detection fails.");
         local.setText(settings.local);
         hudInput(local);
-        setupInput(advanced, "LOCAL IP OVERRIDE", local);
+        setupInput(advanced, "YOUR IP (OPTIONAL)", local);
         CheckBox lanOnly = new CheckBox(this);
         lanOnly.setText("LAN ONLY");
         lanOnly.setChecked(invitePending ? false : settings.lanOnly);
@@ -1089,158 +1112,58 @@ public class LauncherActivity extends Activity {
             + "10 kills: invisible and invulnerable for 60 seconds. Death or match end cancels protection.");
         killstreakPanel.addView(rewardSummary);
 
-        // All tools are visible on their page; dangerous operations still
-        // require their existing confirmation and file-picker grants.
+        // Seven visible user actions. Preserve validation/rollback in the
+        // underlying import and repair helpers, not in more menu buttons.
         LinearLayout repairPanel = hudPanel();
-        toolsLeft.addView(repairPanel);
-        repairPanel.addView(hudSection("MAP REPAIR / ORIGINAL CAMPAIGN MAPS"));
-        repairPanel.addView(lanText("Check original maps; replace only failed files.", 11));
+        toolsPage.addView(repairPanel);
+        repairPanel.addView(hudSection("MAP MANAGEMENT"));
         stockCampaignAuditButton = new Button(this);
         stockCampaignAuditButton.setText("CHECK MY MAPS");
         hudButton(stockCampaignAuditButton, false);
-        stockCampaignAuditButton.setOnClickListener(view ->
-            auditStockCampaignMaps());
-        repairPanel.addView(stockCampaignAuditButton);
+        stockCampaignAuditButton.setOnClickListener(view -> auditStockCampaignMaps());
+        repairHostButton = new Button(this);
+        repairHostButton.setText("REPAIR FROM HOST");
+        hudButton(repairHostButton, false);
+        toolsPair(repairPanel, stockCampaignAuditButton, repairHostButton);
 
-        Button shareMaps = new Button(this);
-        shareMaps.setText("SHARE MY MAPS"); hudButton(shareMaps, false); repairPanel.addView(shareMaps);
-        Button repairFromHost = new Button(this);
-        repairFromHost.setText("REPAIR FROM HOST"); hudButton(repairFromHost, false); repairPanel.addView(repairFromHost);
-        Button pauseMaps = new Button(this);
-        pauseMaps.setText("STOP / PAUSE"); hudButton(pauseMaps, false); repairPanel.addView(pauseMaps);
-        TextView transferStatus = lanText("Repair over your hotspot. Keep this screen open on both phones; interrupted downloads can resume.", 13);
-        repairPanel.addView(transferStatus);
-        lanMapRepair = new LanMapRepair(this, dataRoot, shareMaps, repairFromHost, pauseMaps, transferStatus,
-            () -> !repairBusy && gameProcessStatus() == 0,
-            busy -> {
-                repairBusy = busy;
-                if (playButton != null) playButton.setEnabled(!busy);
-                if (stockCampaignAuditButton != null) stockCampaignAuditButton.setEnabled(!busy);
-                if (stockCampaignImportButton != null) stockCampaignImportButton.setEnabled(!busy);
-                if (stockCampaignExportButton != null) stockCampaignExportButton.setEnabled(!busy);
-            }, this::auditStockCampaignMaps);
-
-        stockCampaignImportButton = new Button(this);
-        stockCampaignImportButton.setText("IMPORT MAPS OR REPAIR ZIP");
-        hudButton(stockCampaignImportButton, false);
-        stockCampaignImportButton.setOnClickListener(view -> pickStockMapRepairs());
-        repairPanel.addView(stockCampaignImportButton);
-        repairPanel.addView(lanText("Verified maps stay; earlier copies are backed up.", 11));
-        repairStatus = lanText("Choose CHECK MY MAPS to see what needs attention.", 13);
+        mapAuditProgress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        mapAuditProgress.setVisibility(View.GONE);
+        mapAuditProgress.setProgressTintList(android.content.res.ColorStateList.valueOf(HUD_ACCENT));
+        repairPanel.addView(mapAuditProgress, new LinearLayout.LayoutParams(-1, dp(5)));
+        repairStatus = lanText("", 12);
         repairStatus.setTextColor(HUD_TEXT);
+        revealStatus(repairStatus);
         repairPanel.addView(repairStatus);
-        stockMapResults = new LinearLayout(this);
-        stockMapResults.setOrientation(LinearLayout.VERTICAL);
-        // Audit results span the full width below both tool columns.
-        toolsPage.addView(stockMapResults);
+        stockMapResults = setupColumn();
+        repairPanel.addView(stockMapResults);
 
-        LinearLayout advancedMaps = hudPanel();
-        toolsLeft.addView(advancedMaps);
-        advancedMaps.addView(hudSection("SHARE MAPS & BACKUPS"));
-        String[] mapNames = new String[SidewinderRepair.CAMPAIGN_MAP_FILES.length + 1];
-        for (int i = 0; i < SidewinderRepair.CAMPAIGN_MAP_FILES.length; i++)
-            mapNames[i] = SidewinderRepair.CAMPAIGN_MAP_TITLES[i]
-                + "  (" + SidewinderRepair.CAMPAIGN_MAP_FILES[i] + ")";
-        mapNames[mapNames.length - 1] = "Sidewinder  (sidewinder.map)";
-        advancedMaps.addView(lanText("MAP TO SHARE OR RESTORE", 11));
-        stockCampaignMapChoice = new ChoiceButton("MAP TO SHARE OR RESTORE", mapNames, 3);
-        advancedMaps.addView(stockCampaignMapChoice,
-            new LinearLayout.LayoutParams(-1, dp(setupRowHeight())));
+        shareMapsButton = new Button(this);
+        shareMapsButton.setText("SHARE MAPS");
+        hudButton(shareMapsButton, false);
+        receiveMapsButton = new Button(this);
+        receiveMapsButton.setText("RECEIVE MAPS");
+        hudButton(receiveMapsButton, false);
+        toolsPair(repairPanel, shareMapsButton, receiveMapsButton);
 
-        Button exportAdminMaps = new Button(this);
-        exportAdminMaps.setText("EXPORT ADMIN REPAIR LIBRARY");
-        hudButton(exportAdminMaps, false);
-        exportAdminMaps.setOnClickListener(view -> {
-            if (repairBusy) return;
-            if (gameProcessStatus() != 0) {
-                repairStatus.setText("Close Halo before exporting campaign maps.");
-                return;
-            }
-            new HaloDialog.Builder(this)
-                .setTitle("Create your campaign repair library?")
-                .setMessage("Only your validated original Xbox campaign maps "
-                    + "will be included. Missing or invalid maps are listed "
-                    + "in the inventory, never exported as good copies. "
-                    + "The ZIP can require 1–2 GB of storage. Choose a "
-                    + "local folder with enough free space.")
-                .setNegativeButton("CANCEL", null)
-                .setPositiveButton("CHOOSE LOCATION", (dialog, which) -> {
-                    Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-                    save.addCategory(Intent.CATEGORY_OPENABLE);
-                    save.setType("application/zip");
-                    save.putExtra(Intent.EXTRA_TITLE,
-                        "Halo-Campaign-Repair-Library-" +
-                        new java.text.SimpleDateFormat("yyyyMMdd",
-                            java.util.Locale.US).format(new java.util.Date()) +
-                        ".zip");
-                    startActivityForResult(save, PICK_ADMIN_CAMPAIGN_ARCHIVE);
-                })
-                .show();
-        });
-        advancedMaps.addView(exportAdminMaps);
+        TextView transferStatus = lanText("", 12);
+        revealStatus(transferStatus);
+        repairPanel.addView(transferStatus);
+        Button pauseMaps = new Button(this);
+        pauseMaps.setText("STOP / PAUSE");
+        hudButton(pauseMaps, false);
+        repairPanel.addView(pauseMaps, new LinearLayout.LayoutParams(-1, dp(40)));
+        lanMapRepair = new LanMapRepair(this, dataRoot, shareMapsButton, repairHostButton,
+            receiveMapsButton, pauseMaps, transferStatus,
+            () -> !repairBusy && gameProcessStatus() == 0,
+            this::setMapToolsBusy, this::auditStockCampaignMaps);
 
-        LinearLayout mapTransferActions = new LinearLayout(this);
-        mapTransferActions.setOrientation(LinearLayout.HORIZONTAL);
-        advancedMaps.addView(mapTransferActions);
-        stockCampaignExportButton = new Button(this);
-        stockCampaignExportButton.setText("EXPORT MAP");
-        hudButton(stockCampaignExportButton, false);
-        stockCampaignExportButton.setOnClickListener(view -> {
-            if (repairBusy) return;
-            if (gameProcessStatus() != 0) {
-                if (repairStatus != null)
-                    repairStatus.setText("Close Halo before exporting its maps.");
-                return;
-            }
-            pendingStockMapTransfer = selectedStockCampaignMap();
-            Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-            save.addCategory(Intent.CATEGORY_OPENABLE);
-            save.setType("application/octet-stream");
-            save.putExtra(Intent.EXTRA_TITLE, pendingStockMapTransfer);
-            startActivityForResult(save, PICK_STOCK_MAP_EXPORT);
-        });
-        stockCampaignExportButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        mapTransferActions.addView(stockCampaignExportButton,
-            new LinearLayout.LayoutParams(0, dp(48), 1f));
-
-        Button restoreVerifiedMap = new Button(this);
-        restoreVerifiedMap.setText("RESTORE BACKUP");
-        hudButton(restoreVerifiedMap, false);
-        restoreVerifiedMap.setOnClickListener(view -> {
-            if (repairBusy) return;
-            String selected = selectedStockCampaignMap();
-            if (!SidewinderRepair.hasPrevious(dataRoot, selected)) {
-                repairStatus.setText("No earlier backup of " + selected + " exists.");
-                return;
-            }
-            new HaloDialog.Builder(this)
-                .setTitle("Restore the previous " + selected + "?")
-                .setMessage("This swaps the selected map with its preserved "
-                    + "backup. The backup may also be invalid. Existing saves "
-                    + "and other maps will not change.")
-                .setNegativeButton("CANCEL", null)
-                .setPositiveButton("RESTORE", (dialog, which) -> {
-                    runMapRepair("Restoring " + selected + "...", () -> {
-                        SidewinderRepair.restorePrevious(dataRoot, selected);
-                        return "Restored " + selected + " from its previous backup.";
-                    });
-                })
-                .show();
-        });
-        advancedMaps.addView(restoreVerifiedMap);
-        LinearLayout customMapsPanel = hudPanel();
-        toolsRight.addView(customMapsPanel);
-        customMapsPanel.addView(hudSection("CUSTOM MAPS / HALO CUSTOM EDITION"));
-        customMapsPanel.addView(lanText(
-            "Custom Edition maps, resources and menu previews.", 11));
         customMapImportButton = new Button(this);
-        customMapImportButton.setText("IMPORT MAPS OR PREVIEW FILES");
+        customMapImportButton.setText("IMPORT MAPS");
         hudButton(customMapImportButton, false);
         customMapImportButton.setOnClickListener(view -> {
-            if (repairBusy)
-                return;
+            if (repairBusy) return;
             if (gameProcessStatus() != 0) {
-                customMapStatus.setText("Force-stop Halo before importing custom maps.");
+                repairStatus.setText("Close Halo before importing maps.");
                 return;
             }
             Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -1249,70 +1172,16 @@ public class LauncherActivity extends Activity {
             picker.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
             startActivityForResult(picker, PICK_CUSTOM_MAPS);
         });
-        customMapsPanel.addView(customMapImportButton);
-
-        // Android file pickers sometimes hide unknown .map extensions.
-        // Request access to only the chosen folder; no all-files privilege.
-        customMapFolderButton = new Button(this);
-        customMapFolderButton.setText("IMPORT A MAP FOLDER");
-        hudButton(customMapFolderButton, false);
-        customMapFolderButton.setOnClickListener(view -> {
-            if (repairBusy)
-                return;
-            if (gameProcessStatus() != 0) {
-                customMapStatus.setText("Close Halo before importing maps.");
-                return;
-            }
-            startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE),
-                PICK_CUSTOM_FOLDER);
-        });
-        customMapsPanel.addView(customMapFolderButton);
-        customMapsPanel.addView(lanText("Select a map subfolder, not Downloads. Use ZIP if access fails.", 11));
-
-        customMapZipButton = new Button(this);
-        customMapZipButton.setText("IMPORT MAP / PREVIEW ZIP");
-        hudButton(customMapZipButton, false);
-        customMapZipButton.setOnClickListener(view -> {
-            if (repairBusy)
-                return;
-            if (gameProcessStatus() != 0) {
-                customMapStatus.setText("Close Halo before importing maps.");
-                return;
-            }
-            Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-            picker.addCategory(Intent.CATEGORY_OPENABLE);
-            picker.setType("*/*");
-            startActivityForResult(picker, PICK_CUSTOM_ZIP);
-        });
-        customMapsPanel.addView(customMapZipButton);
-
-        customMapStatus = lanText("Maps stay separate from the original Xbox maps.", 12);
-        customMapStatus.setTextColor(HUD_WARNING);
-        customMapsPanel.addView(customMapStatus);
-        Button checkBeachResources = new Button(this);
-        checkBeachResources.setText("CHECK BEACH ASSAULT RESOURCES");
-        hudButton(checkBeachResources, false);
-        checkBeachResources.setOnClickListener(view -> {
-            // The audit checks up to 65K tag instances and resource indexes.
-            // Keep it off the UI thread and never modify imported maps.
-            checkBeachResources.setEnabled(false);
-            customMapStatus.setText("Checking installed Beach Assault resource tags...");
-            new Thread(() -> {
-                final String result = beachAssaultResourceStatus();
-                handler.post(() -> {
-                    if (isFinishing() || isDestroyed()) return;
-                    customMapStatus.setText(result);
-                    checkBeachResources.setEnabled(true);
-                });
-            }, "Halo-Beach-Assault-audit").start();
-        });
-        customMapsPanel.addView(checkBeachResources);
+        repairPanel.addView(customMapImportButton, new LinearLayout.LayoutParams(-1, dp(44)));
+        repairPanel.addView(lanText("Map files, BMP previews or ZIP archives from this device.", 10));
+        customMapStatus = repairStatus;
+        diagnosticStatus = repairStatus;
 
         // Campaign progress is in save/u and save/z under app-owned storage.
         // An update preserves these, but Android uninstall/clear-data does
         // not. Offer a portable backup in a player-selected external location.
         LinearLayout campaignSavesPanel = hudPanel();
-        toolsRight.addView(campaignSavesPanel);
+        toolsPage.addView(campaignSavesPanel);
         campaignSavesPanel.addView(hudSection("CAMPAIGN SAVES"));
         campaignSavesPanel.addView(lanText(
             "Never uninstall Halo to update. Back up outside Android/data.", 11));
@@ -1341,7 +1210,6 @@ public class LauncherActivity extends Activity {
                     java.util.Locale.US).format(new java.util.Date()) + ".zip");
             startActivityForResult(picker, PICK_CAMPAIGN_BACKUP);
         });
-        campaignSavesPanel.addView(campaignBackupButton);
 
         campaignRestoreButton = new Button(this);
         campaignRestoreButton.setText("RESTORE CAMPAIGN BACKUP");
@@ -1359,39 +1227,14 @@ public class LauncherActivity extends Activity {
             picker.setType("application/zip");
             startActivityForResult(picker, PICK_CAMPAIGN_RESTORE);
         });
-        campaignSavesPanel.addView(campaignRestoreButton);
-        campaignSavesPanel.addView(lanText(
-            "Restore validates the ZIP and keeps old saves for rollback. Backups may contain profile names.", 11));
+        toolsPair(campaignSavesPanel, campaignBackupButton, campaignRestoreButton);
+
         campaignSaveStatus = lanText(
-            CampaignSaveArchive.hasSaves(dataRoot) ?
-                "Campaign save data found. A backup is recommended before "
-                + "switching builds or uninstalling." :
-                "No campaign progress detected yet. You can restore a backup.",
+            "",
             12);
         campaignSaveStatus.setTextColor(HUD_WARNING);
+        revealStatus(campaignSaveStatus);
         campaignSavesPanel.addView(campaignSaveStatus);
-
-        // On-demand, file-picker-scoped diagnostics. Never auto-upload logs,
-        // include config.toml, or request broad Android storage permissions.
-        Button diagnostics = new Button(this);
-        diagnostics.setText("SAVE DIAGNOSTIC REPORT");
-        hudButton(diagnostics, false);
-        diagnostics.setOnClickListener(view -> {
-            if (repairBusy)
-                return;
-            Intent picker = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-            picker.addCategory(Intent.CATEGORY_OPENABLE);
-            picker.setType("text/plain");
-            picker.putExtra(Intent.EXTRA_TITLE, "Halo-diagnostics.txt");
-            startActivityForResult(picker, SAVE_DIAGNOSTICS);
-        });
-        LinearLayout diagnosticsPanel = hudPanel();
-        diagnosticsPanel.addView(hudSection("DIAGNOSTICS"));
-        diagnosticsPanel.addView(diagnostics);
-        toolsRight.addView(diagnosticsPanel);
-        diagnosticStatus = lanText("Saves recent co-op/network errors and "
-            + "map names, not credentials. Review the report before sharing.", 12);
-        diagnosticsPanel.addView(diagnosticStatus);
 
         // Compact action over the empty lower-right part of the active page.
         // Status/error text occupies a separate scrollable region if needed.
@@ -1703,14 +1546,8 @@ public class LauncherActivity extends Activity {
                 "Close or force-stop the Halo game before working with saves.");
             return;
         }
-        repairBusy = true;
+        setMapToolsBusy(true);
         campaignSaveStatus.setText(initial);
-        if (playButton != null)
-            playButton.setEnabled(false);
-        if (campaignBackupButton != null)
-            campaignBackupButton.setEnabled(false);
-        if (campaignRestoreButton != null)
-            campaignRestoreButton.setEnabled(false);
         new Thread(() -> {
             String result;
             try {
@@ -1725,14 +1562,8 @@ public class LauncherActivity extends Activity {
             }
             final String message = result;
             handler.post(() -> {
-                repairBusy = false;
+                setMapToolsBusy(false);
                 campaignSaveStatus.setText(message);
-                if (campaignBackupButton != null)
-                    campaignBackupButton.setEnabled(true);
-                if (campaignRestoreButton != null)
-                    campaignRestoreButton.setEnabled(true);
-                if (playButton != null)
-                    playButton.setEnabled(true);
             });
         }, "Halo-Campaign-Backup").start();
     }
@@ -1770,6 +1601,15 @@ public class LauncherActivity extends Activity {
         String apply() throws Exception;
     }
 
+    private void setMapToolsBusy(boolean busy) {
+        repairBusy = busy;
+        Button[] actions = { playButton, stockCampaignAuditButton, repairHostButton,
+            shareMapsButton, receiveMapsButton, customMapImportButton,
+            campaignBackupButton, campaignRestoreButton, stockCampaignImportButton,
+            stockCampaignExportButton, customMapFolderButton, customMapZipButton };
+        for (Button action : actions) if (action != null) action.setEnabled(!busy);
+    }
+
     private void runMapRepair(String initialStatus, RepairOperation operation) {
         if (repairBusy)
             return;
@@ -1780,25 +1620,9 @@ public class LauncherActivity extends Activity {
                 customMapStatus.setText("Close or force-stop Halo before importing maps.");
             return;
         }
-        repairBusy = true;
-        if (repairStatus != null)
-            repairStatus.setText(initialStatus);
-        if (customMapStatus != null)
-            customMapStatus.setText(initialStatus);
-        if (playButton != null)
-            playButton.setEnabled(false);
-        if (customMapImportButton != null)
-            customMapImportButton.setEnabled(false);
-        if (customMapFolderButton != null)
-            customMapFolderButton.setEnabled(false);
-        if (customMapZipButton != null)
-            customMapZipButton.setEnabled(false);
-        if (stockCampaignAuditButton != null)
-            stockCampaignAuditButton.setEnabled(false);
-        if (stockCampaignImportButton != null)
-            stockCampaignImportButton.setEnabled(false);
-        if (stockCampaignExportButton != null)
-            stockCampaignExportButton.setEnabled(false);
+        setMapToolsBusy(true);
+        if (repairStatus != null) repairStatus.setText(initialStatus);
+        if (customMapStatus != null && customMapStatus != repairStatus) customMapStatus.setText(initialStatus);
 
         new Thread(() -> {
             String result;
@@ -1812,25 +1636,10 @@ public class LauncherActivity extends Activity {
             }
             final String message = result;
             handler.post(() -> {
-                repairBusy = false;
-                if (repairStatus != null)
-                    repairStatus.setText(readableMapStatus(message));
-                if (customMapStatus != null)
-                    customMapStatus.setText(message);
-                if (customMapImportButton != null)
-                    customMapImportButton.setEnabled(true);
-                if (customMapFolderButton != null)
-                    customMapFolderButton.setEnabled(true);
-                if (customMapZipButton != null)
-                    customMapZipButton.setEnabled(true);
-                if (stockCampaignAuditButton != null)
-                    stockCampaignAuditButton.setEnabled(true);
-                if (stockCampaignImportButton != null)
-                    stockCampaignImportButton.setEnabled(true);
-                if (stockCampaignExportButton != null)
-                    stockCampaignExportButton.setEnabled(true);
-                if (playButton != null)
-                    playButton.setEnabled(true);
+                setMapToolsBusy(false);
+                if (mapAuditProgress != null) mapAuditProgress.setVisibility(View.GONE);
+                if (repairStatus != null) repairStatus.setText(readableMapStatus(message));
+                if (customMapStatus != null && customMapStatus != repairStatus) customMapStatus.setText(message);
             });
         }, "Halo-Xbox-Map-Transfer").start();
     }
@@ -1860,34 +1669,30 @@ public class LauncherActivity extends Activity {
     private String refreshStockMapChecks() {
         java.util.List<CampaignMapTransfer.Check> checks = CampaignMapTransfer.checks(dataRoot,
             (name, index, total) -> handler.post(() -> {
-                if (repairStatus != null) repairStatus.setText("Checking map " + index + "/" + total + "...");
+                if (repairStatus != null) repairStatus.setText("Checking " + SidewinderRepair.titleFor(name) +
+                    " (" + index + "/" + total + ")...");
+                if (mapAuditProgress != null) {
+                    mapAuditProgress.setMax(total);
+                    mapAuditProgress.setProgress(index - 1);
+                    mapAuditProgress.setVisibility(View.VISIBLE);
+                }
             }));
         int passed = 0;
         for (CampaignMapTransfer.Check check : checks) if (check.passed) passed++;
         handler.post(() -> showStockMapChecks(checks));
         return (passed == checks.size() ? "✓ PASS  " : "✕ FAIL  ") + passed + "/" + checks.size()
             + " maps passed. " + (passed == checks.size() ? "All map files passed." :
-            (checks.size() - passed) + " need repair. Choose replacements with IMPORT MAPS OR REPAIR ZIP.");
+            (checks.size() - passed) + " need repair. Use Repair From Host or Import Maps.");
     }
 
     private void showStockMapChecks(java.util.List<CampaignMapTransfer.Check> checks) {
         if (stockMapResults == null) return;
         stockMapResults.removeAllViews();
         for (CampaignMapTransfer.Check check : checks) {
-            LinearLayout row = hudPanel();
-            TextView result = lanText((check.passed ? "✓ PASS  " : "✕ FAIL  ") + check.title, 17);
-            result.setTextColor(check.passed ? Color.rgb(87, 230, 155) : Color.rgb(255, 107, 107));
-            result.setTypeface(result.getTypeface(), Typeface.BOLD);
-            row.addView(result);
-            row.addView(lanText(check.filename + " · " + check.detail, 12));
-            if (!check.passed) {
-                Button repair = new Button(this);
-                repair.setText("CHOOSE REPLACEMENT");
-                hudButton(repair, false);
-                repair.setOnClickListener(view -> pickStockMapRepairs());
-                row.addView(repair);
-            }
-            stockMapResults.addView(row);
+            if (check.passed) continue;
+            TextView failed = lanText("✕ " + check.title + " (" + check.filename + ") — " + check.detail, 12);
+            failed.setTextColor(HUD_WARNING);
+            stockMapResults.addView(failed);
         }
     }
 
@@ -1905,7 +1710,9 @@ public class LauncherActivity extends Activity {
     }
 
     private void auditStockCampaignMaps() {
-        runMapRepair("Checking your campaign maps and Sidewinder...", this::refreshStockMapChecks);
+        if (repairBusy) return;
+        if (stockMapResults != null) stockMapResults.removeAllViews();
+        runMapRepair("Checking original maps...", this::refreshStockMapChecks);
     }
 
     /** A user-selected SAF destination receives verified, streaming map
@@ -2017,38 +1824,23 @@ public class LauncherActivity extends Activity {
             documents.add(single);
         if (documents.isEmpty() || documents.size() > 32) {
             if (customMapStatus != null)
-                customMapStatus.setText("Choose 1 to 32 .map files or .bmp previews.");
+                customMapStatus.setText("Choose 1 to 32 map files, BMP previews or ZIP archives.");
             return;
         }
 
-        runMapRepair("Importing " + documents.size() + " Custom Edition files...", () -> {
-            int installed = 0;
-            long bytes = 0;
+        runMapRepair("Importing " + documents.size() + " selected files...", () -> {
+            StringBuilder report = new StringBuilder();
             for (Uri document : documents) {
                 String name = customMapDisplayName(document);
-                if (!CustomMapImporter.isImportName(name))
-                    throw new java.io.IOException("Unsupported map filename: " + name);
-                final int fileIndex = installed + 1;
-                handler.post(() -> {
-                    if (customMapStatus != null)
-                        customMapStatus.setText("Verifying " + name + " (" + fileIndex
-                            + " of " + documents.size() + ")...");
-                });
+                handler.post(() -> repairStatus.setText("Checking " + name + "..."));
                 try (InputStream input = getContentResolver().openInputStream(document)) {
-                    if (input == null)
-                        throw new java.io.IOException("Android could not open " + name);
-                    CustomMapImporter.Result outcome =
-                        CustomMapImporter.install(input, dataRoot, name);
-                    installed++;
-                    bytes += outcome.size;
-                } catch (java.io.IOException problem) {
-                    throw new java.io.IOException(installed + " file(s) installed; "
-                        + "could not import " + name + ": " + problem.getMessage(), problem);
+                    report.append(UnifiedMapImport.install(input, dataRoot, name,
+                        progress -> handler.post(() -> repairStatus.setText(progress)))).append('\n');
+                } catch (java.io.IOException invalid) {
+                    report.append("✕ FAIL  ").append(name).append(": ").append(invalid.getMessage()).append('\n');
                 }
             }
-            return "Imported " + installed + " Custom Edition files ("
-                + (bytes / (1024 * 1024)) + " MiB). "
-                + "Choose CUSTOM MULTIPLAYER in Halo's map list.";
+            return report.toString().trim();
         });
     }
 

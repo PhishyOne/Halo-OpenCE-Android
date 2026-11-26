@@ -9,7 +9,7 @@ import java.util.*;
 
 /** Versioned, bounded map-only protocol. No URLs or peer-supplied filesystem paths. */
 final class LanMapTransfer {
-    static final int PORT = 5164, MAGIC = 0x484d5031, CHUNK = 4 * 1024 * 1024;
+    static final int PORT = 5166, LEGACY_PORT = 5164, MAGIC = 0x484d5031, CHUNK = 4 * 1024 * 1024;
     static final long MAX_MAP = 256L * 1024 * 1024;
     static final int LIST = 1, GET = 2, OK = 0, CHANGED = 1, DENIED = 2;
     private static final java.util.concurrent.ScheduledThreadPoolExecutor DEADLINES = deadlines();
@@ -96,6 +96,20 @@ final class LanMapTransfer {
         return Collections.unmodifiableList(sources);
     }
     static Connect connect(String ip) throws IOException {
+        return connect(ip, PORT);
+    }
+    /** Preserve original repair framing and allow new clients to receive
+     * from legacy map-sharing phones on the former port. */
+    static Connect repairConnection(String ip) throws IOException {
+        Connect modern = connect(ip);
+        try { list(modern); return modern; }
+        catch (IOException unavailable) {
+            Connect legacy = connect(ip, LEGACY_PORT);
+            list(legacy);
+            return legacy;
+        }
+    }
+    private static Connect connect(String ip, int port) throws IOException {
         byte[] address = LanUpdateProtocol.privateAddress(ip);
         if (address == null) throw new IOException("Use a private hotspot or Wi-Fi host address");
         InetAddress target = InetAddress.getByAddress(address); // never resolve a hostname
@@ -117,7 +131,7 @@ final class LanMapTransfer {
                 }
                 if (local == null) throw new IOException("Connect to the host's hotspot or the same Wi-Fi first");
                 s.bind(new InetSocketAddress(local, 0));
-                s.connect(new InetSocketAddress(target, PORT), 2500); s.setSoTimeout(12000); return s;
+                s.connect(new InetSocketAddress(target, port), 2500); s.setSoTimeout(12000); return s;
             }
             catch (IOException e) { s.close(); throw e; }
         };

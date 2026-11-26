@@ -92,7 +92,7 @@ class LanPeerRatingUiTest(unittest.TestCase):
         self.assertNotIn("if (sharing.isChecked()) synchronize();",self.ui)
         self.assertIn('sync = button("REFRESH LAN", this::synchronize)',self.ui)
         self.assertIn("LanShareSettings.career(activity)",self.ui)
-        self.assertIn("Peer IP (optional)",self.ui)
+        self.assertIn("FRIEND'S IP (OPTIONAL)",self.ui)
         self.assertIn("LAN LEADERBOARD",self.ui)
         self.assertIn("UNVERIFIED",self.ui)
         self.assertIn("Last synced: ",self.ui)

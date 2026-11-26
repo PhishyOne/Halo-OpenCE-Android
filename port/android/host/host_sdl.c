@@ -553,8 +553,9 @@ int host_android_announce_killstreak(int award)
 	jmethodID announce;
 	int delivered = 0;
 
-	if (award != 3 && award != 5 && award != 10 && award != 11 &&
-        award != 12 && award != 13)
+	/* Match the native HUD and Java audio receiver's supported IDs.
+	 * 14 is the global God Mode/Phantom warning. */
+	if (award != 3 && award != 5 && award != 14)
 		return 0;
 	env = (JNIEnv *)SDL_GetAndroidJNIEnv();
 	if (!env)

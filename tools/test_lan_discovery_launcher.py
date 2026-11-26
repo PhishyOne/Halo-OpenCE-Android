@@ -46,7 +46,7 @@ class DiscoveryAndLauncherTests(unittest.TestCase):
         self.assertIn('hostPicker.search(false, null);', self.launcher)
         self.assertIn('hostPicker.isSearching()', self.launcher)
         self.assertNotIn('manualHostToggle', self.launcher)
-        self.assertIn('setupInput(manualHostPanel, "HOST IP", hostIp);', self.launcher)
+        self.assertIn('setupInput(manualHostPanel, "HOST\'S IP ADDRESS", hostIp);', self.launcher)
         self.assertIn('manual.setVisibility(View.VISIBLE);', self.picker)
         self.assertIn('new HaloDialog.Builder(activity)', self.picker)
         self.assertIn('address.setText(current);', self.picker)
@@ -54,10 +54,8 @@ class DiscoveryAndLauncherTests(unittest.TestCase):
 
     def test_tools_separate_from_game_modes(self):
         self.assertIn('"Leaderboard", "Offline Match", "Host", "Join", "Tools"', self.launcher)
-        for column, name in (('toolsLeft','repairPanel'), ('toolsLeft','advancedMaps'),
-                             ('toolsRight','customMapsPanel'), ('toolsRight','campaignSavesPanel'),
-                             ('diagnosticsPanel','diagnostics')):
-            self.assertIn(f'{column}.addView({name});', self.launcher)
+        for name in ('repairPanel', 'campaignSavesPanel'):
+            self.assertIn(f'toolsPage.addView({name});', self.launcher)
         self.assertIn('toolsPage.setVisibility(toolsVisible[0] ? View.VISIBLE : View.GONE);',
                       self.launcher)
         self.assertNotIn('footer.addView(choices);', self.launcher)

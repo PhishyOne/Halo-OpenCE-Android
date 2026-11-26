@@ -206,10 +206,12 @@ final class LanBoardUi {
         hostIp.setSingleLine(true); hostIp.setTextSize(12);
         hostIp.setInputType(InputType.TYPE_CLASS_PHONE);
         hostIp.setTextColor(HaloTheme.TEXT); hostIp.setHintTextColor(HaloTheme.MUTED);
-        hostIp.setHint("Peer IP (optional)");
+        hostIp.setHint("Friend\u2019s IP (optional)");
+        hostIp.setContentDescription("Friend\u2019s IP address, optional. Copy the address shown on their phone if automatic discovery fails.");
         String remembered = activity.getSharedPreferences("launcher_ui", Context.MODE_PRIVATE)
             .getString("last_host", "");
         if (LanUpdateProtocol.privateAddress(remembered) != null) hostIp.setText(remembered);
+        actions.addView(text("FRIEND'S IP (OPTIONAL)", 10, HaloTheme.MUTED, true));
         actions.addView(hostIp, new LinearLayout.LayoutParams(0, dp(38), 2));
         sync = button("REFRESH LAN", this::synchronize);
         sync.setEnabled(!syncing);

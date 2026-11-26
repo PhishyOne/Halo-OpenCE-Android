@@ -15,6 +15,10 @@ final class LanMapServer implements AutoCloseable {
     private volatile boolean closed;
 
     synchronized String start(List<LanMapTransfer.Source> sources) throws IOException {
+        return start(sources, Collections.emptyList());
+    }
+    synchronized String start(List<LanMapTransfer.Source> sources,
+            List<LanCustomMapTransfer.Source> custom) throws IOException {
         if (closed) throw new IOException("Map sharing stopped");
         deadlines.setRemoveOnCancelPolicy(true);
         List<String> addresses = new ArrayList<>();
@@ -30,7 +34,7 @@ final class LanMapServer implements AutoCloseable {
                 try {
                     ServerSocket listener = new ServerSocket(LanMapTransfer.PORT, 6, ip);
                     listeners.add(listener); addresses.add(ip.getHostAddress());
-                    Thread thread = new Thread(() -> accept(listener, ip.getAddress(), prefix, sources), "Halo-map-listener");
+                    Thread thread = new Thread(() -> accept(listener, ip.getAddress(), prefix, sources, custom), "Halo-map-listener");
                     thread.setDaemon(true); thread.start();
                 } catch (IOException unavailable) { /* another eligible interface may work */ }
             }
@@ -38,7 +42,7 @@ final class LanMapServer implements AutoCloseable {
         if (addresses.isEmpty()) { close(); throw new IOException("Turn on your hotspot or join Wi-Fi, then try Share my maps again."); }
         return String.join(", ", addresses);
     }
-    private void accept(ServerSocket listener, byte[] local, int prefix, List<LanMapTransfer.Source> sources) {
+    private void accept(ServerSocket listener, byte[] local, int prefix, List<LanMapTransfer.Source> sources, List<LanCustomMapTransfer.Source> custom) {
         while (!closed) {
             Socket incoming = null;
             try {
@@ -53,7 +57,14 @@ final class LanMapServer implements AutoCloseable {
                 try {
                     workers.execute(() -> {
                         try (Socket connection = socket) {
-                            LanMapTransfer.serve(connection.getInputStream(), connection.getOutputStream(), sources);
+                            BufferedInputStream input = new BufferedInputStream(connection.getInputStream(), 65536);
+                            input.mark(4);
+                            int magic = new DataInputStream(input).readInt();
+                            input.reset();
+                            if (magic == LanCustomMapTransfer.MAGIC)
+                                LanCustomMapTransfer.serve(input, connection.getOutputStream(), custom);
+                            else
+                                LanMapTransfer.serve(input, connection.getOutputStream(), sources);
                         } catch (IOException ignored) { /* client retains any partial download */ }
                         finally { expiry.cancel(false); sockets.remove(socket); }
                     });

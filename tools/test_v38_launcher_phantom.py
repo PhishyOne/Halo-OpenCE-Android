@@ -31,17 +31,14 @@ class V38Tests(unittest.TestCase):
                       self.launcher)
 
     def test_clean_host_join_and_accurate_map_importers(self):
-        self.assertIn('"HOST IP: " + android.text.TextUtils.join', self.launcher)
+        self.assertIn('"YOUR IP: " + android.text.TextUtils.join', self.launcher)
         for removed in ("shareActions", "hostManualToggle", "manualHostToggle",
                         "repairCartographerChooseButton", "PICK_SIDEWINDER"):
             self.assertNotIn(removed, self.launcher)
-        self.assertIn('setupInput(manualHostPanel, "HOST IP", hostIp)', self.launcher)
-        self.assertIn('mapNames[mapNames.length - 1] = "Sidewinder  (sidewinder.map)"',
-                      self.launcher)
+        self.assertIn('setupInput(manualHostPanel, "HOST\'S IP ADDRESS", hostIp)', self.launcher)
+        self.assertIn("UnifiedMapImport.install(input, dataRoot, name,", self.launcher)
         self.assertIn("CampaignRepairImport.install(input, dataRoot,", self.launcher)
-        self.assertIn("SidewinderRepair.restorePrevious(dataRoot, selected)",
-                      self.launcher)
-        self.assertIn("CustomMapImporter.install(input, dataRoot, name)", self.launcher)
+        self.assertIn("CustomMapImporter.install(", self.launcher)
         self.assertIn("SidewinderRepair.SIDEWINDER_MAP.equals(name)",
                       (APP / "CampaignMapTransfer.java").read_text())
         self.assertNotIn("b40.map and c10.map failed", self.launcher)
@@ -60,9 +57,8 @@ class V38Tests(unittest.TestCase):
         self.assertNotIn("toggleSection(", self.launcher)
         self.assertIn('advanced.addView(hudSection("NETWORK OPTIONS"))', self.launcher)
         self.assertIn("killstreakPanel.setVisibility(available ? View.VISIBLE : View.GONE)", self.launcher)
-        for panel in ("repairPanel", "advancedMaps", "customMapsPanel", "campaignSavesPanel"):
-            column = "toolsLeft" if panel in ("repairPanel", "advancedMaps") else "toolsRight"
-            self.assertIn(column + ".addView(" + panel + ");", self.launcher)
+        for panel in ("repairPanel", "campaignSavesPanel"):
+            self.assertIn("toolsPage.addView(" + panel + ");", self.launcher)
             self.assertNotIn(panel + ".setVisibility(View.GONE)", self.launcher)
 
     def test_commander_and_orbital_actually_disabled(self):

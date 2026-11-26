@@ -211,6 +211,13 @@ final class CustomMapImporter {
             validateMap(file, name);
     }
 
+    static void validateImport(File file, String name) throws IOException {
+        if (!isImportName(name) || Files.isSymbolicLink(file.toPath()) || !file.isFile())
+            throw new IOException("Invalid custom map or preview file.");
+        if (name.endsWith(".bmp")) validatePreview(file);
+        else validate(file, name);
+    }
+
     static synchronized Result install(InputStream source, File dataRoot, String name)
             throws IOException {
         if (!isImportName(name) || source == null)

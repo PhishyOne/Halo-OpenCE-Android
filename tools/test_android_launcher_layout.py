@@ -45,11 +45,11 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         self.assertIn('hostPicker.search(true, () -> play.performClick());', s)
         self.assertIn('hostPicker.search(false, null);', s)
         self.assertNotIn('manualHostToggle', s)
-        self.assertIn('setupInput(manualHostPanel, "HOST IP", hostIp);', s)
+        self.assertIn('setupInput(manualHostPanel, "HOST\'S IP ADDRESS", hostIp);', s)
         self.assertNotIn('shareActions.addView', s)
         self.assertIn('game.putExtra(HaloActivity.LAN_DISCOVERY_HOST, true);', s)
-        self.assertIn('toolsLeft.addView(repairPanel);', s)
-        self.assertIn('diagnosticsPanel.addView(diagnostics);', s)
+        self.assertIn('toolsPage.addView(repairPanel);', s)
+        self.assertIn('toolsPage.addView(campaignSavesPanel);', s)
 
     def test_offline_uses_original_native_arguments(self):
         s = self.source
@@ -80,52 +80,40 @@ class HaloLauncherLayoutTests(unittest.TestCase):
 
     def test_xbox_maps_consolidated_without_removing_verification(self):
         s = self.source
-        self.assertIn('repairPanel.addView(hudSection("MAP REPAIR / ORIGINAL CAMPAIGN MAPS"));', s)
-        self.assertNotIn('repairChooseButton.setText(', s)
-        self.assertNotIn('repairCartographerChooseButton.setText(', s)
-        self.assertIn('mapNames[mapNames.length - 1] = "Sidewinder  (sidewinder.map)";', s)
-        self.assertIn('return selected == names.length ?', s)
-        self.assertIn('SidewinderRepair.SIDEWINDER_MAP :', s)
-        self.assertIn('CampaignRepairImport.install(input, dataRoot,', s)
-        self.assertIn('SidewinderRepair.restorePrevious(dataRoot, selected)', s)
-        self.assertIn('stockCampaignImportButton.setText("IMPORT MAPS OR REPAIR ZIP")', s)
+        self.assertIn('repairPanel.addView(hudSection("MAP MANAGEMENT"));', s)
         self.assertIn('stockCampaignAuditButton.setText("CHECK MY MAPS")', s)
+        self.assertIn('repairHostButton.setText("REPAIR FROM HOST")', s)
+        self.assertIn('toolsPair(repairPanel, stockCampaignAuditButton, repairHostButton)', s)
+        self.assertIn('CampaignMapTransfer.checks(dataRoot,', s)
+        self.assertIn('if (check.passed) continue;', s)
         self.assertIn('if (gameProcessStatus() != 0)', s)
-        self.assertIn('playButton.setEnabled(false)', s)
+        self.assertIn('setMapToolsBusy(true)', s)
         self.assertIn('if (repairBusy)', s)
+        repair = (LAUNCHER.parent / "SidewinderRepair.java").read_text()
+        self.assertIn("moveInSameDirectory(target, previous)", repair)
+        self.assertIn("restorePrevious(File dataRoot, String targetMap)", repair)
 
-    def test_custom_edition_import_via_document_picker(self):
+    def test_unified_map_import_via_document_picker(self):
         s = self.source
-        self.assertIn('customMapsPanel.addView(hudSection("CUSTOM MAPS / HALO CUSTOM EDITION"));', s)
-        self.assertIn('customMapImportButton.setText("IMPORT MAPS OR PREVIEW FILES");', s)
+        self.assertIn('customMapImportButton.setText("IMPORT MAPS");', s)
         self.assertIn('picker.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);', s)
         self.assertIn('startActivityForResult(picker, PICK_CUSTOM_MAPS);', s)
         self.assertIn('if (requestCode == PICK_CUSTOM_MAPS)', s)
         self.assertIn('importCustomMaps(data);', s)
-        self.assertIn('CustomMapImporter.install(input, dataRoot, name)', s)
+        self.assertIn('UnifiedMapImport.install(input, dataRoot, name,', s)
         self.assertIn('customMapDisplayName(document)', s)
         self.assertIn('getContentResolver().query(document,', s)
         self.assertIn('OpenableColumns.DISPLAY_NAME', s)
-        self.assertIn('customMapImportButton.setEnabled(false);', s)
-        self.assertIn('customMapImportButton.setEnabled(true);', s)
+        self.assertIn('customMapImportButton,', s)
         self.assertIn('runMapRepair("Importing "', s)
 
-    def test_custom_map_folder_and_zip_fallback(self):
+    def test_folder_and_zip_buttons_removed_but_import_validators_remain(self):
         s = self.source
-        self.assertIn('customMapFolderButton.setText("IMPORT A MAP FOLDER");', s)
-        self.assertIn('new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)', s)
-        self.assertIn('PICK_CUSTOM_FOLDER', s)
-        self.assertIn('DocumentsContract.buildChildDocumentsUriUsingTree(tree, root)', s)
-        self.assertIn('DocumentsContract.buildDocumentUriUsingTree(tree, documentId)', s)
-        self.assertIn('input, dataRoot, document.filename)', s)
-        self.assertIn('customMapZipButton.setText("IMPORT MAP / PREVIEW ZIP");', s)
+        self.assertNotIn('customMapFolderButton.setText(', s)
+        self.assertNotIn('customMapZipButton.setText(', s)
         self.assertIn('CustomMapPack.install(', s)
-        self.assertIn('PICK_CUSTOM_ZIP', s)
+        self.assertIn('CustomMapImporter.install(', s)
         self.assertIn('if (gameProcessStatus() != 0)', s)
-        self.assertIn('customMapFolderButton.setEnabled(false)', s)
-        self.assertIn('customMapZipButton.setEnabled(false)', s)
-        self.assertIn('customMapFolderButton.setEnabled(true)', s)
-        self.assertIn('customMapZipButton.setEnabled(true)', s)
 
     def test_offline_ctf_king_uses_native_configuration(self):
         s = self.source
@@ -140,15 +128,10 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         self.assertIn('LanConfig.save(new File(dataRoot, "config.toml")', s)
         self.assertIn('startGame(game);', s)
 
-    def test_diagnostic_report_is_user_initiated_and_local(self):
+    def test_diagnostic_report_removed_from_user_menu(self):
         s = self.source
-        self.assertIn('diagnostics.setText("SAVE DIAGNOSTIC REPORT");', s)
-        self.assertIn('Intent.ACTION_CREATE_DOCUMENT', s)
-        self.assertIn('picker.putExtra(Intent.EXTRA_TITLE, "Halo-diagnostics.txt");', s)
-        self.assertIn('startActivityForResult(picker, SAVE_DIAGNOSTICS);', s)
-        self.assertIn('if (requestCode == SAVE_DIAGNOSTICS)', s)
+        self.assertNotIn('diagnostics.setText("SAVE DIAGNOSTIC REPORT");', s)
         self.assertIn('HaloDiagnostics.write(dataRoot, output);', s)
-        self.assertIn('Review it before sharing.', s)
 
     def test_commander_retired_and_phantom_settings_available(self):
         s = self.source
@@ -167,8 +150,8 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         self.assertIn('KillstreakConfig.disable(file);', s)
         self.assertNotIn('targeted orbital strike.', s)
         self.assertIn('killstreakPanel.setVisibility(available ? View.VISIBLE : View.GONE)', s)
-        self.assertIn('toolsRight.addView(customMapsPanel);', s)
-        self.assertIn('toolsLeft.addView(repairPanel);', s)
+        self.assertIn('toolsPair(repairPanel, shareMapsButton, receiveMapsButton);', s)
+        self.assertIn('toolsPage.addView(repairPanel);', s)
         self.assertNotIn('toggleSection(', s)
 
     def test_disc_import_is_preserved(self):

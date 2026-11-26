@@ -66,7 +66,7 @@ class V41Tests(unittest.TestCase):
         self.assertNotIn(".shots_hit", self.native)
 
     def test_admin_campaign_library_requires_explicit_destination(self):
-        self.assertIn("EXPORT ADMIN REPAIR LIBRARY", self.launcher)
+        self.assertNotIn('setText("EXPORT ADMIN REPAIR LIBRARY")', self.launcher)
         self.assertIn("PICK_ADMIN_CAMPAIGN_ARCHIVE", self.launcher)
         self.assertIn("Intent.ACTION_CREATE_DOCUMENT", self.launcher)
         self.assertIn("CampaignAdminArchive.export(", self.launcher)
@@ -77,7 +77,6 @@ class V41Tests(unittest.TestCase):
         self.assertIn('ZipEntry("maps/" + name)', self.archive)
         self.assertIn("source.length() != length", self.archive)
         self.assertNotIn("SidewinderRepair.install(", self.archive)
-        self.assertIn("invalid maps are listed", self.launcher.lower())
 
 
 if __name__ == "__main__":

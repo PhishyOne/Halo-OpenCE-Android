@@ -50,9 +50,8 @@ class FlatLauncherTest(unittest.TestCase):
             self.assertNotIn(name, self.s)
         self.assertIn('advanced.addView(hudSection("NETWORK OPTIONS"))', self.s)
         self.assertIn("networkColumn.addView(advanced)", self.s)
-        for panel in ("repairPanel", "advancedMaps", "customMapsPanel", "campaignSavesPanel"):
-            column = "toolsLeft" if panel in ("repairPanel", "advancedMaps") else "toolsRight"
-            self.assertIn(column + ".addView(" + panel + ")", self.s)
+        for panel in ("repairPanel", "campaignSavesPanel"):
+            self.assertIn("toolsPage.addView(" + panel + ")", self.s)
             self.assertNotIn(panel + ".setVisibility(View.GONE)", self.s)
         self.assertIn("boolean available = playing && (offlineMode.isChecked()", self.s)
         self.assertIn("lanMode.isChecked() && hostRole.isChecked()", self.s)
@@ -68,7 +67,7 @@ class FlatLauncherTest(unittest.TestCase):
         self.assertIn("hostPicker.search(true, () -> play.performClick())", self.s)
         self.assertIn('LanUpdateClient.check(this, hostIp.getText().toString().trim()', self.s)
         self.assertIn('setTitle("Restore campaign progress?")', self.s)
-        self.assertIn('setTitle("Restore the previous " + selected + "?")', self.s)
+        self.assertNotIn('restoreVerifiedMap.setText("RESTORE BACKUP")', self.s)
         self.assertIn('if (repairBusy)', self.s)
 
 if __name__ == "__main__":

@@ -139,11 +139,9 @@ class GroundDriverTest(unittest.TestCase):
         check=src[a:b]
         audit = (JAVA / "CeResourceAudit.java").read_text()
         for token in (
-            '"CHECK BEACH ASSAULT RESOURCES"',
             'beachAssaultResourceStatus()',
             'CeResourceAudit.beachReport(dataRoot)',
             'new Thread(() ->',
-            '"Halo-Beach-Assault-audit"',
         ):
             self.assertIn(token, src)
         for token in (

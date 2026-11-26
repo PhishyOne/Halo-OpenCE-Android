@@ -61,7 +61,7 @@ class ThemePrivacyTests(unittest.TestCase):
         launcher = self.read("LauncherActivity")
         self.assertIn("createScreenCaptureIntent(", launcher)
         self.assertIn("Intent.ACTION_CREATE_DOCUMENT", launcher)
-        self.assertIn("Intent.ACTION_OPEN_DOCUMENT_TREE", launcher)
+        self.assertIn("Intent.ACTION_OPEN_DOCUMENT", launcher)
         self.assertIn("startActivityForResult", launcher)
         self.assertIn("Updater.install(activity)", self.read("LanUpdateClient"))
 
