@@ -35,7 +35,7 @@ class V38Tests(unittest.TestCase):
         for removed in ("shareActions", "hostManualToggle", "manualHostToggle",
                         "repairCartographerChooseButton", "PICK_SIDEWINDER"):
             self.assertNotIn(removed, self.launcher)
-        self.assertIn("manualHostPanel.addView(hostIp)", self.launcher)
+        self.assertIn('setupInput(manualHostPanel, "HOST IP", hostIp)', self.launcher)
         self.assertIn('mapNames[mapNames.length - 1] = "Sidewinder  (sidewinder.map)"',
                       self.launcher)
         self.assertIn("CampaignRepairImport.install(input, dataRoot,", self.launcher)
@@ -61,7 +61,8 @@ class V38Tests(unittest.TestCase):
         self.assertIn('advanced.addView(hudSection("NETWORK OPTIONS"))', self.launcher)
         self.assertIn("killstreakPanel.setVisibility(available ? View.VISIBLE : View.GONE)", self.launcher)
         for panel in ("repairPanel", "advancedMaps", "customMapsPanel", "campaignSavesPanel"):
-            self.assertIn("toolsPage.addView(" + panel + ");", self.launcher)
+            column = "toolsLeft" if panel in ("repairPanel", "advancedMaps") else "toolsRight"
+            self.assertIn(column + ".addView(" + panel + ");", self.launcher)
             self.assertNotIn(panel + ".setVisibility(View.GONE)", self.launcher)
 
     def test_commander_and_orbital_actually_disabled(self):

@@ -27,7 +27,7 @@ class LanApkUpdateTests(unittest.TestCase):
     def test_game_host_opt_in_only(self):
         source = LAUNCHER.read_text()
         game = GAME.read_text()
-        self.assertIn('shareUpdates.setText("SHARE MY HALO VERSION WITH LAN PLAYERS")', source)
+        self.assertIn('shareUpdates.setText("SHARE APK")', source)
         self.assertIn('getBoolean("lan_update_share", true)', source)
         self.assertIn("lanMode.isChecked() && hostRole.isChecked()", source)
         self.assertIn("lanOnly.isChecked() && !invitePending", source)

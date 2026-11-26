@@ -572,15 +572,88 @@ public class LauncherActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(4), 0, dp(4));
-        TextView title = lanText(label, 13);
+        row.setPadding(0, 0, 0, dp(2));
+        TextView title = lanText(label, 11);
         title.setTextColor(HUD_MUTED);
         title.setGravity(Gravity.CENTER_VERTICAL);
-        row.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        row.addView(title, new LinearLayout.LayoutParams(0, -2, 0.8f));
         ChoiceButton choice = new ChoiceButton(label, choices, selection);
-        row.addView(choice, new LinearLayout.LayoutParams(dp(174), dp(44)));
+        choice.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        choice.setMinWidth(0);
+        choice.setMinimumWidth(0);
+        choice.setMinHeight(0);
+        choice.setMinimumHeight(0);
+        row.addView(choice, new LinearLayout.LayoutParams(0, dp(setupRowHeight()), 1.2f));
         layout.addView(row);
         return choice;
+    }
+
+    /** Equal-weight columns use the real available landscape width. */
+    private LinearLayout setupColumn() {
+        LinearLayout column = new LinearLayout(this);
+        column.setOrientation(LinearLayout.VERTICAL);
+        return column;
+    }
+
+    private LinearLayout setupGrid(LinearLayout parent, LinearLayout left,
+            LinearLayout right) {
+        LinearLayout grid = new LinearLayout(this);
+        grid.setOrientation(LinearLayout.HORIZONTAL);
+        grid.setBaselineAligned(false);
+        grid.setGravity(Gravity.TOP);
+        LinearLayout.LayoutParams first = new LinearLayout.LayoutParams(0, -2, 1f);
+        first.rightMargin = dp(7);
+        grid.addView(left, first);
+        grid.addView(right, new LinearLayout.LayoutParams(0, -2, 1f));
+        parent.addView(grid, new LinearLayout.LayoutParams(-1, -2));
+        return grid;
+    }
+
+    /** A shared panel is reparented, never cloned: values survive tab changes. */
+    private void attachSetupPanel(LinearLayout parent, View view) {
+        if (view.getParent() == parent) return;
+        if (view.getParent() instanceof ViewGroup)
+            ((ViewGroup)view.getParent()).removeView(view);
+        parent.addView(view, new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    private int setupRowHeight() {
+        return getResources().getConfiguration().screenHeightDp <= 340 ? 34 : 42;
+    }
+
+    private void setupCheck(CheckBox check) {
+        hudCheck(check);
+        check.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        check.setMinimumHeight(0);
+        check.setMinHeight(dp(setupRowHeight()));
+        check.setPadding(dp(2), 0, dp(2), 0);
+    }
+
+    private LinearLayout setupChecks(LinearLayout parent) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setBaselineAligned(false);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        parent.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        return row;
+    }
+
+    private void addSetupCheck(LinearLayout row, CheckBox check) {
+        setupCheck(check);
+        row.addView(check, new LinearLayout.LayoutParams(0, -2, 1f));
+    }
+
+    private void setupInput(LinearLayout parent, String label, EditText input) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        TextView name = lanText(label, 11);
+        name.setTextColor(HUD_MUTED);
+        row.addView(name, new LinearLayout.LayoutParams(0, -2, 0.75f));
+        input.setPadding(dp(6), dp(2), dp(6), dp(2));
+        input.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        row.addView(input, new LinearLayout.LayoutParams(0, dp(setupRowHeight()), 1.25f));
+        parent.addView(row);
     }
 
     /** Native OpenCE-style tabs for Leaderboard, Offline Match, Host,
@@ -616,13 +689,15 @@ public class LauncherActivity extends Activity {
         LinearLayout masthead = new LinearLayout(this);
         masthead.setOrientation(LinearLayout.HORIZONTAL);
         masthead.setGravity(Gravity.CENTER_VERTICAL);
-        masthead.setPadding(dp(18), dp(5), dp(18), dp(3));
-        TextView halo = lanText("HALO", 28);
+        masthead.setPadding(dp(10), dp(1), dp(10), dp(1));
+        TextView halo = lanText("HALO", 23);
+        halo.setPadding(0, 0, 0, 0);
         HaloTheme.font(halo, true);
         halo.setLetterSpacing(0.18f);
         halo.setTextColor(HaloTheme.FOCUS_TEXT);
         masthead.addView(halo);
-        TextView subtitle = lanText("COMBAT EVOLVED  /  GAME SETUP", 11);
+        TextView subtitle = lanText("COMBAT EVOLVED", 10);
+        subtitle.setPadding(0, 0, 0, 0);
         subtitle.setTextColor(HUD_MUTED);
         subtitle.setLetterSpacing(0.08f);
         LinearLayout.LayoutParams subtitleLayout = new LinearLayout.LayoutParams(
@@ -643,7 +718,7 @@ public class LauncherActivity extends Activity {
         livePeers.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         livePeers.setMinWidth(0);
         livePeers.setMinimumWidth(0);
-        LinearLayout.LayoutParams liveParams = new LinearLayout.LayoutParams(0, dp(38), 1f);
+        LinearLayout.LayoutParams liveParams = new LinearLayout.LayoutParams(0, dp(setupRowHeight()), 1f);
         liveParams.leftMargin = dp(8);
         masthead.addView(livePeers, liveParams);
         if (socialUi != null) socialUi.close();
@@ -659,7 +734,7 @@ public class LauncherActivity extends Activity {
         // One row of choices replaces two checkboxes plus the Host/Join radios.
         LinearLayout modeBar = new LinearLayout(this);
         modeBar.setOrientation(LinearLayout.HORIZONTAL);
-        modeBar.setPadding(dp(8), dp(5), dp(8), dp(5));
+        modeBar.setPadding(dp(6), dp(2), dp(6), dp(2));
         String[] modeNames = {
             "Leaderboard", "Offline Match", "Host", "Join", "Tools"
         };
@@ -669,7 +744,7 @@ public class LauncherActivity extends Activity {
             tab.setText(modeNames[i]);
             hudTab(tab);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                0, dp(39), 1.0f);
+                0, dp(setupRowHeight()), 1.0f);
             if (i > 0) params.leftMargin = dp(5);
             modeBar.addView(tab, params);
             modeTabs[i] = tab;
@@ -681,7 +756,7 @@ public class LauncherActivity extends Activity {
         scroll.setVerticalScrollBarEnabled(false);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(14), dp(10), dp(14), dp(12));
+        content.setPadding(dp(7), dp(3), dp(7), dp(3));
         scroll.addView(content);
         root.addView(scroll, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.0f));
@@ -690,14 +765,20 @@ public class LauncherActivity extends Activity {
         toolsPage.setOrientation(LinearLayout.VERTICAL);
         toolsPage.setVisibility(View.GONE);
         content.addView(toolsPage);
+        LinearLayout toolsLeft = setupColumn();
+        LinearLayout toolsRight = setupColumn();
+        setupGrid(toolsPage, toolsLeft, toolsRight);
         dashboardPanel = hudPanel();
         dashboardPanel.setVisibility(View.GONE);
         content.addView(dashboardPanel);
         socialUi = new LanBoardUi(this, dataRoot, dashboardPanel, scroll);
         // System Link panel. Host, guest and advanced controls are retained.
         LinearLayout lanPanel = hudPanel();
+        lanPanel.setPadding(dp(7), dp(3), dp(7), dp(3));
         content.addView(lanPanel);
-        lanPanel.addView(hudSection("SYSTEM LINK"));
+        LinearLayout roleColumn = setupColumn();
+        LinearLayout networkColumn = setupColumn();
+        setupGrid(lanPanel, roleColumn, networkColumn);
         RadioGroup roles = new RadioGroup(this);
         roles.setOrientation(LinearLayout.HORIZONTAL);
         RadioButton hostRole = new RadioButton(this);
@@ -717,7 +798,7 @@ public class LauncherActivity extends Activity {
         roles.check("join".equals(rememberedRole) ?
             joinRole.getId() : hostRole.getId());
         roles.setVisibility(View.GONE); // Host/Join are the main tabs.
-        lanPanel.addView(roles);
+        roleColumn.addView(roles);
 
         TextView feedback = lanText(inviteError == null
             ? warning : warning + "  " + inviteError, 12);
@@ -727,29 +808,26 @@ public class LauncherActivity extends Activity {
         hostPanel.setOrientation(LinearLayout.VERTICAL);
         TextView hostAddress = lanText(ips.isEmpty()
             ? "HOST IP: NOT DETECTED"
-            : "HOST IP: " + android.text.TextUtils.join("   /   ", ips), 19);
+            : "HOST IP: " + android.text.TextUtils.join(" / ", ips), 14);
         hostAddress.setTextColor(HUD_ACCENT);
         HaloTheme.font(hostAddress, true);
-        hostAddress.setPadding(dp(12), dp(7), dp(12), dp(8));
+        hostAddress.setPadding(dp(5), dp(3), dp(5), dp(3));
         hostAddress.setBackground(hudSurface(
             HaloTheme.PANEL_TOP, HaloTheme.PANEL_BOTTOM, HUD_BORDER));
         hostPanel.addView(hostAddress);
         if (ips.size() > 1)
-            hostPanel.addView(lanText(
-                "Use the IP belonging to the active Wi-Fi hotspot.", 12));
+            hostAddress.setContentDescription(hostAddress.getText() +
+                ". Use the address belonging to the active Wi-Fi hotspot.");
         // Serving is explicitly scoped to a LAN host's game process. This
         // preference never enables a socket for standard, offline or joins.
         CheckBox shareUpdates = new CheckBox(this);
-        shareUpdates.setText("SHARE MY HALO VERSION WITH LAN PLAYERS");
+        shareUpdates.setText("SHARE APK");
+        shareUpdates.setContentDescription("Share my Halo version with LAN players");
         shareUpdates.setChecked(getSharedPreferences("launcher_ui", MODE_PRIVATE)
             .getBoolean("lan_update_share", true));
-        hudCheck(shareUpdates);
-        hostPanel.addView(shareUpdates);
-        Button social = new Button(this);
-        social.setText("LAN PLAYERS / SHARING");
-        hudButton(social, false);
-        social.setOnClickListener(view -> LanBoardUi.show(this, dataRoot));
-        hostPanel.addView(social);
+        LinearLayout hostChecks = setupChecks(hostPanel);
+        addSetupCheck(hostChecks, shareUpdates);
+        // Live-player and sharing controls remain in the masthead/Leaderboard.
 
         final int[] lanBotCounts = LanConfig.choicesIncluding(
             settings.systemLinkBotCount);
@@ -770,32 +848,28 @@ public class LauncherActivity extends Activity {
         }
         ChoiceButton lanSkill = botChoice(hostPanel, "DIFFICULTY",
             lanSkillChoices, lanSkillSelection);
-        CheckBox driverBots = new CheckBox(this);
-        driverBots.setText("BOTS DRIVE GROUND VEHICLES (EXPERIMENTAL)");
-        driverBots.setChecked(settings.vehicleDriving);
-        hudCheck(driverBots);
-        hostPanel.addView(driverBots);
-        lanPanel.addView(hostPanel);
+        // Driving is permanently enabled when this launcher hosts LAN bots.
+        roleColumn.addView(hostPanel);
 
         LinearLayout joinPanel = new LinearLayout(this);
         joinPanel.setOrientation(LinearLayout.VERTICAL);
-        TextView discoveryStatus = lanText("Searching for LAN games...", 12);
+        TextView discoveryStatus = lanText("Find a LAN host or enter its IP.", 11);
         discoveryStatus.setTextColor(HUD_ACCENT);
         joinPanel.addView(discoveryStatus);
         LinearLayout joinActions = new LinearLayout(this);
         joinActions.setOrientation(LinearLayout.HORIZONTAL);
-        joinActions.setPadding(0, dp(4), 0, dp(4));
+        joinActions.setPadding(0, dp(2), 0, dp(2));
         joinPanel.addView(joinActions);
         Button findHosts = new Button(this);
         findHosts.setText("FIND HOSTS");
         hudButton(findHosts, false);
         joinActions.addView(findHosts,
-            new LinearLayout.LayoutParams(0, dp(46), 1f));
+            new LinearLayout.LayoutParams(0, dp(setupRowHeight()), 1f));
         LinearLayout manualHostPanel = new LinearLayout(this);
         manualHostPanel.setOrientation(LinearLayout.VERTICAL);
         /* Auto-discovery remains primary; the direct-IP field is a single
          * visible fallback, without an extra disclosure button. */
-        manualHostPanel.addView(lanText("HOST IP", 12));
+        // The host IP stays directly editable on this page.
         EditText hostIp = new EditText(this);
         hostIp.setSingleLine(true);
         hostIp.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
@@ -805,7 +879,7 @@ public class LauncherActivity extends Activity {
         hostIp.setText(settings.peer.isEmpty() ? previousHost : settings.peer);
         hostIp.setSelectAllOnFocus(true);
         hudInput(hostIp);
-        manualHostPanel.addView(hostIp);
+        setupInput(manualHostPanel, "HOST IP", hostIp);
         joinPanel.addView(manualHostPanel);
         LanHostPicker hostPicker = new LanHostPicker(
             this, hostIp, discoveryStatus, findHosts, manualHostPanel);
@@ -833,30 +907,30 @@ public class LauncherActivity extends Activity {
                 true, null, () -> checkHostUpdate.setEnabled(true));
         });
         LinearLayout.LayoutParams updateButtonParams =
-            new LinearLayout.LayoutParams(0, dp(46), 1f);
+            new LinearLayout.LayoutParams(0, dp(setupRowHeight()), 1f);
         updateButtonParams.leftMargin = dp(8);
         joinActions.addView(checkHostUpdate, updateButtonParams);
         // These are global recorder preferences, not a join-only recording mode.
         // Store on change so Host and offline multiplayer use the same choices.
-        joinPanel.addView(hudSection("MATCH RECORDING"));
-        joinPanel.addView(lanText("Applies to multiplayer in every mode, including Host and Offline Match. "
-            + "Campaign and co-op are not recorded.", 11));
+        LinearLayout recordingPanel = setupColumn();
+        recordingPanel.addView(hudSection("MATCH RECORDING"));
+        LinearLayout recordingChecks = setupChecks(recordingPanel);
         CheckBox recordHighlights = new CheckBox(this);
-        recordHighlights.setText("RECORD MULTIPLAYER MATCHES (OPT-IN • SILENT)");
+        recordHighlights.setText("RECORD MATCHES");
+        recordHighlights.setContentDescription("Record multiplayer matches without audio");
         recordHighlights.setChecked(getSharedPreferences("reel_settings",
             MODE_PRIVATE).getBoolean("record_opt_in", false));
-        hudCheck(recordHighlights);
-        joinPanel.addView(recordHighlights);
+        addSetupCheck(recordingChecks, recordHighlights);
 
         CheckBox keepFullVideo = new CheckBox(this);
-        keepFullVideo.setText("KEEP FULL MATCH RECORDINGS");
+        keepFullVideo.setText("KEEP FULL");
+        keepFullVideo.setContentDescription("Keep full match recordings");
         keepFullVideo.setChecked(getSharedPreferences("reel_settings", MODE_PRIVATE)
             .getBoolean("keep_full_match", false));
-        hudCheck(keepFullVideo);
         keepFullVideo.setOnCheckedChangeListener((view, checked) ->
             getSharedPreferences("reel_settings", MODE_PRIVATE).edit()
                 .putBoolean("keep_full_match", checked).apply());
-        joinPanel.addView(keepFullVideo);
+        addSetupCheck(recordingChecks, keepFullVideo);
         keepFullVideo.setEnabled(recordHighlights.isChecked());
         recordHighlights.setOnCheckedChangeListener((view, checked) -> {
             getSharedPreferences("reel_settings", MODE_PRIVATE).edit()
@@ -864,32 +938,40 @@ public class LauncherActivity extends Activity {
             keepFullVideo.setEnabled(checked);
         });
 
-        lanPanel.addView(joinPanel);
+        recordingPanel.addView(lanText(
+            "Silent, all multiplayer modes. No campaign/co-op. Keep full or highlights only.", 10));
+        LinearLayout joinChecks = setupChecks(joinPanel);
+        roleColumn.addView(joinPanel);
 
-        Runnable updateRole = () -> {
-            hostPanel.setVisibility(hostRole.isChecked() ? View.VISIBLE : View.GONE);
-            joinPanel.setVisibility(hostRole.isChecked() ? View.GONE : View.VISIBLE);
-        };
-        updateRole.run();
-
-        LinearLayout advanced = new LinearLayout(this);
-        advanced.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout advanced = setupColumn();
         advanced.addView(hudSection("NETWORK OPTIONS"));
-        advanced.addView(lanText("LOCAL ADDRESS OVERRIDE", 12));
         EditText local = new EditText(this);
         local.setSingleLine(true);
         local.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         local.setHint("Automatic");
         local.setText(settings.local);
         hudInput(local);
-        advanced.addView(local);
+        setupInput(advanced, "LOCAL IP OVERRIDE", local);
         CheckBox lanOnly = new CheckBox(this);
         lanOnly.setText("LAN ONLY");
         lanOnly.setChecked(invitePending ? false : settings.lanOnly);
-        hudCheck(lanOnly);
-        advanced.addView(lanOnly);
-        advanced.addView(lanText("Host port 5150. Joining client 5151.", 11));
-        lanPanel.addView(advanced);
+        setupCheck(lanOnly);
+        lanOnly.setContentDescription("LAN only. Host port 5150. Joining client 5151.");
+        networkColumn.addView(advanced);
+        networkColumn.addView(recordingPanel);
+        Runnable updateRole = () -> {
+            boolean hosting = hostRole.isChecked();
+            hostPanel.setVisibility(hosting ? View.VISIBLE : View.GONE);
+            joinPanel.setVisibility(hosting ? View.GONE : View.VISIBLE);
+            recordingPanel.setVisibility(hosting ? View.GONE : View.VISIBLE);
+            LinearLayout checks = hosting ? hostChecks : joinChecks;
+            if (lanOnly.getParent() != checks) {
+                if (lanOnly.getParent() instanceof ViewGroup)
+                    ((ViewGroup)lanOnly.getParent()).removeView(lanOnly);
+                checks.addView(lanOnly, new LinearLayout.LayoutParams(0, -2, 1f));
+            }
+        };
+        updateRole.run();
 
         if (invitePending) {
             lanPanel.addView(lanText("An internet invitation is pending. Join using online mode "
@@ -912,8 +994,11 @@ public class LauncherActivity extends Activity {
         // Offline bot options are part of the page rather than a second dialog.
         SharedPreferences offlinePreferences = getSharedPreferences("offline_bots", MODE_PRIVATE);
         LinearLayout offlinePanel = hudPanel();
+        offlinePanel.setPadding(dp(7), dp(3), dp(7), dp(3));
         content.addView(offlinePanel);
-        offlinePanel.addView(hudSection("OFFLINE MATCH"));
+        LinearLayout offlineLeft = setupColumn();
+        LinearLayout offlineRight = setupColumn();
+        setupGrid(offlinePanel, offlineLeft, offlineRight);
         SharedPreferences launcherPreferences = getSharedPreferences("launcher_ui", MODE_PRIVATE);
         String savedMode = invitePending ? "lan" :
             launcherPreferences.getString("play_mode", "lan");
@@ -931,18 +1016,20 @@ public class LauncherActivity extends Activity {
         campaign.setTextColor(HUD_TEXT);
         campaign.setButtonTintList(HaloTheme.CHECK_TINT);
         HaloTheme.font(campaign, true);
-        offlineType.addView(botMatch, new RadioGroup.LayoutParams(0, dp(44), 1f));
-        offlineType.addView(campaign, new RadioGroup.LayoutParams(0, dp(44), 1f));
+        botMatch.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        campaign.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        offlineType.addView(botMatch, new RadioGroup.LayoutParams(0, dp(setupRowHeight()), 1f));
+        offlineType.addView(campaign, new RadioGroup.LayoutParams(0, dp(setupRowHeight()), 1f));
         String offlineChoice = launcherPreferences.getString("offline_game_type",
             "standard".equals(savedMode) ? "campaign" : "bots");
         offlineType.check("campaign".equals(offlineChoice) ? campaign.getId() : botMatch.getId());
-        offlinePanel.addView(offlineType);
+        offlineLeft.addView(offlineType);
         TextView campaignInfo = lanText("Launch the original Halo campaign. "
             + "Your existing profiles and checkpoints are kept.", 12);
-        offlinePanel.addView(campaignInfo);
+        offlineRight.addView(campaignInfo);
         LinearLayout offlineBotOptions = new LinearLayout(this);
         offlineBotOptions.setOrientation(LinearLayout.VERTICAL);
-        offlinePanel.addView(offlineBotOptions);
+        offlineLeft.addView(offlineBotOptions);
         String[] offlineCounts = new String[127];
         for (int i = 0; i < offlineCounts.length; i++)
             offlineCounts[i] = Integer.toString(i + 1);
@@ -951,28 +1038,29 @@ public class LauncherActivity extends Activity {
         String[] offlineSkills = { "Recruit", "Easy", "Normal", "Heroic", "Veteran", "Legendary" };
         ChoiceButton offlineSkill = botChoice(offlineBotOptions, "DIFFICULTY",
             offlineSkills, offlinePreferences.getInt("skill", 2));
-        String[] offlineTeams = { "Balanced teams", "Bots against players" };
-        ChoiceButton offlineTeam = botChoice(offlineBotOptions, "TEAM ASSIGNMENT",
+        String[] offlineTeams = { "Balanced", "Bots vs players" };
+        LinearLayout offlineTeamOptions = setupColumn();
+        offlineRight.addView(offlineTeamOptions);
+        ChoiceButton offlineTeam = botChoice(offlineTeamOptions, "TEAMS",
             offlineTeams, offlinePreferences.getInt("team", 0));
 
         /* The inactive 2142 commander experiment is retired. Keep only
          * individual host-authorized killstreak rewards in this launcher. */
-        LinearLayout killstreakPanel = hudPanel();
+        LinearLayout killstreakPanel = setupColumn();
         killstreakPanel.setVisibility(View.GONE);
-        content.addView(killstreakPanel);
+        offlineRight.addView(killstreakPanel);
         SharedPreferences killstreakPrefs =
             getSharedPreferences("killstreak_controls", MODE_PRIVATE);
         KillstreakConfig.Options killstreakChoices = new KillstreakConfig.Options();
         for (String key : KillstreakConfig.KEYS)
             killstreakChoices.set(key, killstreakPrefs.getBoolean(key,
                 killstreakChoices.get(key)));
-        killstreakPanel.addView(hudSection("INDIVIDUAL KILLSTREAK REWARDS"));
-        killstreakPanel.addView(lanText(
-            "3 kills: enhancements   •   5: recon   •   10: God Mode (60s)", 12));
+        killstreakPanel.addView(hudSection("KILLSTREAK REWARDS"));
+        LinearLayout rewardChecks = setupChecks(killstreakPanel);
         String[] killstreakLabels = {
-            "ENABLE KILLSTREAK REWARDS",
+            "ENABLE",
             "RETIRED ORBITAL (DISABLED)",
-            "KILLSTREAK RADIO ANNOUNCEMENTS"
+            "RADIO"
         };
         CheckBox[] killstreakChecks = new CheckBox[KillstreakConfig.KEYS.length];
         for (int i = 0; i < KillstreakConfig.KEYS.length; i++) {
@@ -980,10 +1068,10 @@ public class LauncherActivity extends Activity {
             check.setText(killstreakLabels[i]);
             check.setChecked(i == 1 ? false :
                 killstreakChoices.get(KillstreakConfig.KEYS[i]));
-            hudCheck(check);
-            /* Leave the old key serialized as OFF for old installations,
-             * but never expose or re-enable the retired orbital mode. */
-            if (i != 1) killstreakPanel.addView(check);
+            check.setContentDescription(i == 0 ? "Enable killstreak rewards" :
+                i == 2 ? "Killstreak radio announcements" : "Retired orbital");
+            /* Preserve the old OFF key without exposing it. */
+            if (i != 1) addSetupCheck(rewardChecks, check);
             killstreakChecks[i] = check;
         }
         Runnable updateKillstreakChecks = () -> {
@@ -995,18 +1083,17 @@ public class LauncherActivity extends Activity {
             check.setOnCheckedChangeListener((button, checked) ->
                 updateKillstreakChecks.run());
         updateKillstreakChecks.run();
-        killstreakPanel.addView(lanText(
-            "3: camo + overshield. 5: refresh + recon. "
-            + "10: invisible and invulnerable for 60 seconds. "
-            + "Death or match end cancels protection.", 11));
+        TextView rewardSummary = lanText("3: camo + overshield  •  5: recon  •  10: God Mode (60s)", 10);
+        rewardSummary.setContentDescription("3 kills: camo and overshield. 5 kills: refresh and recon. "
+            + "10 kills: invisible and invulnerable for 60 seconds. Death or match end cancels protection.");
+        killstreakPanel.addView(rewardSummary);
 
         // All tools are visible on their page; dangerous operations still
         // require their existing confirmation and file-picker grants.
         LinearLayout repairPanel = hudPanel();
-        toolsPage.addView(repairPanel);
+        toolsLeft.addView(repairPanel);
         repairPanel.addView(hudSection("MAP REPAIR / ORIGINAL CAMPAIGN MAPS"));
-        repairPanel.addView(lanText("Check your maps, then import replacements for any failures. "
-            + "Choose .map files or a repair ZIP. Halo matches the levels automatically.", 13));
+        repairPanel.addView(lanText("Check original maps; replace only failed files.", 11));
         stockCampaignAuditButton = new Button(this);
         stockCampaignAuditButton.setText("CHECK MY MAPS");
         hudButton(stockCampaignAuditButton, false);
@@ -1017,7 +1104,7 @@ public class LauncherActivity extends Activity {
         Button shareMaps = new Button(this);
         shareMaps.setText("SHARE MY MAPS"); hudButton(shareMaps, false); repairPanel.addView(shareMaps);
         Button repairFromHost = new Button(this);
-        repairFromHost.setText("REPAIR FROM HOST"); hudButton(repairFromHost, true); repairPanel.addView(repairFromHost);
+        repairFromHost.setText("REPAIR FROM HOST"); hudButton(repairFromHost, false); repairPanel.addView(repairFromHost);
         Button pauseMaps = new Button(this);
         pauseMaps.setText("STOP / PAUSE"); hudButton(pauseMaps, false); repairPanel.addView(pauseMaps);
         TextView transferStatus = lanText("Repair over your hotspot. Keep this screen open on both phones; interrupted downloads can resume.", 13);
@@ -1034,28 +1121,30 @@ public class LauncherActivity extends Activity {
 
         stockCampaignImportButton = new Button(this);
         stockCampaignImportButton.setText("IMPORT MAPS OR REPAIR ZIP");
-        hudButton(stockCampaignImportButton, true);
+        hudButton(stockCampaignImportButton, false);
         stockCampaignImportButton.setOnClickListener(view -> pickStockMapRepairs());
         repairPanel.addView(stockCampaignImportButton);
-        repairPanel.addView(lanText("Good maps are kept. Repaired maps are checked before installation; "
-            + "earlier copies are backed up. Custom Edition maps use CUSTOM MAPS below.", 12));
+        repairPanel.addView(lanText("Verified maps stay; earlier copies are backed up.", 11));
         repairStatus = lanText("Choose CHECK MY MAPS to see what needs attention.", 13);
         repairStatus.setTextColor(HUD_TEXT);
         repairPanel.addView(repairStatus);
         stockMapResults = new LinearLayout(this);
         stockMapResults.setOrientation(LinearLayout.VERTICAL);
-        repairPanel.addView(stockMapResults);
+        // Audit results span the full width below both tool columns.
+        toolsPage.addView(stockMapResults);
 
         LinearLayout advancedMaps = hudPanel();
-        toolsPage.addView(advancedMaps);
+        toolsLeft.addView(advancedMaps);
         advancedMaps.addView(hudSection("SHARE MAPS & BACKUPS"));
         String[] mapNames = new String[SidewinderRepair.CAMPAIGN_MAP_FILES.length + 1];
         for (int i = 0; i < SidewinderRepair.CAMPAIGN_MAP_FILES.length; i++)
             mapNames[i] = SidewinderRepair.CAMPAIGN_MAP_TITLES[i]
                 + "  (" + SidewinderRepair.CAMPAIGN_MAP_FILES[i] + ")";
         mapNames[mapNames.length - 1] = "Sidewinder  (sidewinder.map)";
-        stockCampaignMapChoice = botChoice(
-            advancedMaps, "MAP TO SHARE OR RESTORE", mapNames, 3);
+        advancedMaps.addView(lanText("MAP TO SHARE OR RESTORE", 11));
+        stockCampaignMapChoice = new ChoiceButton("MAP TO SHARE OR RESTORE", mapNames, 3);
+        advancedMaps.addView(stockCampaignMapChoice,
+            new LinearLayout.LayoutParams(-1, dp(setupRowHeight())));
 
         Button exportAdminMaps = new Button(this);
         exportAdminMaps.setText("EXPORT ADMIN REPAIR LIBRARY");
@@ -1139,10 +1228,10 @@ public class LauncherActivity extends Activity {
         });
         advancedMaps.addView(restoreVerifiedMap);
         LinearLayout customMapsPanel = hudPanel();
-        toolsPage.addView(customMapsPanel);
+        toolsRight.addView(customMapsPanel);
         customMapsPanel.addView(hudSection("CUSTOM MAPS / HALO CUSTOM EDITION"));
         customMapsPanel.addView(lanText(
-            "Custom Edition maps, resources and preview pictures. Import a preview ZIP once; pictures appear in Halo's map menu.", 12));
+            "Custom Edition maps, resources and menu previews.", 11));
         customMapImportButton = new Button(this);
         customMapImportButton.setText("IMPORT MAPS OR PREVIEW FILES");
         hudButton(customMapImportButton, false);
@@ -1177,9 +1266,7 @@ public class LauncherActivity extends Activity {
                 PICK_CUSTOM_FOLDER);
         });
         customMapsPanel.addView(customMapFolderButton);
-        customMapsPanel.addView(lanText("Select the Halo-Custom-Maps subfolder, "
-            + "not the Downloads root. ZIP import is available if Android "
-            + "won't grant access to the folder.", 12));
+        customMapsPanel.addView(lanText("Select a map subfolder, not Downloads. Use ZIP if access fails.", 11));
 
         customMapZipButton = new Button(this);
         customMapZipButton.setText("IMPORT MAP / PREVIEW ZIP");
@@ -1224,13 +1311,10 @@ public class LauncherActivity extends Activity {
         // An update preserves these, but Android uninstall/clear-data does
         // not. Offer a portable backup in a player-selected external location.
         LinearLayout campaignSavesPanel = hudPanel();
-        toolsPage.addView(campaignSavesPanel);
+        toolsRight.addView(campaignSavesPanel);
         campaignSavesPanel.addView(hudSection("CAMPAIGN SAVES"));
         campaignSavesPanel.addView(lanText(
-            "Normal Android UPDATE preserves progress. Never uninstall Halo "
-            + "to update it. If a reinstall is unavoidable, first back up "
-            + "your saves to Downloads or another folder outside Android/data. "
-            + "The backup contains player profiles and checkpoints only.", 12));
+            "Never uninstall Halo to update. Back up outside Android/data.", 11));
         campaignBackupButton = new Button(this);
         campaignBackupButton.setText("BACK UP CAMPAIGN PROGRESS");
         hudButton(campaignBackupButton, false);
@@ -1276,9 +1360,7 @@ public class LauncherActivity extends Activity {
         });
         campaignSavesPanel.addView(campaignRestoreButton);
         campaignSavesPanel.addView(lanText(
-            "Restore replaces current campaign saves after validating the "
-            + "entire ZIP. The old saves are kept on this phone for rollback. "
-            + "Do not send backups to strangers; they may contain profile names.", 11));
+            "Restore validates the ZIP and keeps old saves for rollback. Backups may contain profile names.", 11));
         campaignSaveStatus = lanText(
             CampaignSaveArchive.hasSaves(dataRoot) ?
                 "Campaign save data found. A backup is recommended before "
@@ -1302,15 +1384,18 @@ public class LauncherActivity extends Activity {
             picker.putExtra(Intent.EXTRA_TITLE, "Halo-diagnostics.txt");
             startActivityForResult(picker, SAVE_DIAGNOSTICS);
         });
-        toolsPage.addView(diagnostics);
+        LinearLayout diagnosticsPanel = hudPanel();
+        diagnosticsPanel.addView(hudSection("DIAGNOSTICS"));
+        diagnosticsPanel.addView(diagnostics);
+        toolsRight.addView(diagnosticsPanel);
         diagnosticStatus = lanText("Saves recent co-op/network errors and "
             + "map names, not credentials. Review the report before sharing.", 12);
-        toolsPage.addView(diagnosticStatus);
+        diagnosticsPanel.addView(diagnosticStatus);
 
         // Fixed footer stays on screen even when the host options are long.
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.VERTICAL);
-        footer.setPadding(dp(14), dp(5), dp(14), dp(10));
+        footer.setPadding(dp(7), dp(2), dp(7), dp(3));
         footer.setBackground(hudSurface(HaloTheme.PANEL_TOP,
             HaloTheme.PANEL_BOTTOM, HUD_BORDER));
 
@@ -1327,6 +1412,8 @@ public class LauncherActivity extends Activity {
             boolean available = playing && (offlineMode.isChecked() ||
                 (lanMode.isChecked() && hostRole.isChecked() &&
                     lanOnly.isChecked() && !invitePending));
+            if (available) attachSetupPanel(offlineMode.isChecked() ? offlineRight : networkColumn,
+                killstreakPanel);
             killstreakPanel.setVisibility(available ? View.VISIBLE : View.GONE);
         };
         roles.setOnCheckedChangeListener((group, id) -> {
@@ -1340,6 +1427,7 @@ public class LauncherActivity extends Activity {
             offlinePanel.setVisibility(playing && !lanMode.isChecked() ?
                 View.VISIBLE : View.GONE);
             offlineBotOptions.setVisibility(offlineMode.isChecked() ? View.VISIBLE : View.GONE);
+            offlineTeamOptions.setVisibility(offlineMode.isChecked() ? View.VISIBLE : View.GONE);
             campaignInfo.setVisibility(offlineMode.isChecked() ? View.GONE : View.VISIBLE);
             lanPanel.setVisibility(playing && lanMode.isChecked() ?
                 View.VISIBLE : View.GONE);
@@ -1347,7 +1435,7 @@ public class LauncherActivity extends Activity {
             dashboardPanel.setVisibility(homeVisible[0] ?
                 View.VISIBLE : View.GONE);
             if (socialUi != null) socialUi.setVisible(homeVisible[0]);
-            footer.setVisibility(homeVisible[0] ? View.GONE : View.VISIBLE);
+            footer.setVisibility(playing ? View.VISIBLE : View.GONE);
             updateRewardVisibility.run();
             if (playButton != null)
                 playButton.setVisibility(playing ? View.VISIBLE : View.GONE);
@@ -1412,6 +1500,14 @@ public class LauncherActivity extends Activity {
         });
 
         footer.addView(feedback);
+        feedback.setVisibility(feedback.length() == 0 ? View.GONE : View.VISIBLE);
+        feedback.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence text, int start, int count, int after) { }
+            @Override public void onTextChanged(CharSequence text, int start, int before, int count) {
+                feedback.setVisibility(text.length() == 0 ? View.GONE : View.VISIBLE);
+            }
+            @Override public void afterTextChanged(android.text.Editable text) { }
+        });
         Button appSettings = new Button(this);
         appSettings.setText("OPEN ANDROID APP SETTINGS");
         hudButton(appSettings, false);
@@ -1501,7 +1597,7 @@ public class LauncherActivity extends Activity {
                         ? LanConfig.BOT_SKILLS[lanSkill.getSelectedItemPosition()] : null;
                     LanConfig.save(new File(dataRoot, "config.toml"),
                         local.getText().toString(), peer, lanOnly.isChecked(),
-                        count, skill, true, true, hosting && driverBots.isChecked());
+                        count, skill, true, true, hosting);
                     CommanderConfig.disable(new File(dataRoot, "config.toml"));
                     saveKillstreakChoices(new File(dataRoot, "config.toml"),
                         killstreakChecks, killstreakPrefs, hosting);
@@ -1554,8 +1650,8 @@ public class LauncherActivity extends Activity {
             startGame();
         });
         LinearLayout.LayoutParams playParams = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, dp(49));
-        playParams.topMargin = dp(6);
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(setupRowHeight() + 4));
+        playParams.topMargin = dp(1);
         footer.addView(play, playParams);
         root.addView(footer);
         setContentView(root);

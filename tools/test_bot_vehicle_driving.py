@@ -170,12 +170,11 @@ class GroundDriverTest(unittest.TestCase):
         self.assertLess(settings.index(mirror),settings.index("mavenCentral()"))
         self.assertNotIn("http://",settings)
 
-    def test_toggle_is_explicit_off_by_default(self):
+    def test_launcher_host_driving_always_enabled(self):
         launcher=LAUNCHER.read_text()
         config=CONFIG.read_text()
-        self.assertIn('driverBots.setText("BOTS DRIVE GROUND VEHICLES (EXPERIMENTAL)")',launcher)
-        self.assertIn("driverBots.setChecked(settings.vehicleDriving)",launcher)
-        self.assertIn("hosting && driverBots.isChecked()",launcher)
+        self.assertNotIn("driverBots",launcher)
+        self.assertIn("count, skill, true, true, hosting);",launcher)
         self.assertIn("boolean vehicleDriving = false;",config)
         self.assertIn("BOT_DRIVING_KEY",config)
         self.assertIn("Duplicate vehicle_driving in [bots]",config)

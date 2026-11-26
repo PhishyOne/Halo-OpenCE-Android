@@ -135,7 +135,7 @@ class CommanderPolicyTest(unittest.TestCase):
         self.assertIn('getSharedPreferences("killstreak_controls", MODE_PRIVATE)',s)
         self.assertNotIn('commanderToggle',s)
         self.assertNotIn('commanderChecks',s)
-        self.assertIn('killstreakPanel.addView(hudSection("INDIVIDUAL KILLSTREAK REWARDS"));',s)
+        self.assertIn('killstreakPanel.addView(hudSection("KILLSTREAK REWARDS"));',s)
         self.assertIn('killstreakChecks[0].isChecked()',s)
         self.assertIn('hostRole.isChecked()',s)
         self.assertIn('!invitePending',s)

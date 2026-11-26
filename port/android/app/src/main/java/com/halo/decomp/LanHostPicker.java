@@ -34,7 +34,7 @@ final class LanHostPicker {
         if (searching) return;
         searching = true;
         refresh.setEnabled(false);
-        status.setText("Looking for Halo hosts on this Wi-Fi / hotspot...");
+        status.setText("Searching local Wi-Fi / hotspot...");
         final String previous = address.getText().toString().trim();
         LanDiscoveryClient.search(activity, found -> {
             searching = false;
@@ -42,15 +42,14 @@ final class LanHostPicker {
             if (found.isEmpty()) {
                 playWhenFound = null;
                 manual.setVisibility(View.VISIBLE);
-                status.setText("No Halo host answered. Check the hotspot and that " +
-                    "the host is running v36+. Manual IP is available below.");
+                status.setText("No host answered. Check the hotspot or enter its IP.");
             } else if (found.size() == 1) {
                 String current = found.get(0);
                 // Do not overwrite a new manual edit made during discovery.
                 if (!address.getText().toString().trim().equals(previous)) {
                     playWhenFound = null;
                     status.setText("Host found at " + current +
-                        ". Your manual address was left unchanged.");
+                        ". Manual IP kept.");
                     return;
                 }
                 address.setText(current);

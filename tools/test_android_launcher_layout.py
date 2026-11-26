@@ -45,11 +45,11 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         self.assertIn('hostPicker.search(true, () -> play.performClick());', s)
         self.assertIn('hostPicker.search(false, null);', s)
         self.assertNotIn('manualHostToggle', s)
-        self.assertIn('manualHostPanel.addView(hostIp);', s)
+        self.assertIn('setupInput(manualHostPanel, "HOST IP", hostIp);', s)
         self.assertNotIn('shareActions.addView', s)
         self.assertIn('game.putExtra(HaloActivity.LAN_DISCOVERY_HOST, true);', s)
-        self.assertIn('toolsPage.addView(repairPanel);', s)
-        self.assertIn('toolsPage.addView(diagnostics);', s)
+        self.assertIn('toolsLeft.addView(repairPanel);', s)
+        self.assertIn('diagnosticsPanel.addView(diagnostics);', s)
 
     def test_offline_uses_original_native_arguments(self):
         s = self.source
@@ -64,7 +64,7 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         s = self.source
         self.assertIn('LanConfig.peerForRole(hostRole.isChecked()', s)
         self.assertIn('LanConfig.save(new File(dataRoot, "config.toml")', s)
-        self.assertIn('count, skill, true, true, hosting && driverBots.isChecked());', s)
+        self.assertIn('count, skill, true, true, hosting);', s)
         self.assertNotIn('objectiveBotsLan', s)
         self.assertNotIn('vehicleSeatsLan', s)
         self.assertIn('if (!canStartGame(feedback, appSettings))', s)
@@ -155,7 +155,7 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         self.assertNotIn('commanderToggle', s)
         self.assertNotIn('commanderChecks', s)
         self.assertNotIn('saveCommanderChoices(', s)
-        self.assertIn('killstreakPanel.addView(hudSection("INDIVIDUAL KILLSTREAK REWARDS"));', s)
+        self.assertIn('killstreakPanel.addView(hudSection("KILLSTREAK REWARDS"));', s)
         self.assertIn('CheckBox[] killstreakChecks = new CheckBox[KillstreakConfig.KEYS.length];', s)
         self.assertIn('killstreakChecks[0].isChecked()', s)
         self.assertIn('God Mode (60s)', s)
@@ -167,8 +167,8 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         self.assertIn('KillstreakConfig.disable(file);', s)
         self.assertNotIn('targeted orbital strike.', s)
         self.assertIn('killstreakPanel.setVisibility(available ? View.VISIBLE : View.GONE)', s)
-        self.assertIn('toolsPage.addView(customMapsPanel);', s)
-        self.assertIn('toolsPage.addView(repairPanel);', s)
+        self.assertIn('toolsRight.addView(customMapsPanel);', s)
+        self.assertIn('toolsLeft.addView(repairPanel);', s)
         self.assertNotIn('toggleSection(', s)
 
     def test_disc_import_is_preserved(self):

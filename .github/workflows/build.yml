@@ -251,6 +251,7 @@ jobs:
           python3 -m unittest tools.test_group_rating_native -v
           python3 -m unittest tools.test_sticks_and_stones -v
           python3 -m unittest tools.test_vip -v
+          python3 -m unittest tools.test_v65_compact_launcher -v
           python3 tools/test_highlight_moments.py -v
           python3 tools/test_v42_highlights_integration.py -v
           python3 tools/test_android_experiment_package.py -v

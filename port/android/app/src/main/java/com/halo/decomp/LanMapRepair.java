@@ -34,7 +34,7 @@ final class LanMapRepair {
         this.activity = activity; this.root = root; this.share = share; this.repair = repair;
         this.pause = pause; this.status = status; this.available = available; this.busy = busy; this.changed = changed;
         share.setOnClickListener(v -> share()); repair.setOnClickListener(v -> search());
-        pause.setVisibility(View.GONE); pause.setOnClickListener(v -> stop());
+        pause.setEnabled(false); pause.setOnClickListener(v -> stop());
     }
     private void message(String text) {
         activity.runOnUiThread(() -> { if (!activity.isDestroyed()) status.setText(text); });
@@ -48,7 +48,7 @@ final class LanMapRepair {
         if (active) return false;
         if (!available.getAsBoolean()) { message("Close the game and wait for any map check to finish first."); return false; }
         active = true; stopped = false; busy.accept(true);
-        share.setEnabled(false); repair.setEnabled(false); pause.setVisibility(View.VISIBLE); pause.setEnabled(true);
+        share.setEnabled(false); repair.setEnabled(false); pause.setEnabled(true);
         try {
             cpu = activity.getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Halo:map-repair");
             cpu.setReferenceCounted(false); cpu.acquire();
@@ -73,7 +73,7 @@ final class LanMapRepair {
     private void finish(String result, boolean refresh) {
         stopped = true; closeSockets(); worker = null; active = false; release();
         if (activity.isDestroyed()) return;
-        busy.accept(false); share.setEnabled(true); repair.setEnabled(true); pause.setVisibility(View.GONE);
+        busy.accept(false); share.setEnabled(true); repair.setEnabled(true); pause.setEnabled(false); pause.setText("STOP / PAUSE");
         status.setText(result);
         if (refresh) changed.run();
     }

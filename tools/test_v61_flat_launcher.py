@@ -14,7 +14,7 @@ class FlatLauncherTest(unittest.TestCase):
         self.assertNotIn("modeTabs[5]", self.s)
         self.assertIn('botMatch.setText("BOT MATCH")', self.s)
         self.assertIn('campaign.setText("CAMPAIGN")', self.s)
-        self.assertIn("offlinePanel.addView(offlineType)", self.s)
+        self.assertIn("offlineLeft.addView(offlineType)", self.s)
         self.assertIn('getString("offline_game_type",', self.s)
         self.assertIn('putString("offline_game_type", bots ? "bots" : "campaign")', self.s)
         self.assertIn("offlineMode.setChecked(botMatch.isChecked())", self.s)
@@ -25,10 +25,10 @@ class FlatLauncherTest(unittest.TestCase):
 
     def test_recording_controls_only_join_global_prefs(self):
         a = self.s.index('LinearLayout joinPanel =')
-        b = self.s.index('lanPanel.addView(joinPanel)', a)
+        b = self.s.index('roleColumn.addView(joinPanel)', a)
         join = self.s[a:b]
-        self.assertIn('joinPanel.addView(recordHighlights)', join)
-        self.assertIn('joinPanel.addView(keepFullVideo)', join)
+        self.assertIn('addSetupCheck(recordingChecks, recordHighlights)', join)
+        self.assertIn('addSetupCheck(recordingChecks, keepFullVideo)', join)
         self.assertIn('putBoolean("record_opt_in", checked)', join)
         self.assertIn('putBoolean("keep_full_match", checked)', join)
         self.assertIn('keepFullVideo.setEnabled(checked)', join)
@@ -36,8 +36,8 @@ class FlatLauncherTest(unittest.TestCase):
         self.assertNotIn('footer.addView(keepFullVideo)', self.s)
         self.assertIn('getBoolean("record_opt_in", false)', self.s)
         self.assertIn("startActivityForResult(request, PICK_REEL_CONSENT)", self.s)
-        self.assertIn("Applies to multiplayer in every mode", join)
-        self.assertIn("Campaign and co-op are not recorded.", join)
+        self.assertIn("all multiplayer modes", join)
+        self.assertIn("No campaign/co-op.", join)
         self.assertEqual(self.s.count('CheckBox recordHighlights ='), 1)
         self.assertEqual(self.s.count('CheckBox keepFullVideo ='), 1)
         self.assertEqual(self.s.count('footer.addView(play, playParams)'), 1)
@@ -49,9 +49,10 @@ class FlatLauncherTest(unittest.TestCase):
                      "mapAdvancedToggle", "customMapsToggle", "savesToggle"):
             self.assertNotIn(name, self.s)
         self.assertIn('advanced.addView(hudSection("NETWORK OPTIONS"))', self.s)
-        self.assertIn("lanPanel.addView(advanced)", self.s)
+        self.assertIn("networkColumn.addView(advanced)", self.s)
         for panel in ("repairPanel", "advancedMaps", "customMapsPanel", "campaignSavesPanel"):
-            self.assertIn("toolsPage.addView(" + panel + ")", self.s)
+            column = "toolsLeft" if panel in ("repairPanel", "advancedMaps") else "toolsRight"
+            self.assertIn(column + ".addView(" + panel + ")", self.s)
             self.assertNotIn(panel + ".setVisibility(View.GONE)", self.s)
         self.assertIn("boolean available = playing && (offlineMode.isChecked()", self.s)
         self.assertIn("lanMode.isChecked() && hostRole.isChecked()", self.s)
