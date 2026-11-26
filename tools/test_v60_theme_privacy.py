@@ -52,9 +52,10 @@ class ThemePrivacyTests(unittest.TestCase):
         self.assertIn("return new LanShareState(career, enabled)", state)
         self.assertIn("state.encode()", settings)
         self.assertIn("StandardCopyOption.ATOMIC_MOVE", settings)
-        self.assertIn("LanShareSettings.setVideos(activity, next)", ui)
-        self.assertIn("addVideoOptOut();", ui)
-        self.assertLess(ui.index("panel.addView(actions);"), ui.index("addVideoOptOut();"))
+        self.assertIn("LanShareSettings.setVideos(activity, enabled)", ui)
+        self.assertIn("videoSharing.setChecked(state.videoAllowed)", ui)
+        self.assertLess(ui.index("shareControls.addView(videoSharing);"), ui.index("shareControls.addView(sharing);"))
+        self.assertNotIn("addVideoOptOut", ui)
         self.assertIn("LanShareSettings.reels(context)", self.read("LanBoardServer"))
 
     def test_system_owned_permission_and_install_flows_unchanged(self):

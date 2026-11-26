@@ -25,6 +25,43 @@ final class TitleBackdropFiles {
     }
 
 
+    /** Small non-sensitive status, persisted before the capture process exits.
+     * Never include game files, account data, addresses or arbitrary paths. */
+    private static final String STATUS = "title-backdrop-status-v1.txt";
+
+    static void writeStatus(File root, String message) {
+        File temporary = null;
+        try {
+            safeDirectory(root);
+            String text = message == null ? "" : message.replaceAll("[\\r\\n\\t]", " ");
+            if (text.length() > 220) text = text.substring(0, 220);
+            temporary = File.createTempFile("title-status-", ".tmp", root);
+            try (FileOutputStream out = new FileOutputStream(temporary)) {
+                out.write(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                out.getFD().sync();
+            }
+            File target = new File(root, STATUS);
+            try {
+                Files.move(temporary.toPath(), target.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException unsupported) {
+                Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException | RuntimeException ignored) {
+        } finally {
+            if (temporary != null) temporary.delete();
+        }
+    }
+
+    static String readStatus(File root) {
+        File file = new File(root, STATUS);
+        try {
+            if (!regular(file) || file.length() > 1024) return "";
+            return new String(Files.readAllBytes(file.toPath()),
+                java.nio.charset.StandardCharsets.UTF_8);
+        } catch (IOException | RuntimeException unavailable) { return ""; }
+    }
+
     static File pending(File root) { return new File(root, PENDING); }
     static File directory(File root) { return new File(root, FINAL); }
 

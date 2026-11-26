@@ -85,6 +85,8 @@ public class LauncherActivity extends Activity {
     private File dataRoot;
     private LauncherBackdrop titleBackdrop;
     private boolean titleBackdropAvailable;
+    private TextView titleStatusView;
+    private String lastTitleNotice = "";
     private TextView status;
     private ProgressBar progress;
     private Button pick;
@@ -458,8 +460,8 @@ public class LauncherActivity extends Activity {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(14), dp(10), dp(14), dp(12));
         panel.setBackground(hudSurface(
-            titleBackdropAvailable ? (HaloTheme.PANEL_TOP & 0x00ffffff) | 0xb8000000 : HaloTheme.PANEL_TOP,
-            titleBackdropAvailable ? (HaloTheme.PANEL_BOTTOM & 0x00ffffff) | 0xb8000000 : HaloTheme.PANEL_BOTTOM,
+            titleBackdropAvailable ? (HaloTheme.PANEL_TOP & 0x00ffffff) | 0x92000000 : HaloTheme.PANEL_TOP,
+            titleBackdropAvailable ? (HaloTheme.PANEL_BOTTOM & 0x00ffffff) | 0x92000000 : HaloTheme.PANEL_BOTTOM,
             HUD_BORDER));
         return panel;
     }
@@ -615,6 +617,15 @@ public class LauncherActivity extends Activity {
         return grid;
     }
 
+    /** Visual grouping only: foreground has no layout padding or extra rows. */
+    private void setupGroupBorder(View group) {
+        GradientDrawable border = new GradientDrawable();
+        border.setColor(android.graphics.Color.TRANSPARENT);
+        border.setCornerRadius(dp(3));
+        border.setStroke(Math.max(1, dp(1)), 0x657bb8ed);
+        group.setForeground(border);
+    }
+
     private void toolsPair(LinearLayout parent, Button first, Button second) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -720,9 +731,13 @@ public class LauncherActivity extends Activity {
         if (!prefs.edit().putLong("attempted_version", version).commit()) return;
         try {
             TitleBackdropFiles.prepare(getFilesDir());
+            TitleBackdropFiles.writeStatus(getFilesDir(), "Preparing: launching title");
             startActivity(new Intent(this, HaloActivity.class)
                 .putExtra(HaloActivity.TITLE_CAPTURE, true));
         } catch (Exception unavailable) {
+            TitleBackdropFiles.writeStatus(getFilesDir(), "Title preparation unavailable (" +
+                unavailable.getClass().getSimpleName() + ")");
+            updateTitleStatus();
             HaloNotice.makeText(this, "Original title unavailable; Halo still works. " +
                 (unavailable.getMessage() == null ? "" : unavailable.getMessage()),
                 HaloNotice.LENGTH_LONG).show();
@@ -733,6 +748,7 @@ public class LauncherActivity extends Activity {
         if (titleBackdrop != null) titleBackdrop.pauseTitle();
         titleBackdrop = null;
         titleBackdropAvailable = TitleBackdropFiles.ready(getFilesDir());
+        titleStatusView = null;
         LanConfig.Settings settings = new LanConfig.Settings();
         String warning = "";
         try {
@@ -752,9 +768,9 @@ public class LauncherActivity extends Activity {
             new int[] { HaloTheme.BACKGROUND_TOP, HaloTheme.BACKGROUND_CENTER,
                 HaloTheme.BACKGROUND_BOTTOM }));
         if (titleBackdropAvailable) {
-            titleBackdrop = new LauncherBackdrop(this, getFilesDir());
+            titleBackdrop = new LauncherBackdrop(this, getFilesDir(), message -> updateTitleStatus());
             stage.addView(titleBackdrop, new android.widget.FrameLayout.LayoutParams(-1, -1));
-            root.setBackgroundColor(0x60091320);
+            root.setBackgroundColor(0x30091320);
         }
         stage.addView(root, new android.widget.FrameLayout.LayoutParams(-1, -1));
 
@@ -877,6 +893,12 @@ public class LauncherActivity extends Activity {
 
         LinearLayout hostPanel = new LinearLayout(this);
         hostPanel.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout hostConnection = setupColumn();
+        LinearLayout hostBotOptions = setupColumn();
+        setupGroupBorder(hostConnection);
+        setupGroupBorder(hostBotOptions);
+        hostPanel.addView(hostConnection);
+        hostPanel.addView(hostBotOptions);
         TextView hostAddress = lanText(ips.isEmpty()
             ? "YOUR IP: NOT DETECTED"
             : "YOUR IP: " + android.text.TextUtils.join(" / ", ips), 14);
@@ -885,7 +907,7 @@ public class LauncherActivity extends Activity {
         hostAddress.setPadding(dp(5), dp(3), dp(5), dp(3));
         hostAddress.setBackground(hudSurface(
             HaloTheme.PANEL_TOP, HaloTheme.PANEL_BOTTOM, HUD_BORDER));
-        hostPanel.addView(hostAddress);
+        hostConnection.addView(hostAddress);
         if (ips.size() > 1)
             hostAddress.setContentDescription(hostAddress.getText() +
                 ". Use the address belonging to the active Wi-Fi hotspot.");
@@ -896,7 +918,7 @@ public class LauncherActivity extends Activity {
         shareUpdates.setContentDescription("Share my Halo version with LAN players");
         shareUpdates.setChecked(getSharedPreferences("launcher_ui", MODE_PRIVATE)
             .getBoolean("lan_update_share", true));
-        LinearLayout hostChecks = setupChecks(hostPanel);
+        LinearLayout hostChecks = setupChecks(hostConnection);
         addSetupCheck(hostChecks, shareUpdates);
         // Live-player and sharing controls remain in the masthead/Leaderboard.
 
@@ -906,7 +928,7 @@ public class LauncherActivity extends Activity {
         for (int index = 0; index < lanBotCounts.length; index++)
             lanBotChoices[index] = lanBotCounts[index] == 0 ?
                 "None" : Integer.toString(lanBotCounts[index]);
-        ChoiceButton lanBots = botChoice(hostPanel, "BOT COUNT",
+        ChoiceButton lanBots = botChoice(hostBotOptions, "BOT COUNT",
             lanBotChoices, LanConfig.choiceIndex(lanBotCounts,
                 settings.systemLinkBotCount));
         String[] lanSkillChoices = { "Recruit", "Easy", "Normal", "Heroic", "Veteran", "Legendary" };
@@ -917,13 +939,14 @@ public class LauncherActivity extends Activity {
                 break;
             }
         }
-        ChoiceButton lanSkill = botChoice(hostPanel, "DIFFICULTY",
+        ChoiceButton lanSkill = botChoice(hostBotOptions, "DIFFICULTY",
             lanSkillChoices, lanSkillSelection);
         // Driving is permanently enabled when this launcher hosts LAN bots.
         roleColumn.addView(hostPanel);
 
         LinearLayout joinPanel = new LinearLayout(this);
         joinPanel.setOrientation(LinearLayout.VERTICAL);
+        setupGroupBorder(joinPanel);
         TextView discoveryStatus = lanText("Find a LAN host or enter its IP.", 11);
         discoveryStatus.setTextColor(HUD_ACCENT);
         joinPanel.addView(discoveryStatus);
@@ -985,6 +1008,7 @@ public class LauncherActivity extends Activity {
         // These are global recorder preferences, not a join-only recording mode.
         // Store on change so Host and offline multiplayer use the same choices.
         LinearLayout recordingPanel = setupColumn();
+        setupGroupBorder(recordingPanel);
         recordingPanel.addView(hudSection("MATCH RECORDING"));
         LinearLayout recordingChecks = setupChecks(recordingPanel);
         CheckBox recordHighlights = new CheckBox(this);
@@ -1016,6 +1040,7 @@ public class LauncherActivity extends Activity {
         roleColumn.addView(joinPanel);
 
         LinearLayout advanced = setupColumn();
+        setupGroupBorder(advanced);
         advanced.addView(hudSection("NETWORK OPTIONS"));
         EditText local = new EditText(this);
         local.setSingleLine(true);
@@ -1096,12 +1121,14 @@ public class LauncherActivity extends Activity {
         String offlineChoice = launcherPreferences.getString("offline_game_type",
             "standard".equals(savedMode) ? "campaign" : "bots");
         offlineType.check("campaign".equals(offlineChoice) ? campaign.getId() : botMatch.getId());
+        setupGroupBorder(offlineType);
         offlineLeft.addView(offlineType);
         TextView campaignInfo = lanText("Launch the original Halo campaign. "
             + "Your existing profiles and checkpoints are kept.", 12);
         offlineRight.addView(campaignInfo);
         LinearLayout offlineBotOptions = new LinearLayout(this);
         offlineBotOptions.setOrientation(LinearLayout.VERTICAL);
+        setupGroupBorder(offlineBotOptions);
         offlineLeft.addView(offlineBotOptions);
         String[] offlineCounts = new String[127];
         for (int i = 0; i < offlineCounts.length; i++)
@@ -1113,6 +1140,7 @@ public class LauncherActivity extends Activity {
             offlineSkills, offlinePreferences.getInt("skill", 2));
         String[] offlineTeams = { "Balanced", "Bots vs players" };
         LinearLayout offlineTeamOptions = setupColumn();
+        setupGroupBorder(offlineTeamOptions);
         offlineRight.addView(offlineTeamOptions);
         ChoiceButton offlineTeam = botChoice(offlineTeamOptions, "TEAMS",
             offlineTeams, offlinePreferences.getInt("team", 0));
@@ -1120,6 +1148,7 @@ public class LauncherActivity extends Activity {
         /* The inactive 2142 commander experiment is retired. Keep only
          * individual host-authorized killstreak rewards in this launcher. */
         LinearLayout killstreakPanel = setupColumn();
+        setupGroupBorder(killstreakPanel);
         killstreakPanel.setVisibility(View.GONE);
         offlineRight.addView(killstreakPanel);
         SharedPreferences killstreakPrefs =
@@ -1284,6 +1313,11 @@ public class LauncherActivity extends Activity {
         campaignSaveStatus.setTextColor(HUD_WARNING);
         revealStatus(campaignSaveStatus);
         campaignSavesPanel.addView(campaignSaveStatus);
+        titleStatusView = lanText("", 11);
+        titleStatusView.setTextColor(HUD_WARNING);
+        titleStatusView.setVisibility(View.GONE);
+        toolsPage.addView(titleStatusView);
+        updateTitleStatus();
 
         // Compact action over the empty lower-right part of the active page.
         // Status/error text occupies a separate scrollable region if needed.
@@ -2184,6 +2218,7 @@ public class LauncherActivity extends Activity {
         }
         if (titleBackdrop != null) titleBackdrop.resumeTitle();
         showTitleResult(getIntent());
+        updateTitleStatus();
         maybePrepareOriginalTitle();
     }
 
@@ -2202,12 +2237,31 @@ public class LauncherActivity extends Activity {
         }
     }
 
+    private void updateTitleStatus() {
+        String status = TitleBackdropFiles.readStatus(getFilesDir());
+        boolean failure = !status.isEmpty() && !status.equals("Ready") &&
+            (!status.startsWith("Preparing:") ||
+                (!titleBackdropAvailable && gameProcessStatus() == 0));
+        String display = failure && status.startsWith("Preparing:") ?
+            "Title preparation did not finish: " + status.substring("Preparing:".length()).trim() : status;
+        if (titleStatusView != null) {
+            titleStatusView.setText(failure ? display : "");
+            titleStatusView.setVisibility(failure ? View.VISIBLE : View.GONE);
+        }
+        if (failure && launcherResumed && !display.equals(lastTitleNotice)) {
+            lastTitleNotice = display;
+            HaloNotice.makeText(this, display, HaloNotice.LENGTH_LONG).show();
+        }
+    }
+
     private void showTitleResult(Intent intent) {
         if (intent == null) return;
         String message = intent.getStringExtra(HaloActivity.TITLE_RESULT);
         if (message == null) return;
         intent.removeExtra(HaloActivity.TITLE_RESULT);
-        HaloNotice.makeText(this, message, HaloNotice.LENGTH_LONG).show();
+        updateTitleStatus();
+        if (TitleBackdropFiles.ready(getFilesDir()))
+            HaloNotice.makeText(this, message, HaloNotice.LENGTH_LONG).show();
     }
 
     @Override

@@ -14,6 +14,8 @@ import java.io.File;
  * Android launcher. Only a small decoder and music player run here. */
 final class LauncherBackdrop extends View {
     private final File directory;
+    private final File root;
+    private final java.util.function.Consumer<String> status;
     private final Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
     private final RectF dst = new RectF();
     private volatile Bitmap frame;
@@ -24,8 +26,10 @@ final class LauncherBackdrop extends View {
     private boolean active, prepared, focused;
     private final AudioManager audio;
 
-    LauncherBackdrop(Context context, File root) {
+    LauncherBackdrop(Context context, File root, java.util.function.Consumer<String> status) {
         super(context);
+        this.root = root;
+        this.status = status;
         directory = TitleBackdropFiles.directory(root);
         audio = (AudioManager)context.getSystemService(Context.AUDIO_SERVICE);
         setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -56,7 +60,11 @@ final class LauncherBackdrop extends View {
             MediaPlayer player = new MediaPlayer();
             music = player;
             player.setAudioAttributes(attributes);
-            player.setDataSource(new File(directory, "audio.wav").getAbsolutePath());
+            // The media service must receive an open descriptor; the file is
+            // private to this app and not readable by unrelated processes.
+            try (java.io.FileInputStream input = new java.io.FileInputStream(new File(directory, "audio.wav"))) {
+                player.setDataSource(input.getFD());
+            }
             player.setLooping(true);
             player.setOnPreparedListener(p -> {
                 if (!active || token != generation || p != music) return;
@@ -64,11 +72,17 @@ final class LauncherBackdrop extends View {
                 if (focused) try { p.start(); } catch (RuntimeException ignored) { }
             });
             player.setOnErrorListener((p, what, extra) -> {
-                if (p == music) releaseMusic();
+                if (p == music) {
+                    reportFailure("Title audio playback failed (" + what + "/" + extra + ")");
+                    releaseMusic();
+                }
                 return true;
             });
             player.prepareAsync();
-        } catch (Exception unavailable) { releaseMusic(); }
+        } catch (Exception unavailable) {
+            reportFailure("Title audio could not start (" + unavailable.getClass().getSimpleName() + ")");
+            releaseMusic();
+        }
     }
 
     private void decode(int token) {
@@ -95,8 +109,16 @@ final class LauncherBackdrop extends View {
                 Thread.sleep(1000 / reader.fps / 2);
             }
         } catch (Exception unavailable) {
-            // Fall back to the existing gradient behind the View.
+            if (generation == token && !(unavailable instanceof InterruptedException))
+                post(() -> { if (generation == token) reportFailure("Title animation playback failed (" +
+                    unavailable.getClass().getSimpleName() + ")"); });
         }
+    }
+
+    private void reportFailure(String message) {
+        TitleBackdropFiles.writeStatus(root, message);
+        android.util.Log.w("HaloTitle", message);
+        if (status != null) status.accept(message);
     }
 
     @Override protected void onDraw(Canvas canvas) {

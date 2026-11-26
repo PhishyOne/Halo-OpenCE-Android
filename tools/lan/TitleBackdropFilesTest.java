@@ -35,6 +35,15 @@ public final class TitleBackdropFilesTest {
             File r=root.toFile();
             Files.write(root.resolve("keep-game-data"),new byte[]{42});
             check(!TitleBackdropFiles.ready(r),"missing cache does not appear ready");
+            check(TitleBackdropFiles.readStatus(r).isEmpty(),"missing status safe");
+            TitleBackdropFiles.writeStatus(r,"Preparing: native title");
+            check(TitleBackdropFiles.readStatus(r).equals("Preparing: native title"),"status persisted across process");
+            TitleBackdropFiles.writeStatus(r,"Title failed: black frames");
+            check(TitleBackdropFiles.readStatus(r).equals("Title failed: black frames"),"status replaced atomically");
+            TitleBackdropFiles.writeStatus(r,"x".repeat(1000));
+            check(TitleBackdropFiles.readStatus(r).length()==220,"status bounded");
+            TitleBackdropFiles.writeStatus(r,"line\nnext");
+            check(TitleBackdropFiles.readStatus(r).equals("line next"),"status single line");
             check(TitleBackdropFiles.shouldPrepare(false,-1,69),"first startup prepares");
             check(!TitleBackdropFiles.shouldPrepare(false,69,69),"cancel/crash cannot loop");
             check(TitleBackdropFiles.shouldPrepare(false,69,70),"updated build can retry");

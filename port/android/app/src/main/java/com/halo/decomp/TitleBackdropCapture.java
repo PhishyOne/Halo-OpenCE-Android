@@ -25,6 +25,10 @@ final class TitleBackdropCapture {
     private final AtomicBoolean canceled = new AtomicBoolean();
     private final AtomicBoolean finished = new AtomicBoolean();
     private Thread worker;
+    private long surfaceDeadline;
+    private int copyFailures, copiedFrames, changedFrames, writtenFrames;
+    private int capturedAudioMs;
+    private String phase = "Waiting for native title";
     private final Runnable timeout = () -> {
         if (worker == null && !finished.get())
             fail("The original title scene did not become ready.");
@@ -32,7 +36,8 @@ final class TitleBackdropCapture {
 
     TitleBackdropCapture(HaloActivity activity, View root, TextView status) {
         this.activity = activity; this.root = root; this.status = status;
-        ui.postDelayed(timeout, 45000);
+        TitleBackdropFiles.writeStatus(activity.getFilesDir(), "Preparing: " + phase);
+        ui.postDelayed(timeout, 60000);
     }
 
     private static SurfaceView surface(View view) {
@@ -51,12 +56,26 @@ final class TitleBackdropCapture {
         if (finished.get() || canceled.get() || worker != null) return;
         ui.removeCallbacks(timeout);
         if (!audioReady) { fail("Could not open the original title audio cache."); return; }
+        phase = "Waiting for SDL surface";
+        TitleBackdropFiles.writeStatus(activity.getFilesDir(), "Preparing: " + phase);
+        surfaceDeadline = SystemClock.elapsedRealtime() + 12000;
+        awaitSurface();
+    }
+
+    /** The music tag can become ready before the first SDL surface buffer.
+     * Do not discard the entire preparation on this transient startup race. */
+    private void awaitSurface() {
+        if (finished.get() || canceled.get() || worker != null) return;
         SurfaceView source = surface(root);
-        if (source == null || !source.getHolder().getSurface().isValid()) {
-            fail("Halo's title rendering surface is unavailable."); return;
-        }
-        worker = new Thread(() -> capture(source), "Halo-title-capture");
-        worker.start();
+        if (source != null && source.getWidth() > 0 && source.getHeight() > 0 &&
+                source.getHolder().getSurface().isValid()) {
+            phase = "Capturing native title";
+            TitleBackdropFiles.writeStatus(activity.getFilesDir(), "Preparing: " + phase);
+            worker = new Thread(() -> capture(source), "Halo-title-capture");
+            worker.start();
+        } else if (SystemClock.elapsedRealtime() < surfaceDeadline) {
+            ui.postDelayed(this::awaitSurface, 150);
+        } else fail("Halo's title rendering surface is unavailable.");
     }
 
     void cancel() {
@@ -74,7 +93,13 @@ final class TitleBackdropCapture {
     private void finish(boolean success, String message) {
         if (!finished.compareAndSet(false, true)) return;
         ui.removeCallbacks(timeout);
-        ui.post(() -> activity.returnFromTitleCapture(success, message));
+        String detail = success ? "Ready" : "Title failed: " + message +
+            " (frames " + copiedFrames + "/" + writtenFrames + ", changes " +
+            changedFrames + ", copy errors " + copyFailures + ", audio " +
+            capturedAudioMs + "ms)";
+        TitleBackdropFiles.writeStatus(activity.getFilesDir(), detail);
+        android.util.Log.i("HaloTitle", detail);
+        ui.post(() -> activity.returnFromTitleCapture(success, success ? message : detail));
     }
 
     /** A successful PixelCopy alone can still be black. Require visible,
@@ -136,14 +161,23 @@ final class TitleBackdropCapture {
                                 if (lastSignature != 0 && sample != lastSignature) changes++;
                                 lastSignature = sample;
                                 jpeg.reset();
-                                if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 76, jpeg))
+                                // Keep the private cache within its fixed budget even for
+                                // detailed frames. Preserve the real scene, not a synthetic image.
+                                if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 65, jpeg))
                                     throw new IOException("Cannot encode title frame.");
                                 last = jpeg.toByteArray();
                                 copied++;
+                                copiedFrames = copied;
+                                changedFrames = changes;
                             }
-                        }
+                        } else copyFailures++;
                     }
-                    if (last != null) writer.frame(last);
+                    if (last != null) {
+                        writer.frame(last);
+                        writtenFrames = writer.count();
+                    }
+                    else if (tick > 10 * TitleBackdropFiles.FPS)
+                        throw new IOException("No visible original title frame received.");
                     int seconds = tick / TitleBackdropFiles.FPS;
                     if (seconds != lastProgress) {
                         lastProgress = seconds;
@@ -152,11 +186,12 @@ final class TitleBackdropCapture {
                     }
                 }
                 if (canceled.get()) throw new IOException("Title setup canceled.");
-                if (copied < TitleBackdropFiles.FRAMES / 3 || changes < 12)
+                if (copied < TitleBackdropFiles.FRAMES / 6 || changes < 12)
                     throw new IOException("The title capture was black, static or too slow.");
                 writer.complete();
             }
             int audioMs = activity.finishTitleAudio(true);
+            capturedAudioMs = audioMs;
             if (audioMs < 55000) throw new IOException("The title music was silent or incomplete.");
             if (canceled.get()) throw new IOException("Title setup canceled.");
             TitleBackdropFiles.commit(root);

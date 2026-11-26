@@ -44,8 +44,8 @@ final class LanBoardUi {
     private String detailFingerprint;
     private GroupRatingLedger.Snapshot groupRatings = GroupRatingLedger.empty();
     private boolean groupRatingAvailable = true;
-    private CheckBox sharing;
-    private Button sync, videoOptOut;
+    private CheckBox sharing, videoSharing;
+    private Button sync;
     private EditText hostIp;
     private int boardScroll;
     private static final int GREEN = Color.rgb(124, 229, 174);
@@ -150,6 +150,8 @@ final class LanBoardUi {
         generation++;
         page = next;
         panel.removeAllViews();
+        sharing = null;
+        videoSharing = null;
         LinearLayout heading = horizontal();
         if (back != null) {
             Button arrow = button("‹ BACK", back);
@@ -167,24 +169,32 @@ final class LanBoardUi {
         LinearLayout header = horizontal();
         live = text("CHECKING…", 12, HaloTheme.MUTED, true);
         header.addView(live, new LinearLayout.LayoutParams(0, -2, 1));
+        LinearLayout shareControls = new LinearLayout(activity);
+        shareControls.setOrientation(LinearLayout.VERTICAL);
+        shareControls.setGravity(Gravity.START);
+        videoSharing = sharingCheck("LAN VIDEO SHARING");
         sharing = new CheckBox(activity);
-        sharing.setText("LAN CAREER SHARING");
-        sharing.setTextColor(HaloTheme.TEXT); sharing.setTextSize(11);
-        sharing.setButtonTintList(HaloTheme.CHECK_TINT); HaloTheme.font(sharing, true);
-        sharing.setChecked(LanShareSettings.career(activity));
+        styleSharingCheck(sharing, "LAN CAREER SHARING");
+        refreshSharingChecks();
+        videoSharing.setOnCheckedChangeListener((v, enabled) -> {
+            if (changing) return;
+            boolean saved = LanShareSettings.setVideos(activity, enabled);
+            refreshSharingChecks();
+            if (saved) activity.boardSharingChanged();
+            else HaloNotice.makeText(activity, "Couldn't save video sharing setting.",
+                HaloNotice.LENGTH_LONG).show();
+        });
         sharing.setOnCheckedChangeListener((v, enabled) -> {
             if (changing) return;
             boolean saved = LanShareSettings.setCareer(activity, enabled);
-            changing = true;
-            sharing.setChecked(LanShareSettings.career(activity));
-            changing = false;
-            if (saved) {
-                if (videoOptOut != null) videoOptOut.setText(videoSharingLabel());
-                activity.boardSharingChanged();
-            }
-            else status.setText("Couldn't save sharing setting.");
+            refreshSharingChecks();
+            if (saved) activity.boardSharingChanged();
+            else HaloNotice.makeText(activity, "Couldn't save sharing setting.",
+                HaloNotice.LENGTH_LONG).show();
         });
-        header.addView(sharing);
+        shareControls.addView(videoSharing);
+        shareControls.addView(sharing);
+        header.addView(shareControls);
         panel.addView(header);
         panel.addView(text("Automatic on trusted local Wi-Fi. Shared reels are accessible to reachable LAN devices. "
             + "Not encrypted. Full recordings stay private.", 10, HaloTheme.MUTED, false));
@@ -217,32 +227,41 @@ final class LanBoardUi {
         sync.setEnabled(!syncing);
         actions.addView(sync, new LinearLayout.LayoutParams(0, dp(38), 1));
         panel.addView(actions);
-        addVideoOptOut();
         drawBoard();
     }
 
-    /** One optional opt-out, not a required sharing prompt. */
-    private void addVideoOptOut() {
-        Button toggle = button(videoSharingLabel(), () -> { });
-        videoOptOut = toggle;
-        toggle.setOnClickListener(v -> {
-            boolean next = !LanShareSettings.read(activity).videoAllowed;
-            if (LanShareSettings.setVideos(activity, next)) {
-                activity.boardSharingChanged();
-                toggle.setText(videoSharingLabel());
-                HaloNotice.makeText(activity, next ? "Highlight sharing enabled" :
-                    "Highlight sharing disabled. Career sync is unchanged.", HaloNotice.LENGTH_SHORT).show();
-            } else HaloNotice.makeText(activity, "Couldn't save video sharing setting.",
-                HaloNotice.LENGTH_LONG).show();
-        });
-        panel.addView(toggle, new LinearLayout.LayoutParams(-1, dp(40)));
+    private CheckBox sharingCheck(String label) {
+        CheckBox check = new CheckBox(activity);
+        styleSharingCheck(check, label);
+        return check;
     }
 
-    private String videoSharingLabel() {
+    private void styleSharingCheck(CheckBox check, String label) {
+        check.setText(label);
+        check.setTextColor(HaloTheme.TEXT);
+        check.setTextSize(11);
+        check.setButtonTintList(HaloTheme.CHECK_TINT);
+        HaloTheme.font(check, true);
+        check.setPadding(0, 0, 0, 0);
+        check.setMinimumHeight(0);
+        check.setMinHeight(dp(34));
+    }
+
+    /** The checked value is the saved preference, not effective serving.
+     * Career off pauses video sharing without erasing its own opt-out. */
+    private void refreshSharingChecks() {
         LanShareState state = LanShareSettings.read(activity);
-        if (!state.videoAllowed) return "VIDEO SHARING: OFF  •  ENABLE";
-        return state.career ? "VIDEO SHARING: ON  •  OPT OUT" :
-            "VIDEO SHARING: PAUSED WITH LAN CAREER  •  OPT OUT";
+        changing = true;
+        if (sharing != null) sharing.setChecked(state.career);
+        if (videoSharing != null) {
+            videoSharing.setChecked(state.videoAllowed);
+            videoSharing.setText(state.videoAllowed && !state.career ?
+                "LAN VIDEO SHARING (PAUSED)" : "LAN VIDEO SHARING");
+            videoSharing.setContentDescription("LAN video sharing. Shares finished highlights only. " +
+                (state.career ? "Independent of career preference." :
+                    "Paused while career sharing is off; your preference is saved."));
+        }
+        changing = false;
     }
 
     private void cell(LinearLayout row, String value, float weight, int size, int color, boolean bold) {
@@ -490,7 +509,6 @@ final class LanBoardUi {
         begin(Page.VIDEOS, (selectedName == null ? "PLAYER" : selectedName) + " / VIDEOS",
             mine ? "SAVED ON THIS PHONE" : "STREAM OVER LAN • NO LOCAL COPY", this::buildPlayer);
         if (mine) {
-            addVideoOptOut();
             action(panel, "MANAGE LOCAL RECORDINGS", () ->
                 HaloReelGallery.manage(activity, root, () -> {
                     if (!closed && visible && page == Page.VIDEOS && mine) buildVideos();

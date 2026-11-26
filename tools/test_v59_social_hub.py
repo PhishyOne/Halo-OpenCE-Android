@@ -19,7 +19,7 @@ class SocialHubTest(unittest.TestCase):
         self.assertIn("read(context).withVideos(enabled)", settings)
         self.assertIn("new LanShareState(false, false)", settings)
         self.assertIn("LAN CAREER SHARING", ui)
-        self.assertIn("VIDEO SHARING: ON  •  OPT OUT", ui)
+        self.assertIn('videoSharing = sharingCheck("LAN VIDEO SHARING")', ui)
         self.assertEqual(ui.count("sharing = new CheckBox(activity)"), 1)
         self.assertNotIn("Share saved highlights?", ui)
         self.assertIn("Not encrypted.", ui)

@@ -255,6 +255,7 @@ jobs:
           python3 -m unittest tools.test_v66_play_dock -v
           python3 -m unittest tools.test_v67_simple_tools -v
           python3 -m unittest tools.test_v68_original_title -v
+          python3 -m unittest tools.test_v70_launcher_polish -v
           python3 tools/test_highlight_moments.py -v
           python3 tools/test_v42_highlights_integration.py -v
           python3 tools/test_android_experiment_package.py -v

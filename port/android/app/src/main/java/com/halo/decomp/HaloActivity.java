@@ -164,6 +164,8 @@ public class HaloActivity extends SDLActivity {
     void returnFromTitleCapture(boolean success, String message) {
         if (!titleCaptureMode || titleReturning) return;
         titleReturning = true;
+        if (titleCapture == null)
+            TitleBackdropFiles.writeStatus(getFilesDir(), success ? "Ready" : "Title failed: " + message);
         android.content.Intent launcher = new android.content.Intent(this, LauncherActivity.class)
             .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK |
                 android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP |
