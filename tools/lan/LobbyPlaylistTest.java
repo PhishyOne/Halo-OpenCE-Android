@@ -123,8 +123,47 @@ public final class LobbyPlaylistTest {
         LobbyModel.Snapshot two=single.beginStart(single.dueStart(5001),true,5001);
         check(!one.round.equals(two.round)&&single.hostReturned(two.round,false,"Halo closed.",5002).secondsToNext<0,"host crash pauses even a single-entry loop");
     }
+    private static LobbyModel.Snapshot finishEntry(LobbyModel model,String guest,long now)throws Exception{
+        LobbyModel.Snapshot start=prepare(model,now);
+        send(model,LobbyWire.Request.acknowledge(guest,start.round,true),now+1);
+        model.hostReturned(start.round,true,"Match complete.",now+2);
+        return back(model,guest,start.round,true,now+3);
+    }
+    private static void mixedRoster()throws Exception{
+        MatchWorkshop.Entry team=entry("bloodgulch","team_slayer");
+        MatchWorkshop.Entry ffa=new MatchWorkshop.Entry("sidewinder",MatchWorkshop.Preset.standard("slayer"),
+            MatchWorkshop.Bots.ffa(3,0),false);
+        MatchWorkshop.Entry versus=new MatchWorkshop.Entry("beavercreek",MatchWorkshop.Preset.standard("team_slayer"),
+            new MatchWorkshop.Bots(MatchWorkshop.Assignment.BOTS_VS_PLAYERS,9,3,0,0,0,MatchWorkshop.Side.BLUE),true);
+        LobbyModel model=lobby(false,false,team,ffa,versus,team);
+        LobbyModel.Joined guest=model.join("Guest",1,0);
+        String hostId=model.hostSnapshot(0).self;
+        model.setTeam(hostId,LobbyModel.BLUE);
+        model.setTeam(guest.snapshot.self,LobbyModel.RED);
+        LobbyModel.Snapshot next=finishEntry(model,guest.secret,1);
+        check(!next.teams()&&next.members.stream().allMatch(m->m.team==LobbyModel.NO_TEAM),"guest sees FFA in the intermission");
+        check(next.allocation().ffa==3&&next.entry().bots.difficulty==0,"guest sees the FFA entry's count and difficulty");
+        LobbyModel.Snapshot locked=model.beginStart(model.dueStart(5004),true,5004);
+        check(!locked.teams()&&locked.entryIndex()==1&&locked.allocation().ffa==3,"host freezes the same FFA roster");
+        send(model,LobbyWire.Request.acknowledge(guest.secret,locked.round,true),5005);
+        model.hostReturned(locked.round,true,"Match complete.",5006);
+        next=back(model,guest.secret,locked.round,true,5007);
+        check(next.versus()&&next.members.stream().allMatch(m->m.team==LobbyModel.RED)&&next.allocation().blue==9,
+            "both humans together with bots opposite on arrival");
+        model.resetStart("Paused",5008);
+        model.setTeam(hostId,LobbyModel.BLUE);
+        LobbyModel.Snapshot swapped=send(model,LobbyWire.Request.poll(guest.secret,-1),5009);
+        check(swapped.members.stream().allMatch(m->m.team==LobbyModel.BLUE)&&swapped.allocation().red==9&&
+            swapped.allocation().blue==0&&swapped.entry().bots.difficulty==3,"whole group swaps and bots switch sides");
+        LobbyWire.Response denied=LobbyModelTest.exchange(model,LobbyWire.Request.update(guest.secret,"Guest",1,false,LobbyModel.RED,swapped.revision),5010);
+        check(!denied.error.isEmpty(),"guest cannot split the humans in versus");
+        next=finishEntry(model,guest.secret,5011);
+        check(next.teams()&&!next.versus()&&next.me().team==LobbyModel.RED&&next.members.get(0).team==LobbyModel.BLUE,
+            "ordinary team assignments survive FFA and the group swap");
+        check(next.allocation().red==3&&next.allocation().blue==3,"last entry restores its own balanced bots");
+    }
     public static void main(String[] args)throws Exception{
-        ordered();interruption();shuffle();
+        ordered();interruption();shuffle();mixedRoster();
         System.out.println("LobbyPlaylistTest PASS ("+checks+" checks, real TCP loopback)");
     }
 }

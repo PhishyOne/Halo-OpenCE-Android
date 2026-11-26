@@ -51,8 +51,7 @@ final class LobbyModel {
                 new Plan(p.name,true,p.shuffle,p.loop,p.entries);
         }
         MatchWorkshop.Entry first(){return entries.isEmpty()?null:entries.get(0);}
-        boolean teams(){return first()==null||first().preset.teams();}
-        boolean versus(){return first()!=null&&first().bots.assignment==MatchWorkshop.Assignment.BOTS_VS_PLAYERS;}
+        MatchWorkshop.Entry entry(int index){return index<0?null:entries.get(index);}
     }
     static final class Snapshot {
         final String session,self;final long revision;final Plan plan;final List<Member> members;
@@ -80,13 +79,24 @@ final class LobbyModel {
             if(revision<0||members.isEmpty()||members.size()>MAX_HUMANS)throw new IllegalArgumentException("Invalid roster");
             this.revision=revision;this.plan=Objects.requireNonNull(plan);
             Set<String> ids=new HashSet<>();int hosts=0;boolean found=false;
+            int humanSide=members.get(0).team;
+            if(!members.get(0).host)throw new IllegalArgumentException("Missing host seat");
             for(Member m:members){
-                if(!ids.add(m.id)||plan.teams()!=(m.team!=NO_TEAM))throw new IllegalArgumentException("Invalid member");
+                if(!ids.add(m.id)||teams()!=(m.team!=NO_TEAM)||
+                        (versus()&&m.team!=humanSide)||((m.host||!teams()||versus())&&m.requestedTeam!=NO_TEAM))
+                    throw new IllegalArgumentException("Invalid member");
                 if(m.host)hosts++;if(m.id.equals(self))found=true;
             }
             if(hosts!=1||!found)throw new IllegalArgumentException("Incomplete roster");
             this.members=Collections.unmodifiableList(new ArrayList<>(members));
         }
+        int entryIndex(){
+            if(!round.isEmpty())return startIndex;
+            return nextIndex>=0?nextIndex:plan.entries.isEmpty()?-1:0;
+        }
+        MatchWorkshop.Entry entry(){return plan.entry(entryIndex());}
+        boolean teams(){return entry()==null||entry().preset.teams();}
+        boolean versus(){return entry()!=null&&entry().bots.assignment==MatchWorkshop.Assignment.BOTS_VS_PLAYERS;}
         Member me(){for(Member m:members)if(m.id.equals(self))return m;throw new IllegalStateException();}
         List<Member> notReady(){
             ArrayList<Member> result=new ArrayList<>();
@@ -96,9 +106,9 @@ final class LobbyModel {
         MatchWorkshop.Allocation allocation(){
             int red=0,blue=0,ffa=0;
             for(Member m:members){if(m.team==RED)red++;else if(m.team==BLUE)blue++;else ffa++;}
-            MatchWorkshop.Entry e=plan.first();
+            MatchWorkshop.Entry e=entry();
             MatchWorkshop.Bots b=e==null?MatchWorkshop.Bots.balanced(0,2):e.bots;
-            return b.resolve(plan.teams(),red,blue,ffa,MatchWorkshop.MAX_LAN_BOTS,MatchWorkshop.MAX_PLAYERS);
+            return b.resolve(teams(),red,blue,ffa,MatchWorkshop.MAX_LAN_BOTS,MatchWorkshop.MAX_PLAYERS);
         }
     }
     /** A host's start dialog is a review of one exact plan and actual
@@ -116,31 +126,19 @@ final class LobbyModel {
         private StartReview(LobbyModel owner,Snapshot s,int entryIndex) {
             this.owner=owner;generation=owner==null?-1:owner.startGeneration;
             session=s.session;plan=s.plan;this.entryIndex=entryIndex;
-            entry=entryIndex<0?null:plan.entries.get(entryIndex);
+            if(entryIndex!=s.entryIndex())throw new IllegalArgumentException("Roster belongs to a different match");
+            entry=s.entry();
             notReady=s.notReady();
-            ArrayList<Member> rows=new ArrayList<>();
-            int red=0,blue=0,ffa=0;
-            boolean teams=entry!=null&&entry.preset.teams();
-            boolean versus=entry!=null&&entry.bots.assignment==MatchWorkshop.Assignment.BOTS_VS_PLAYERS;
-            int hostSide=RED;
-            for(Member m:s.members)if(m.host&&m.team!=NO_TEAM)hostSide=m.team;
-            for(Member m:s.members){
-                int side;
-                if(!teams)side=NO_TEAM;
-                else if(versus&&(!s.plan.teams()||!s.plan.versus()))side=hostSide;
-                else if(m.team!=NO_TEAM&&(versus||!s.plan.versus()))side=m.team;
-                else side=red<=blue?RED:BLUE;
-                Member chosen=new Member(m.id,m.name,m.color,side,NO_TEAM,m.host,m.ready);
-                rows.add(chosen);
-                if(side==RED)red++;else if(side==BLUE)blue++;else ffa++;
+            members=s.members;allocation=s.allocation();
+            int red=0,blue=0;
+            for(Member member:members){
+                if(member.team==RED)red++;
+                else if(member.team==BLUE)blue++;
             }
-            members=Collections.unmodifiableList(rows);
-            allocation=entry==null?new MatchWorkshop.Allocation(0,0,0,"No match selected",false):
-                entry.bots.resolve(teams,red,blue,ffa,MatchWorkshop.MAX_LAN_BOTS,MatchWorkshop.MAX_PLAYERS);
             if(entry==null)blocker="Select a match or a nonempty playlist first.";
             else if(!allocation.valid)blocker=allocation.warning;
-            else if(rows.size()+allocation.bots()<2)blocker="At least two participants are needed.";
-            else if(teams&&(red+allocation.red==0||blue+allocation.blue==0))
+            else if(members.size()+allocation.bots()<2)blocker="At least two participants are needed.";
+            else if(s.teams()&&(red+allocation.red==0||blue+allocation.blue==0))
                 blocker="Both teams need at least one participant.";
             else blocker="";
         }
@@ -220,9 +218,11 @@ final class LobbyModel {
     private final String session=token();
     private final LinkedHashMap<String,Guest> guests=new LinkedHashMap<>();
     private Member host;private Plan plan;private long revision=1;
+    // Rows retain each player's ordinary team while FFA or Humans vs Bots is displayed.
+    private int versusSide=RED;
     LobbyModel(String name,int color,Plan plan){
         this.plan=Objects.requireNonNull(plan);
-        host=new Member(token(),name,color,plan.teams()?RED:NO_TEAM,NO_TEAM,true,false);
+        host=new Member(token(),name,color,RED,NO_TEAM,true,false);
     }
     private StartTicket launch;
     private final Set<String> prepared=new HashSet<>();
@@ -236,6 +236,10 @@ final class LobbyModel {
     synchronized Snapshot beginStart(StartReview review,boolean override,long now){
         if(launch!=null)throw new IllegalStateException("A match is already starting.");
         launch=authorizeStart(review,override,now);
+        for(Guest g:guests.values()){
+            Member m=g.row;
+            if(m.requestedTeam!=NO_TEAM)g.row=m.appearance(m.name,m.color,m.ready,NO_TEAM);
+        }
         startGeneration++;
         prepareBegan=now;prepared.clear();released=guests.isEmpty();startMessage="";secondsToNext=-1;
         changed();
@@ -317,8 +321,6 @@ final class LobbyModel {
         }
     }
     private int nextTeam(){
-        if(!plan.teams())return NO_TEAM;
-        if(plan.versus())return host.team;
         int red=host.team==RED?1:0,blue=host.team==BLUE?1:0;
         for(Guest g:guests.values()){if(g.row.team==RED)red++;if(g.row.team==BLUE)blue++;}
         return red<=blue?RED:BLUE;
@@ -364,7 +366,9 @@ final class LobbyModel {
     synchronized Snapshot guestUpdate(String secret,String name,int color,boolean ready,int request,long knownRevision,long now){
         Guest g=require(secret,now);
         if(launch!=null||secondsToNext>=0||knownRevision!=revision)return snapshot(g.row.id);
-        if(!plan.teams()&&request!=NO_TEAM)throw new IllegalArgumentException("Free-for-all has no teams");
+        MatchWorkshop.Entry entry=activeEntry();
+        if(request!=NO_TEAM&&entry!=null&&(!entry.preset.teams()||entry.bots.assignment==MatchWorkshop.Assignment.BOTS_VS_PLAYERS))
+            throw new IllegalArgumentException("This match has no individual team changes");
         Member old=g.row;
         if(request==old.team)request=NO_TEAM;
         if(old.name.equals(name(name))&&old.color==color(color)&&old.ready==ready&&old.requestedTeam==request)
@@ -389,23 +393,20 @@ final class LobbyModel {
     }
     synchronized void setTeam(String id,int requested){
         if(launch!=null||secondsToNext>=0)return;
-        if(!plan.teams()||requested==NO_TEAM)throw new IllegalArgumentException("No such team");
+        MatchWorkshop.Entry e=activeEntry();
+        if((e!=null&&!e.preset.teams())||requested==NO_TEAM)throw new IllegalArgumentException("No such team");
         team(requested);
+        if(e!=null&&e.bots.assignment==MatchWorkshop.Assignment.BOTS_VS_PLAYERS){
+            if(!host.id.equals(id))throw new IllegalArgumentException("Move all humans together in this mode");
+            versusSide=requested;clearReady();changed();return;
+        }
         if(host.id.equals(id)){host=host.assigned(requested);clearReady();changed();return;}
         for(Guest g:guests.values())if(g.row.id.equals(id)){g.row=g.row.assigned(requested);clearReady();changed();return;}
         throw new IllegalArgumentException("Player left");
     }
     synchronized void setPlan(Plan p){
         if(launch!=null||secondsToNext>=0)return;
-        boolean was=plan.teams();plan=Objects.requireNonNull(p);rotation=null;startMessage="";
-        if(!p.teams()){
-            host=host.assigned(NO_TEAM);
-            for(Guest g:guests.values())g.row=g.row.assigned(NO_TEAM);
-        }else if(!was){
-            host=host.assigned(RED);
-            int n=1;
-            for(Guest g:guests.values())g.row=g.row.assigned(p.versus()?RED:n++%2);
-        }
+        plan=Objects.requireNonNull(p);rotation=null;startMessage="";
         clearReady();changed();
     }
     private String waitingFor(Set<String> accounted){
@@ -413,8 +414,22 @@ final class LobbyModel {
         for(Guest g:guests.values())if(!accounted.contains(g.row.id))names.add(g.row.name);
         return names.size()>3?names.size()+" phones":String.join(", ",names);
     }
+    private int activeIndex(){
+        if(launch!=null)return launch.entryIndex;
+        return rotation!=null?rotation.peekIndex():plan.entries.isEmpty()?-1:0;
+    }
+    private MatchWorkshop.Entry activeEntry(){return plan.entry(activeIndex());}
+    private Member displayed(Member row,MatchWorkshop.Entry entry){
+        if(entry==null)return row;
+        if(!entry.preset.teams())return new Member(row.id,row.name,row.color,NO_TEAM,NO_TEAM,row.host,row.ready);
+        if(entry.bots.assignment==MatchWorkshop.Assignment.BOTS_VS_PLAYERS)
+            return new Member(row.id,row.name,row.color,versusSide,NO_TEAM,row.host,row.ready);
+        return row;
+    }
     private Snapshot snapshot(String self){
-        List<Member> rows=new ArrayList<>();rows.add(host);for(Guest g:guests.values())rows.add(g.row);
+        MatchWorkshop.Entry entry=activeEntry();
+        List<Member> rows=new ArrayList<>();rows.add(displayed(host,entry));
+        for(Guest g:guests.values())rows.add(displayed(g.row,entry));
         String message=startMessage;
         if(launch!=null&&!released)message="Checking match on "+waitingFor(prepared);
         if(hostBack)message="Waiting for "+waitingFor(returned)+" to return.";

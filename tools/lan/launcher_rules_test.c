@@ -1,9 +1,20 @@
 #include <assert.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #include <wchar.h>
 #include "launcher_rule_structs.inc"
 #include "launcher_match_rules.h"
+
+#define NONE (-1)
+#define PIN(x,lo,hi) ((x)<(lo)?(lo):(x)>(hi)?(hi):(x))
+#define csmemset memset
+static struct game_variant global_variant;
+static struct game_variant_options active_options;
+static boolean game_engine;
+static const struct game_variant_options *game_variant_options_get(void){return &active_options;}
+static boolean game_engine_test_trait(long player,int trait){return player==trait;}
+#include "workshop_runtime.inc"
 
 static void base(struct game_variant *v,struct game_variant_options *o,int engine,int mode,int teams){
     memset(v,0,sizeof(*v));memset(o,0,sizeof(*o));
@@ -21,6 +32,37 @@ static void reject(const char *text,const char *name,struct game_variant *v,stru
 int main(void){
     struct game_variant v;
     struct game_variant_options o;
+    base(&v,&o,game_engine_slayer,_game_mode_none,1);
+    assert(sizeof(o)==44 && offsetof(struct game_variant_options,gravity_percent)==40 &&
+        offsetof(struct game_variant_options,damage_percent)==42);
+    assert(launcher_match_rules_apply("gravity_percent=25;damage_percent=400","team_slayer",&v,&o));
+    assert(o.gravity_percent==25 && o.damage_percent==400);
+    assert(launcher_match_rules_apply("gravity_percent=200;damage_percent=25","team_slayer",&v,&o));
+    assert(o.gravity_percent==200 && o.damage_percent==25);
+    reject("damage_percent=250;gravity_percent=24","team_slayer",&v,&o);
+    reject("gravity_percent=201","team_slayer",&v,&o);
+    reject("damage_percent=24","team_slayer",&v,&o);
+    reject("damage_percent=401","team_slayer",&v,&o);
+    game_modes_options_default(&o);
+    assert(o.gravity_percent==100 && o.damage_percent==100);
+    memset(&o,0,sizeof(o)); /* options from a pre-v76 save */
+    game_modes_options_sanitize(&o);
+    assert(o.gravity_percent==100 && o.damage_percent==100);
+    o.gravity_percent=201;o.damage_percent=401;game_modes_options_sanitize(&o);
+    assert(o.gravity_percent==100 && o.damage_percent==100);
+    assert(launcher_match_rules_apply("gravity_percent=50;damage_percent=200","team_slayer",&v,&o));
+    memcpy(&active_options,&o,sizeof(o));game_modes_options_sanitize(&active_options);
+    physics_set_gravity_percent(active_options.gravity_percent);
+    assert(global_gravity==STOCK_GRAVITY/2);
+    physics_set_gravity_percent(active_options.gravity_percent);
+    assert(global_gravity==STOCK_GRAVITY/2);
+    physics_set_gravity_percent(100);assert(global_gravity==STOCK_GRAVITY);
+    game_engine=TRUE;global_variant=v;
+    assert(game_engine_get_damage_multiplier(NONE,NONE)==2.0f);
+    global_variant.universal_variant.health=2.0f;
+    assert(game_engine_get_damage_multiplier(NONE,NONE)==1.0f);
+    assert(game_engine_get_damage_multiplier(2,3)==0.75f);
+    game_engine=FALSE;assert(game_engine_get_damage_multiplier(NONE,NONE)==1.0f);
     base(&v,&o,game_engine_slayer,_game_mode_none,1);
     assert(launcher_match_rules_apply("health=200;respawn_time=7;score_to_win=75;friendly_fire=1;no_shields=1;time_limit=15","team_slayer",&v,&o));
     assert(v.universal_variant.health==2.0f&&v.universal_variant.respawn_time==210&&v.universal_variant.score_to_win==75);

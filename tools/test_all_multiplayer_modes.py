@@ -30,7 +30,7 @@ class AllMultiplayerBotModesTest(unittest.TestCase):
         self.assertIn("server->state != _network_game_server_state_pregame", SERVER)
         self.assertIn("server->sent_start_game_message", SERVER)
         self.assertIn("network_game_server_send_game_data_pregame(server)", SERVER)
-        self.assertIn("HALO_PORT_NETWORK_VERSION 57", LIMITS)
+        self.assertIn("HALO_PORT_NETWORK_VERSION 58", LIMITS)
         self.assertNotIn(chr(92)+"t/* All five original", SERVER)
         self.assertNotIn(chr(92)+"t   simulated bots.", SERVER)
 

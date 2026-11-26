@@ -231,7 +231,6 @@ final class MatchWorkshopUi {
             }
             body.addView(group);
         }
-        label(body,"Extended Gun Game stages, gravity and damage multipliers require new engine support and are not editable yet.");
         Runnable saveNew=()->{try{saved.accept(base.saveAs(name.getText().toString(),rules));}catch(IllegalArgumentException invalid){message(invalid.getMessage());}};
         boolean current=false;
         for(MatchWorkshop.Preset p:library.presets)if(p.id.equals(base.id)&&p.revision==base.revision)current=true;

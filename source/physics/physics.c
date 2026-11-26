@@ -284,7 +284,9 @@ static void rotate_vectors3d_by_angular_velocity(
 
 /* ---------- globals */
 
-real global_gravity = 0.0035651792f;
+/* port: scale from the original constant on every map transition. */
+#define STOCK_GRAVITY 0.0035651792f
+real global_gravity = STOCK_GRAVITY;
 real global_water_density = 1.0f;
 real global_air_density = 0.0011f;
 real global_physics_collision_depth = 0.2f;
@@ -301,6 +303,13 @@ static boolean warned_about_physics_mass_points;
 static boolean warned_about_physics_inertial_matrix;
 
 /* ---------- public code */
+
+/* port: the host's sanitized match options also drive client prediction. */
+void physics_set_gravity_percent(
+	word percent)
+{
+	global_gravity = STOCK_GRAVITY * ((real)percent / 100.0f);
+}
 
 real pin_fraction(
 	real value,

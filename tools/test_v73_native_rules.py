@@ -5,7 +5,7 @@ import re
 import subprocess
 import tempfile
 import unittest
-from tools.harness import structure, enum_with
+from tools.harness import structure, enum_with, function
 
 ROOT=Path(__file__).resolve().parents[1]
 J=ROOT/"port/android/app/src/main/java/com/halo/decomp"
@@ -24,6 +24,17 @@ class NativeMatchRuleTest(unittest.TestCase):
         types+=structure(h,"game_variant")+"\n"+structure(h,"game_variant_options")+"\n"
         with tempfile.TemporaryDirectory(prefix="halo-native-rules-") as tmp:
             p=Path(tmp);(p/"launcher_rule_structs.inc").write_text(types)
+            physics=(ROOT/"source/physics/physics.c").read_text(encoding="latin-1")
+            engine=(ROOT/"source/game/game_engine.c").read_text(encoding="latin-1")
+            modes=(G/"game_modes.c").read_text(encoding="latin-1")
+            (p/"workshop_runtime.inc").write_text("\n".join([
+                re.search(r"^#define STOCK_GRAVITY .*$",physics,re.M).group(),
+                re.search(r"^real global_gravity = .*;$",physics,re.M).group(),
+                function(physics,"physics_set_gravity_percent"),
+                function(engine,"game_engine_get_damage_multiplier"),
+                re.search(r"/\* Infection's options when a gametype has none.*?\};",modes,re.S).group(),
+                function(modes,"game_modes_option"),function(modes,"game_modes_options_default"),
+                function(modes,"game_modes_options_sanitize")]))
             out=p/"rules"
             subprocess.run([os.environ.get("CC","cc"),"-std=gnu99","-Wall","-Wextra","-Werror",
                 "-I"+str(p),"-I"+str(G),str(ROOT/"tools/lan/launcher_rules_test.c"),"-o",str(out)],check=True)
@@ -35,7 +46,7 @@ class NativeMatchRuleTest(unittest.TestCase):
         self.assertEqual(len(names),26)
         for k,builder in names:self.assertIn(builder+"(",h)
         self.assertIn("game_modes_gametype_by_name(base,variant,options)",s)
-        self.assertEqual(len(re.findall(r'if\(!strcmp\(key,"[^"]+"\)\)',(G/"launcher_match_rules.h").read_text())),71)
+        self.assertEqual(len(re.findall(r'if\(!strcmp\(key,"[^"]+"\)\)',(G/"launcher_match_rules.h").read_text())),73)
         main=(ROOT/"source/main/main.c").read_text()
         self.assertIn('launcher_match_rules_apply(getenv("HALO_LAUNCHER_MATCH_RULES")',main)
         self.assertIn("launcher_match_preset_build(mode, &variant, &options)",main)

@@ -74,6 +74,7 @@ void render_debug_physics(struct physics_instance *instance);
 /* ---------- globals */
 
 extern real global_gravity;
+void physics_set_gravity_percent(word percent); /* port: Workshop match gravity */
 extern real global_water_density;
 extern real global_air_density;
 extern real global_physics_collision_depth;

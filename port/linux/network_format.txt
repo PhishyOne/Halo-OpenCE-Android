@@ -1,4 +1,4 @@
-version 57
+version 58
 bound CHAT_TEXT_SIZE 64
 bound DISCORD_ID_SIZE 24
 bound DISCORD_NAME_SIZE 40
@@ -328,5 +328,5 @@ struct distributed_voice_down e3751d692f16
 struct distributed_voice_up 3d74ee44e4cb
 struct distributed_votekick_request 7e29ffd54bd1
 struct distributed_votekick_status b94458cdc180
-struct game_variant_options 0e258e4cf85b
+struct game_variant_options 3e4ec29ec7f0
 struct halo_highlight_event 3512fa76ca3a

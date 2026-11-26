@@ -56,7 +56,7 @@ def test_case(case):
 
 
 @pytest.mark.parametrize('fault,case', [
-    (('!= FALSE;\n\tcsmemset(options->reserved, 0,', '!= FALSE;\n\tcsmemset(options->reserved, 1,'), 'sanitize_range'),
+    (('}\n\tcsmemset(options->reserved, 0,', '}\n\tcsmemset(options->reserved, 1,'), 'sanitize_range'),
     (('unit->object.shield_vitality < 1.0f', 'TRUE'), 'hardcore_restore'),
     (('friendly_fire ||\n', ''), 'hardcore_no_restore'),
     (('return variant->universal_variant.teams ? _game_mode_infection', 'return 1 ? _game_mode_infection'),

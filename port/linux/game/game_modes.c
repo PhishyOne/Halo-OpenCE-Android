@@ -286,6 +286,8 @@ void game_modes_options_default(
 	options->infection_zombie_shields = TRUE;
 	options->gun_game_order = _gun_game_order_strongest_first;
 	options->gun_game_melee_demotes = TRUE;
+	options->gravity_percent = 100;
+	options->damage_percent = 100;
 	csmemset(options->reserved, 0, sizeof(options->reserved));
 }
 
@@ -320,6 +322,10 @@ void game_modes_options_sanitize(
 		options->gun_game_order = _gun_game_order_strongest_first;
 	options->gun_game_melee_demotes = options->gun_game_melee_demotes != FALSE;
 	options->force_team_spawns = options->force_team_spawns != FALSE;
+	if (options->gravity_percent < 25 || options->gravity_percent > 200)
+		options->gravity_percent = 100;
+	if (options->damage_percent < 25 || options->damage_percent > 400)
+		options->damage_percent = 100;
 	if (options->mode == _game_mode_vip)
 	{
 		options->force_team_spawns = TRUE;

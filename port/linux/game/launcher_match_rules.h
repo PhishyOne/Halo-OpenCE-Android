@@ -124,6 +124,14 @@ static boolean launcher_rule_apply_one(const char *key,long n,const char *base,
         if(n < 0 || n > 1 || !(o->mode != _game_mode_vip)) return FALSE;
         o->auto_team_balance=(boolean)n; return TRUE;
     }
+    if(!strcmp(key,"gravity_percent")) {
+        if(n < 25 || n > 200) return FALSE;
+        o->gravity_percent=(word)n; return TRUE;
+    }
+    if(!strcmp(key,"damage_percent")) {
+        if(n < 25 || n > 400) return FALSE;
+        o->damage_percent=(word)n; return TRUE;
+    }
     if(!strcmp(key,"force_team_spawns")) {
         if(n < 0 || n > 1 || !(o->mode != _game_mode_vip)) return FALSE;
         o->force_team_spawns=(boolean)n; return TRUE;

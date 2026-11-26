@@ -50,7 +50,7 @@ class VipTests(unittest.TestCase):
         self.assertIn("vip_enabled()",function((GAME/"network_group_rating.c").read_text(),"group_rating_update"))
         self.assertIn("vip_enabled()",function((GAME/"killstreak_rewards.c").read_text(),"killstreak_rewards_record_kill"))
         from tools import network_format
-        self.assertEqual(network_format.version(),57)
+        self.assertEqual(network_format.version(),58)
         self.assertEqual(network_format.check(),[])
 
 if __name__=="__main__":

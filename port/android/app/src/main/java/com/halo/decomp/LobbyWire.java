@@ -6,7 +6,7 @@ import java.util.*;
 /** Bounded versioned LAN lobby frames. No host-only commands on the wire,
  * no file operations, and never send another member's secret token. */
 final class LobbyWire {
-    static final int MAGIC=0x484c5033, MAX_FRAME=1024*1024;
+    static final int MAGIC=0x484c5034, MAX_FRAME=1024*1024;
     static final int JOIN=1,POLL=2,UPDATE=3,LEAVE=4,ACK=5,RETURN=6;
     static final class Request {
         final int op;final long knownRevision;final String secret,name;final int color,requestTeam;final boolean ready;
@@ -33,6 +33,9 @@ final class LobbyWire {
         final String secret,error;final LobbyModel.Snapshot snapshot;
         Response(String token,LobbyModel.Snapshot snapshot,String error){this.secret=token;this.snapshot=snapshot;this.error=error;}
     }
+    private static class VersionMismatch extends IOException {
+        VersionMismatch(){super("Incompatible lobby version. Update all phones to the same Halo build.");}
+    }
     private interface Writer {void write(DataOutputStream out)throws IOException;}
     private static void frame(OutputStream stream,Writer write)throws IOException{
         ByteArrayOutputStream bytes=new ByteArrayOutputStream();
@@ -45,7 +48,7 @@ final class LobbyWire {
         if(n<5||n>max)throw new IOException("Invalid lobby frame size");
         byte[] b=new byte[n];input.readFully(b);
         DataInputStream in=new DataInputStream(new ByteArrayInputStream(b));
-        if(in.readInt()!=MAGIC)throw new IOException("Incompatible lobby version. Update all phones to the same Halo build.");
+        if(in.readInt()!=MAGIC)throw new VersionMismatch();
         return in;
     }
     private static void end(DataInputStream in)throws IOException{if(in.read()!=-1)throw new IOException("Unexpected lobby payload");}
@@ -113,12 +116,17 @@ final class LobbyWire {
                 snapshot=new LobbyModel.Snapshot(session,self,revision,p,members,round,startIndex,released,message,hostBack,nextIndex,secondsToNext);
             }
             end(in);return new Response(secret,snapshot,error);
-        }catch(IllegalArgumentException|NullPointerException invalid){throw new IOException("Invalid lobby response",invalid);}
+        }catch(EOFException closed){throw new IOException("Host closed the connection. Check that both phones use the same Halo build.",closed);}
+        catch(IllegalArgumentException|NullPointerException invalid){throw new IOException("Invalid lobby response",invalid);}
     }
     static void serve(LobbyModel model,InputStream in,OutputStream out,long now)throws IOException{
         serve(model,in,out,now,"","");
     }
     static void serve(LobbyModel model,InputStream in,OutputStream out,long now,String localAddress,String peerAddress)throws IOException{
-        writeResponse(out,execute(model,readRequest(in),now,localAddress,peerAddress));
+        try{writeResponse(out,execute(model,readRequest(in),now,localAddress,peerAddress));}
+        catch(VersionMismatch mismatch){
+            // An older guest can identify this host's frame version before decoding any state.
+            writeResponse(out,new Response("",null,mismatch.getMessage()));
+        }
     }
 }

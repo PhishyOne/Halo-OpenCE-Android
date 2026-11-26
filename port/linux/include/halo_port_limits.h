@@ -78,7 +78,8 @@ Raise it with any change to what the machines send each other. */
 /* v29: host bots support Oddball and Race game engines. */
 /* v30: host-ground drivers use relayed player_action steering inputs. */
 /* v57: distinct host-authoritative VIP round state; older clients cannot interpret it. */
-#define HALO_PORT_NETWORK_VERSION 57
+/* v58: synced gravity and damage use two former reserved words in variant options. */
+#define HALO_PORT_NETWORK_VERSION 58
 /* ... the advertisement's reserved bytes: the version (a little-endian word),
 then flags, then the game's kind (an OpenCE gametype's mode, and Hardcore:
 port/linux/game/game_modes.h's game_modes_kind), for the server browser */

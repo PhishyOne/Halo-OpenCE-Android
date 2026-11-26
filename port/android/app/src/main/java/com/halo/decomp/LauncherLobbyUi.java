@@ -60,6 +60,12 @@ final class LauncherLobbyUi implements AutoCloseable {
     private void label(LinearLayout p,String s){p.addView(text(s,11,HaloTheme.MUTED,false));}
     private Button button(String label,Runnable action){Button b=new Button(activity);b.setText(label);b.setAllCaps(false);b.setTextSize(11);b.setMinWidth(0);b.setMinimumWidth(0);b.setMinHeight(dp(34));b.setPadding(dp(4),dp(2),dp(4),dp(2));HaloTheme.menuButtonColors(b);HaloTheme.font(b,true);b.setOnClickListener(v->action.run());return b;}
     private void pair(LinearLayout p,View a,View b){LinearLayout r=row();r.addView(a,new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,-2,1);params.leftMargin=dp(5);r.addView(b,params);p.addView(r);}
+    private ScrollView scrollPane(LinearLayout contents){
+        ScrollView scroll=new ScrollView(activity);
+        scroll.setFillViewport(true);
+        scroll.addView(contents);
+        return scroll;
+    }
     private void msg(String value){notice=value;if(status!=null)status.setText(value);HaloNotice.makeText(activity,value,HaloNotice.LENGTH_LONG).show();}
     private String profileName(){
         String n=prefs.getString("name",LanBoardIdentity.name(activity));
@@ -76,8 +82,10 @@ final class LauncherLobbyUi implements AutoCloseable {
     }
     private void showSelection(){
         body.removeAllViews();hostEditor=null;summary=roster=null;
-        body.addView(text("LOBBIES",14,HaloTheme.FOCUS_TEXT,true));
-        status=text(notice.isEmpty()?"Choose an existing lobby or create one.":notice,11,HaloTheme.MUTED,false);body.addView(status);
+        LinearLayout selection=col();
+        body.addView(scrollPane(selection),new LinearLayout.LayoutParams(-1,-1));
+        selection.addView(text("LOBBIES",14,HaloTheme.FOCUS_TEXT,true));
+        status=text(notice.isEmpty()?"Choose an existing lobby or create one.":notice,11,HaloTheme.MUTED,false);selection.addView(status);
         LinearLayout left=panel(),right=panel();
         left.addView(text("AVAILABLE LOBBIES",12,HaloTheme.FOCUS_TEXT,true));
         left.addView(button("FIND LOBBIES",this::search));
@@ -89,7 +97,7 @@ final class LauncherLobbyUi implements AutoCloseable {
         right.addView(button("MATCH RECORDING",this::recording));
         label(right,"Classic Halo still uses the original hosting/joining menus.");
         right.addView(button("CLASSIC HALO",classic));
-        pair(body,left,right);
+        pair(selection,left,right);
     }
     private void showAvailable(){
         if(available==null)return;available.removeAllViews();
@@ -159,30 +167,29 @@ final class LauncherLobbyUi implements AutoCloseable {
         ui.post(()->{if(closed||g!=generation)return;busy=false;msg(error);});
     }
     private void showSession(){
-        body.removeAllViews();available=null;
+        body.removeAllViews();available=null;hostEditor=null;
         boolean hosting=host!=null;
         sessionMaps=WorkshopMapCatalog.installed(dataRoot);
         body.addView(text("LOBBY  /  "+(hosting?"HOST":"PLAYER"),14,HaloTheme.FOCUS_TEXT,true));
         status=text("",11,HaloTheme.MUTED,false);body.addView(status);
         summary=panel();roster=panel();
-        if(snapshot.secondsToNext>=0){
-            LobbyModel.StartReview preview=LobbyModel.StartReview.upcoming(snapshot);
-            MatchWorkshop.Entry next=preview.entry;
-            body.addView(text(WorkshopMapCatalog.label(sessionMaps,next.map)+" · "+next.preset.name,14,HaloTheme.TEXT,true));
-            label(body,snapshot.plan.title+" · Entry "+(snapshot.nextIndex+1)+" of "+snapshot.plan.entries.size());
-            label(body,preview.members.size()+" players · "+preview.allocation.bots()+" bots");
-            if(hosting)body.addView(button("PAUSE PLAYLIST",()->pauseStart("Playlist paused.")));
-            else body.addView(button("LEAVE LOBBY",()->leave(true,"Left lobby.")));
-            refreshStatus();return;
-        }
-        if(!snapshot.round.isEmpty()){
-            LobbyModel.StartReview selected=LobbyModel.StartReview.selected(snapshot);
-            body.addView(text(WorkshopMapCatalog.label(sessionMaps,selected.entry.map)+" · "+selected.entry.preset.name,14,HaloTheme.TEXT,true));
-            label(body,selected.members.size()+" players · "+selected.allocation.bots()+" bots");
-            if(hosting&&!snapshot.released)body.addView(button("CANCEL START",()->pauseStart("Start canceled.")));
-            if(hosting&&snapshot.hostBack)body.addView(button("BACK TO SETUP",()->pauseStart("Back in setup.")));
+        LinearLayout panes=row();
+        panes.addView(scrollPane(summary),new LinearLayout.LayoutParams(0,-1,1.15f));
+        LinearLayout.LayoutParams rosterParams=new LinearLayout.LayoutParams(0,-1,1);
+        rosterParams.leftMargin=dp(5);
+        panes.addView(scrollPane(roster),rosterParams);
+        body.addView(panes,new LinearLayout.LayoutParams(-1,0,1));
+        if(snapshot.secondsToNext>=0||!snapshot.round.isEmpty()){
+            MatchWorkshop.Entry entry=snapshot.entry();
+            summary.addView(text(WorkshopMapCatalog.label(sessionMaps,entry.map)+" · "+entry.preset.name,14,HaloTheme.TEXT,true));
+            if(snapshot.plan.playlist)label(summary,snapshot.plan.title+" · Entry "+(snapshot.entryIndex()+1)+" of "+snapshot.plan.entries.size());
+            label(summary,snapshot.members.size()+" players · "+snapshot.allocation().bots()+" bots");
+            if(!entry.preset.overrides.isEmpty())summary.addView(button("VIEW CUSTOM RULES",()->viewRules(entry.preset)));
             if(!hosting&&!inGame)body.addView(button("LEAVE LOBBY",()->leave(true,"Left lobby.")));
-            refreshStatus();
+            else if(hosting&&snapshot.secondsToNext>=0)body.addView(button("PAUSE PLAYLIST",()->pauseStart("Playlist paused.")));
+            else if(hosting&&!snapshot.released)body.addView(button("CANCEL START",()->pauseStart("Start canceled.")));
+            else if(hosting&&snapshot.hostBack)body.addView(button("BACK TO SETUP",()->pauseStart("Back in setup.")));
+            refreshStatus();refreshRoster(false);
             return;
         }
         if(hosting){
@@ -194,7 +201,6 @@ final class LauncherLobbyUi implements AutoCloseable {
                 summary.addView(hostEditor.view());
             }catch(IOException|RuntimeException error){label(summary,"Workshop unavailable: "+error.getMessage());}
         }
-        pair(body,summary,roster);
         if(hosting){
             Button start=button("START",this::reviewStart);
             pair(body,button("CANCEL LOBBY",()->leave(true,"Lobby closed.")),start);
@@ -229,8 +235,8 @@ final class LauncherLobbyUi implements AutoCloseable {
             LobbyModel.Plan p=snapshot.plan;
             summary.addView(text(p.title,13,HaloTheme.FOCUS_TEXT,true));
             label(summary,p.playlist?"Playlist · Shuffle "+(p.shuffle?"On":"Off")+" · Loop "+(p.loop?"On":"Off"):"Quick match");
-            if(p.first()!=null){
-                MatchWorkshop.Entry e=snapshot.nextIndex<0?p.first():p.entries.get(snapshot.nextIndex);
+            if(snapshot.entry()!=null){
+                MatchWorkshop.Entry e=snapshot.entry();
                 List<WorkshopMapCatalog.MapItem> maps=sessionMaps;
                 summary.addView(text(WorkshopMapCatalog.label(maps,e.map),13,HaloTheme.TEXT,true));
                 label(summary,e.preset.name+" · "+e.bots.description());
@@ -243,21 +249,27 @@ final class LauncherLobbyUi implements AutoCloseable {
                 }
             }else label(summary,"Host has not selected a match.");
         }
+        refreshRoster(true);
+    }
+    private void refreshRoster(boolean editable){
         roster.removeAllViews();
         roster.addView(text("PLAYERS",12,HaloTheme.FOCUS_TEXT,true));
         LobbyModel.Member me=snapshot.me();
         MatchWorkshop.Allocation bots=snapshot.allocation();
-        if(snapshot.plan.teams()){
-            teamRows(roster,LobbyModel.RED,"RED TEAM",0xffe78c8c,bots.red);
-            teamRows(roster,LobbyModel.BLUE,"BLUE TEAM",0xff8dbfff,bots.blue);
-        }else teamRows(roster,LobbyModel.NO_TEAM,"FREE-FOR-ALL",HaloTheme.FOCUS_TEXT,bots.ffa);
+        boolean assignPlayers=editable&&host!=null&&snapshot.teams()&&!snapshot.versus();
+        if(snapshot.teams()){
+            teamRows(roster,LobbyModel.RED,"RED TEAM",0xffe78c8c,bots.red,assignPlayers);
+            teamRows(roster,LobbyModel.BLUE,"BLUE TEAM",0xff8dbfff,bots.blue,assignPlayers);
+        }else teamRows(roster,LobbyModel.NO_TEAM,"FREE-FOR-ALL",HaloTheme.FOCUS_TEXT,bots.ffa,false);
         if(!bots.warning.isEmpty())label(roster,bots.warning);
-        label(roster,"Bots are planned until native game starts.");
+        if(!editable)return;
+        if(host!=null&&snapshot.versus())
+            roster.addView(button("SWAP HUMAN TEAM",()->assign(me.id,1-me.team)));
         Button profile=button("NAME / COLOR",this::appearance);
         Button ready=button(me.ready?"NOT READY":"READY",()->changeSelf(me.name,me.color,!me.ready,me.requestedTeam));
         profile.setEnabled(!connectionLost);ready.setEnabled(!connectionLost);
         pair(roster,profile,ready);
-        if(guest!=null&&snapshot.plan.teams()){
+        if(guest!=null&&snapshot.teams()&&!snapshot.versus()){
             Button request=button(me.requestedTeam==LobbyModel.NO_TEAM?"REQUEST TEAM CHANGE":"CANCEL TEAM REQUEST",()->{
                 LobbyModel.Member self=snapshot.me();
                 int requestTeam=self.requestedTeam==LobbyModel.NO_TEAM?1-self.team:LobbyModel.NO_TEAM;
@@ -267,7 +279,7 @@ final class LauncherLobbyUi implements AutoCloseable {
         }
         roster.addView(button("MATCH RECORDING",this::recording));
     }
-    private void teamRows(LinearLayout parent,int side,String heading,int color,int botCount){
+    private void teamRows(LinearLayout parent,int side,String heading,int color,int botCount,boolean assignPlayers){
         LinearLayout group=panel();int people=0;for(LobbyModel.Member m:snapshot.members)if(m.team==side)people++;
         group.addView(text(heading+" · "+(people+botCount),12,color,true));
         for(LobbyModel.Member m:snapshot.members)if(m.team==side){
@@ -275,12 +287,12 @@ final class LauncherLobbyUi implements AutoCloseable {
             String title=m.name+(m.host?" · HOST":"")+(m.id.equals(snapshot.self)?" (You)":"")+(m.ready?" · Ready":" · Not ready");
             if(m.requestedTeam!=LobbyModel.NO_TEAM)title+=" · Team requested";
             r.addView(text(title,11,HaloTheme.TEXT,false),new LinearLayout.LayoutParams(0,-2,1));
-            if(host!=null&&side!=LobbyModel.NO_TEAM){
+            if(assignPlayers){
                 Button swap=button("↔",()->assign(m.id,1-m.team));swap.setContentDescription("Move "+m.name+" to other team");r.addView(swap);
             }
             group.addView(r);
         }
-        if(botCount>0){MatchWorkshop.Entry e=snapshot.plan.first();label(group,botCount+" bots · "+MatchWorkshop.DIFFICULTIES[e==null?2:e.bots.difficulty]);}
+        if(botCount>0)label(group,botCount+" bots · "+MatchWorkshop.DIFFICULTIES[snapshot.entry().bots.difficulty]);
         parent.addView(group);
     }
     private void reviewStart(){

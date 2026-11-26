@@ -883,7 +883,9 @@ public class LauncherActivity extends Activity {
         socialUi = new LanBoardUi(this, dataRoot, dashboardPanel, scroll);
         LinearLayout lobbyPanel = setupColumn();
         lobbyPanel.setVisibility(View.GONE);
-        content.addView(lobbyPanel);
+        lobbyPanel.setPadding(dp(7), dp(3), dp(7), dp(3));
+        root.addView(lobbyPanel, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.0f));
         // Original native setup remains reachable through Classic Halo.
         LinearLayout lanPanel = hudPanel();
         lanPanel.setPadding(dp(7), dp(3), dp(7), dp(3));
@@ -1455,6 +1457,7 @@ public class LauncherActivity extends Activity {
             lanPanel.setVisibility(playing && lanMode.isChecked() && classicLan[0] ?
                 View.VISIBLE : View.GONE);
             lobbyPanel.setVisibility(lobbyVisible ? View.VISIBLE : View.GONE);
+            actionDock.setVisibility(lobbyVisible ? View.GONE : View.VISIBLE);
             if (lobbyUi != null) lobbyUi.setVisible(lobbyVisible);
             toolsPage.setVisibility(toolsVisible[0] ? View.VISIBLE : View.GONE);
             dashboardPanel.setVisibility(homeVisible[0] ?

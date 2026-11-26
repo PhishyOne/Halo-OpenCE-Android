@@ -290,7 +290,11 @@ struct game_variant_options
 	of their own team (game_engine_get_starting_location_rating). Taken from
 	reserved, which older builds zero and ignore: the host alone picks spawns */
 	boolean force_team_spawns;
-	byte reserved[5];
+	byte reserved[1];
+	/* port: Workshop percentages in the existing settings record. Older
+	   saves contain zero in both words, which sanitizes to stock (100%). */
+	word gravity_percent;
+	word damage_percent;
 };
 
 typedef char verify_game_variant_options_size[sizeof(struct game_variant_options) == 0x2C ? 1 : -1];

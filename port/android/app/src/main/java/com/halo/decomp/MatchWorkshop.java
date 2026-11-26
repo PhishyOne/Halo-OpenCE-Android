@@ -109,6 +109,8 @@ final class MatchWorkshop {
         r.add(range("time_limit","Match","Time limit (minutes; 0 unlimited)",null,0,120));
         r.add(range("lives","Match","Lives (0 unlimited)",null,0,50));
         r.add(toggle("odd_man_out","Match","Odd man out",null));
+        r.add(range("gravity_percent","Match","Gravity (%)",null,25,200));
+        r.add(range("damage_percent","Match","Damage (%)",null,25,400));
         r.add(range("respawn_time","Respawn","Respawn delay (seconds)",null,0,60));
         r.add(range("respawn_time_growth","Respawn","Respawn growth (seconds)",null,0,60));
         r.add(range("suicide_penalty","Respawn","Suicide penalty (seconds)",null,0,60));

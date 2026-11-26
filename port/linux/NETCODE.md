@@ -1291,3 +1291,15 @@ must update, including for other modes; they cannot safely interpret VIP
 and are not allowed into v57 advertised games. The v56 group rating
 receipt layout and other gameplay payloads are unchanged. VIP matches
 are not eligible for Group SR in this first release.
+
+## Workshop gravity and damage (version 58)
+
+The host sends gravity (25–200%) and ordinary damage (25–400%) in the
+existing 44-byte game variant options. Both are little-endian 16-bit
+percentages at offsets 40 and 42. Old saved options have zero in those
+slots and load at 100%. The simulation uses the same gravity on all peers
+for players, projectiles and other physics. Damage combines with existing
+health and trait multipliers. Maps without overrides use stock values.
+All players need protocol 58, including for Classic LAN games. The Android
+pregame lobby uses HLP4 so peers agree on the active playlist entry's
+roster and the new rule keys before entering Halo.

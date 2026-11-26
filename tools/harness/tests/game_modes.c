@@ -72,6 +72,7 @@ int main(int argc,char **argv)
   memset(&options,0,sizeof(options));
   game_modes_options_sanitize(&options);
   CHECK(options.mode==_game_mode_none&&!options.hardcore,"no mode");
+  CHECK(options.gravity_percent==100&&options.damage_percent==100,"legacy settings use stock physics and damage");
   CHECK(options.infection_initial_zombies==1&&options.infection_zombie_speed==150&&
    options.infection_skull_damage==200&&options.infection_respawn_time==5,"Infection's defaults");
   CHECK(options.infection_countdown==0,"a countdown of 0 is one");
@@ -79,6 +80,7 @@ int main(int argc,char **argv)
   memset(&options,0xAA,sizeof(options));
   game_modes_options_default(&options);
   CHECK(options.mode==_game_mode_none&&!options.hardcore,"no mode, not Hardcore");
+  CHECK(options.gravity_percent==100&&options.damage_percent==100,"new modes use stock physics and damage");
   CHECK(options.infection_countdown==10&&options.infection_zombie_shields&&options.gun_game_melee_demotes,
    "a countdown, zombies' shields, melee demotes");
   CHECK(options.time_limit==(short)0xAAAA,"the game type's own options left alone");
@@ -115,6 +117,7 @@ int main(int argc,char **argv)
   memset(&options,0xFF,sizeof(options));
   game_modes_options_sanitize(&options);
   CHECK(options.mode==_game_mode_none,"an unknown mode is none");
+  CHECK(options.gravity_percent==100&&options.damage_percent==100,"out of range multipliers reset");
   CHECK(options.hardcore==TRUE&&options.infection_zombie_shields==TRUE&&options.gun_game_melee_demotes==TRUE,
    "booleans are 0 or 1");
   CHECK(options.infection_initial_zombies==1&&options.infection_zombie_speed==150&&options.infection_skull_damage==200&&
@@ -126,7 +129,9 @@ int main(int argc,char **argv)
   options.mode=_game_mode_infection;options.infection_initial_zombies=16;options.infection_zombie_speed=200;
   options.infection_skull_damage=100;options.infection_respawn_time=30;options.infection_countdown=30;
   options.gun_game_order=_gun_game_order_random;
+  options.gravity_percent=25;options.damage_percent=400;
   game_modes_options_sanitize(&options);
+  CHECK(options.gravity_percent==25&&options.damage_percent==400,"valid multipliers survive transmission");
   CHECK(options.mode==_game_mode_infection&&options.infection_initial_zombies==16&&options.infection_zombie_speed==200&&
    options.infection_skull_damage==100&&options.infection_respawn_time==30&&options.infection_countdown==30&&
    options.gun_game_order==_gun_game_order_random,"values in range are kept");

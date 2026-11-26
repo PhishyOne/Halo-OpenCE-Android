@@ -586,6 +586,7 @@ struct network_game *network_game_server_get_game(struct network_game_server *se
 #include "objects.h"
 #include "objects/damage_effect_definitions.h"
 #include "physics/collision_features.h"
+#include "physics/physics.h" /* port: sync match gravity with the physics simulation */
 #include "player_rumble.h"
 #include "players.h"
 #include "players_runtime.h"
@@ -4309,6 +4310,7 @@ boolean game_engine_force_single_screen(
 void game_engine_dispose(
 	void)
 {
+	physics_set_gravity_percent(100); /* port: restore ordinary gravity outside a match */
 	if (game_engine)
 	{
 		if (game_engine->dispose)
@@ -7632,6 +7634,8 @@ void game_engine_initialize(
 		game_engine = game_modes_engine(game_engine);
 	}
 
+	/* port: set gravity before objects on the new map begin simulating. */
+	physics_set_gravity_percent(game_engine ? game_variant_options_get()->gravity_percent : 100);
 	return;
 }
 
@@ -7662,6 +7666,7 @@ void game_engine_initialize_for_new_map(
 					game_engine->dispose();
 
 				game_engine = NULL;
+				physics_set_gravity_percent(100); /* port: match initialization failed */
 			}
 		}
 
@@ -7976,7 +7981,11 @@ real game_engine_get_damage_multiplier(
 	real result = 1.0f;
 
 	if (game_engine)
+	{
 		result /= PIN(global_variant.universal_variant.health, 0.25f, 4.0f);
+		/* port: scale ordinary match damage once, alongside health and traits. */
+		result *= (real)game_variant_options_get()->damage_percent / 100.0f;
+	}
 
 	if (damaging_player_index != NONE &&
 		damaged_player_index != NONE)

@@ -57,7 +57,7 @@ public final class LobbyModelTest {
         LobbyWire.Response stale=exchange(model,LobbyWire.Request.update(b.secret,"Stale",1,true,LobbyModel.NO_TEAM,revision),6);
         check(stale.snapshot.me().name.equals("Bravo")&&!stale.snapshot.me().ready,"stale update not applied");
         LobbyModel.Snapshot host=model.hostSnapshot(7);
-        if(host.plan.teams()){
+        if(host.teams()){
             LobbyModel.Member me=changed.snapshot.me();
             LobbyWire.Response requested=exchange(model,LobbyWire.Request.update(a.secret,me.name,me.color,false,1-me.team,host.revision),7);
             check(requested.snapshot.me().team==me.team&&requested.snapshot.me().requestedTeam==1-me.team,"guest only requests team");
@@ -78,6 +78,12 @@ public final class LobbyModelTest {
         new DataOutputStream(oversized).writeInt(1025);
         try{LobbyWire.readRequest(new ByteArrayInputStream(oversized.toByteArray()));throw new AssertionError("oversized request");}
         catch(IOException expected){checks++;}
+        ByteArrayOutputStream oldFrame=new ByteArrayOutputStream(),answer=new ByteArrayOutputStream();
+        DataOutputStream old=new DataOutputStream(oldFrame);old.writeInt(5);old.writeInt(0x484c5033);old.writeByte(LobbyWire.JOIN);
+        LobbyWire.serve(model,new ByteArrayInputStream(oldFrame.toByteArray()),answer,31000);
+        LobbyWire.Response incompatible=LobbyWire.readResponse(new ByteArrayInputStream(answer.toByteArray()));
+        check(incompatible.snapshot==null&&incompatible.error.contains("same Halo build")&&model.hostSnapshot(31000).members.size()==1,
+            "different lobby version receives an explicit mismatch without creating a seat");
         System.out.println("LobbyModelTest PASS ("+checks+" checks, real TCP loopback)");
     }
 }
