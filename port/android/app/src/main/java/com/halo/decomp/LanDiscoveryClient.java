@@ -116,7 +116,9 @@ final class LanDiscoveryClient {
         return new ArrayList<>(addresses);
     }
 
-    static List<String> scan(Context context) {
+    static List<String> scan(Context context) { return scan(context,LanDiscoveryProtocol.PORT); }
+    static List<String> scan(Context context,int port) {
+        if(port!=LanDiscoveryProtocol.PORT&&port!=LanLobbyTransport.PORT)throw new IllegalArgumentException("Invalid discovery port");
         List<LocalLink> links = localLinks();
         if (links.isEmpty()) return Collections.emptyList();
         Set<String> results = new LinkedHashSet<>();
@@ -148,7 +150,7 @@ final class LanDiscoveryClient {
                     try {
                         InetAddress target = InetAddress.getByName(address);
                         socket.send(new DatagramPacket(probe, probe.length,
-                            target, LanDiscoveryProtocol.PORT));
+                            target, port));
                     } catch (Exception unavailable) { }
                 }
                 long deadline = android.os.SystemClock.elapsedRealtime() + 440;

@@ -23,9 +23,11 @@ final class LanDiscoveryServer {
     private volatile boolean closed;
     private volatile DatagramSocket listener;
 
-    static LanDiscoveryServer start() {
+    static LanDiscoveryServer start() { return start(LanDiscoveryProtocol.PORT); }
+    static LanDiscoveryServer start(int port) {
+        if(port!=LanDiscoveryProtocol.PORT&&port!=LanLobbyTransport.PORT)throw new IllegalArgumentException("Invalid discovery port");
         LanDiscoveryServer server = new LanDiscoveryServer();
-        Thread thread = new Thread(server::serve, "Halo-LAN-host-discovery");
+        Thread thread = new Thread(() -> server.serve(port), "Halo-LAN-host-discovery");
         thread.setDaemon(true);
         thread.start();
         return server;
@@ -37,10 +39,10 @@ final class LanDiscoveryServer {
         if (current != null) current.close();
     }
 
-    private void serve() {
+    private void serve(int port) {
         try (DatagramSocket socket = new DatagramSocket(null)) {
             socket.setReuseAddress(true);
-            socket.bind(new InetSocketAddress(LanDiscoveryProtocol.PORT));
+            socket.bind(new InetSocketAddress(port));
             socket.setSoTimeout(1000);
             listener = socket;
             if (closed) return;

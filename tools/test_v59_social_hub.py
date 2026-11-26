@@ -55,10 +55,10 @@ class SocialHubTest(unittest.TestCase):
     def test_leaderboard_first_with_three_in_activity_pages(self):
         ui = self.read("LanBoardUi")
         launcher = self.read("LauncherActivity")
-        self.assertIn('"Leaderboard", "Offline Match", "Host", "Join", "Tools"', launcher)
+        self.assertIn('"Leaderboard", "Lobby", "Offline Match", "Tools"', launcher)
         self.assertIn("socialUi = new LanBoardUi(this, dataRoot, dashboardPanel, scroll)", launcher)
         self.assertIn("final boolean[] homeVisible = { !invitePending };", launcher)
-        self.assertIn("footer.setVisibility(playing ? View.VISIBLE : View.GONE)", launcher)
+        self.assertIn("footer.setVisibility(launchVisible ? View.VISIBLE : View.GONE)", launcher)
         self.assertIn("if (socialUi != null && socialUi.back()) return;", launcher)
         self.assertIn("enum Page { BOARD, PLAYER, VIDEOS }", ui)
         self.assertIn("card.setOnClickListener(v -> select(e.id, name, self))", ui)

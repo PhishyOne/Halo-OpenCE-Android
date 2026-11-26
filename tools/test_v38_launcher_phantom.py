@@ -22,7 +22,7 @@ class V38Tests(unittest.TestCase):
         cls.voice_script = (ROOT / "tools/generate_phantom_audio.py").read_text()
 
     def test_profile_is_primary_screen(self):
-        self.assertIn('"Leaderboard", "Offline Match", "Host", "Join", "Tools"',
+        self.assertIn('"Leaderboard", "Lobby", "Offline Match", "Tools"',
                       self.launcher)
         self.assertIn("socialUi = new LanBoardUi(this, dataRoot, dashboardPanel, scroll)", self.launcher)
         self.assertIn("final boolean[] homeVisible = { !invitePending };", self.launcher)

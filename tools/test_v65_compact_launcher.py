@@ -22,7 +22,7 @@ class CompactLauncherTest(unittest.TestCase):
         self.assertIn("offlineRight.addView(campaignInfo)", self.s)
         self.assertIn("attachSetupPanel(offlineMode.isChecked() ? offlineRight : networkColumn", self.s)
         self.assertIn("((ViewGroup)view.getParent()).removeView(view)", self.s)
-        self.assertIn("footer.setVisibility(playing ? View.VISIBLE : View.GONE)", self.s)
+        self.assertIn("footer.setVisibility(launchVisible ? View.VISIBLE : View.GONE)", self.s)
         self.assertIn("feedback.setVisibility(text.length() == 0 ? View.GONE : View.VISIBLE)", self.s)
         # Keep accessibility/keyboard fallback; normal compact pages fit
         # by reducing actual content height, not by clipping controls.

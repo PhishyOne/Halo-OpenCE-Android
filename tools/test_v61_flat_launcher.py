@@ -10,7 +10,7 @@ class FlatLauncherTest(unittest.TestCase):
         self.s = (J / "LauncherActivity.java").read_text()
 
     def test_five_tabs_and_offline_choice(self):
-        self.assertIn('"Leaderboard", "Offline Match", "Host", "Join", "Tools"', self.s)
+        self.assertIn('"Leaderboard", "Lobby", "Offline Match", "Tools"', self.s)
         self.assertNotIn("modeTabs[5]", self.s)
         self.assertIn('botMatch.setText("BOT MATCH")', self.s)
         self.assertIn('campaign.setText("CAMPAIGN")', self.s)
@@ -21,7 +21,7 @@ class FlatLauncherTest(unittest.TestCase):
         self.assertIn("offlinePanel.setVisibility(playing && !lanMode.isChecked()", self.s)
         self.assertIn("offlineBotOptions.setVisibility(offlineMode.isChecked()", self.s)
         self.assertIn("campaignInfo.setVisibility(offlineMode.isChecked()", self.s)
-        self.assertIn('lanMode.isChecked() ? (hostRole.isChecked() ? 2 : 3) : 1', self.s)
+        self.assertIn('lanMode.isChecked() ? 1 : 2', self.s)
 
     def test_recording_controls_only_join_global_prefs(self):
         a = self.s.index('LinearLayout joinPanel =')

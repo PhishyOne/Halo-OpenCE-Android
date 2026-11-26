@@ -312,6 +312,10 @@ static uint32_t make_boot(const struct environment *environment)
 
 /* Set once before game_main starts; only this dedicated launch can capture title assets. */
 int host_title_capture_mode;
+/* Immutable for this launch, never written into persistent config. */
+static const char *launcher_match_map;
+static const char *launcher_match_mode;
+static const char *launcher_match_rules;
 
 #define MAIN_STACK_SIZE (16 * 1024 * 1024)
 
@@ -372,6 +376,15 @@ static void *game_main(void *launch_options)
 		environment_set(&environment, "HALO_BOT_TEAMS", offline_bots[2]);
         if (offline_bots[3])
             environment_set(&environment, "HALO_BOT_VEHICLE_SEATS", offline_bots[3]);
+        if (launcher_match_map && launcher_match_mode)
+        {
+            environment_set(&environment, "HALO_LAUNCHER_MATCH_MAP", launcher_match_map);
+            environment_set(&environment, "HALO_LAUNCHER_MATCH_MODE", launcher_match_mode);
+            if (launcher_match_rules)
+                environment_set(&environment, "HALO_LAUNCHER_MATCH_RULES", launcher_match_rules);
+            /* Production direct launch must never activate debug automation. */
+            environment_set(&environment, "HALO_NETWORK_TEST", "");
+        }
 		environment_set(&environment, "HALO_NET_ONLINE", "false");
 		environment_set(&environment, "HALO_NET_JOIN_FROM_CLIPBOARD", "false");
 	}
@@ -493,6 +506,19 @@ int main(int argc, char *argv[])
 	/* SDLActivity prepends argv[0] to its getArguments() result. */
 	char **offline_bots = (argc == 5 || argc == 6) && !strcmp(argv[1], "--offline-bots")
         ? argv + 2 : NULL;
+    if (argc == 8 && !strcmp(argv[1], "--launcher-match"))
+    {
+        launcher_match_map = argv[2];
+        launcher_match_mode = argv[3];
+        offline_bots = argv + 4;
+    }
+    else if (argc == 9 && !strcmp(argv[1], "--launcher-match-rules"))
+    {
+        launcher_match_map=argv[2];
+        launcher_match_mode=argv[3];
+        offline_bots=argv+4;
+        launcher_match_rules=argv[8];
+    }
 
 	host_title_capture_mode = argc == 2 && !strcmp(argv[1], "--launcher-title-capture");
 	host_logf(HOST_LOG_INFO, "Halo for Android starting");

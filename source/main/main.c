@@ -382,6 +382,15 @@ symbols in this file:
 #include "career_results.h" /* port: finalize a won co-op mission before the lobby transition */
 #ifdef HALO_ANDROID
 #include "career_record.h"
+#include "networking/network_client_manager.h"
+#include "game_modes.h"
+#include "game/game_engine_playlist.h"
+#include "bots.h"
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include "launcher_match_presets.h"
+#include "launcher_match_rules.h"
 #endif
 #include "network_coop.h"
 #include "coop_scripts.h" /* port: port/linux/game/coop_scripts.c */
@@ -3448,6 +3457,211 @@ static void main_loop_web_frame(
 }
 #endif
 
+#ifdef HALO_ANDROID
+/* A production one-shot offline launch. Use the same local server/client
+ * initialization as split screen, not debug.network_test or menu key events.
+ * The engine's actual pregame roster and countdown are the authority. */
+static void launcher_match_update(boolean menu_loaded)
+{
+    enum { waiting_menu, waiting_client, waiting_roster, starting, done };
+    static short state = waiting_menu;
+    static boolean initialized = FALSE;
+    static unsigned long began;
+    static char path[128];
+    static char const *mode;
+    static struct game_variant variant;
+    static struct game_variant_options options;
+    struct network_game_server *server;
+    struct network_game_client *client;
+    struct network_game *game;
+    long index;
+    short machine;
+    boolean local_player = FALSE;
+    char build[0x20];
+
+    if (state == done)
+        return;
+    if (!initialized)
+    {
+        char const *map = getenv("HALO_LAUNCHER_MATCH_MAP");
+        static char const *const allowed_maps[] = {
+            "beavercreek", "sidewinder", "damnation", "ratrace", "prisoner",
+            "hangemhigh", "chillout", "carousel", "boardingaction", "bloodgulch",
+            "wizard", "putput", "longest"
+        };
+        initialized = TRUE;
+        mode = getenv("HALO_LAUNCHER_MATCH_MODE");
+        if (!map || !*map || !mode || !*mode)
+        {
+            state = done;
+            return;
+        }
+        for (index = 0; index < NUMBEROF(allowed_maps); index++)
+            if (!strcmp(map, allowed_maps[index])) break;
+        if (index == NUMBEROF(allowed_maps))
+        {
+            state = done;
+            return;
+        }
+        snprintf(path, sizeof(path), "levels\\test\\%s\\%s", map, map);
+        if (!launcher_match_preset_build(mode, &variant, &options) ||
+            !launcher_match_rules_apply(getenv("HALO_LAUNCHER_MATCH_RULES"), mode, &variant, &options))
+        {
+            state = done;
+            error(_error_silent, "launcher match: unsupported preset or rule combination");
+            return;
+        }
+        began = system_milliseconds();
+    }
+
+    /* Never take over a normal game. Leave the native lobby available if
+     * the direct path fails or the player cancels it. */
+    if (!menu_loaded)
+    {
+        if (state == starting) state = done;
+        else if (system_milliseconds() - began > 45000UL) state = done;
+        return;
+    }
+    if (system_milliseconds() - began > 45000UL)
+    {
+        state = done;
+        server = global_network_game_server_get();
+        if (server && network_game_server_port_bots_adjustable(server))
+            network_game_server_pause_countdown(server, FALSE);
+        error(_error_silent, "launcher match: timed out; continue in the original menus");
+        return;
+    }
+    if (state == waiting_menu)
+    {
+        long profile_index;
+        struct player_profile profile;
+        if (bink_playback_in_progress())
+        {
+            bink_playback_stop();
+            return;
+        }
+        /* Wait until the real main screen shell has been initialized. */
+        if (!ui_main_menu_music_active())
+            return;
+        if (network_game_is_active())
+        {
+            state = done;
+            return;
+        }
+        if (!cache_files_map_present(path, 0) ||
+            !cache_files_map_plays_multiplayer(path, build) || !build[0])
+        {
+            state = done;
+            error(_error_silent, "launcher match: missing or unsupported stock map");
+            return;
+        }
+        profile_index = player_ui_get_player1_last_used_profile_index();
+        if (profile_index != NONE && player_profile_get(profile_index, &profile))
+            player_ui_set_active_player_profile(0, profile_index, &profile);
+        ui_widgets_close_all();
+        network_game_accept_remote_connections(FALSE);
+        game_engine_playlist_initialize();
+        if (!create_global_network_game_server())
+        {
+            state = done;
+            main_goto_main_menu();
+            return;
+        }
+        game_engine_playlist_begin();
+        game_connection_set(_game_connection_network_server);
+        if (!create_global_network_game_client())
+        {
+            dispose_global_network_game_server();
+            game_connection_set(_game_connection_local);
+            state = done;
+            main_goto_main_menu();
+            return;
+        }
+        network_game_set_quickstart_local();
+        player_ui_local_player_joined_multiplayer_game(0);
+        if (!ui_widget_load_by_name_or_tag(
+                "ui\\shell\\main_menu\\multiplayer_type_select\\split_screen\\pregame\\splitscreen_pregame_wrapper_normal",
+                NONE, NULL, NONE, NONE, NONE, NONE))
+        {
+            dispose_global_network_game_client();
+            dispose_global_network_game_server();
+            game_connection_set(_game_connection_local);
+            state = done;
+            main_goto_main_menu();
+            return;
+        }
+        server = global_network_game_server_get();
+        if (server && network_game_server_port_bots_adjustable(server))
+            network_game_server_pause_countdown(server, TRUE);
+        state = waiting_client;
+        return;
+    }
+
+    server = global_network_game_server_get();
+    client = global_network_game_client_get();
+    if (!server || !client || !network_game_is_splitscreen_local())
+    {
+        state = done;
+        return;
+    }
+    if (state == starting)
+        return;
+    if (!network_game_server_port_bots_adjustable(server) ||
+        network_game_client_get_state(client, NULL) != 2) /* native pregame */
+        return;
+    if (state == waiting_client)
+    {
+        network_game_server_change_map_name(server, path);
+        player_ui_set_game_variant(&variant);
+        player_ui_set_game_variant_options(&options);
+        network_game_server_change_game_variant(server, &variant);
+        state = waiting_roster;
+        return;
+    }
+    game = network_game_get_game();
+    if (!game)
+        return;
+    /* An interactive native lobby change must not start an unintended
+     * match. Hand control back to the player if its configuration differs. */
+    if (strcmp(game->map.name, path) ||
+        game->variant.game_engine_index != variant.game_engine_index ||
+        game->variant.universal_variant.teams != variant.universal_variant.teams ||
+        game->variant_options.mode != options.mode ||
+        game->variant_options.hardcore != options.hardcore ||
+        (getenv("HALO_LAUNCHER_MATCH_RULES") &&
+            (memcmp(&game->variant,&variant,sizeof(variant)) ||
+             memcmp(&game->variant_options,&options,sizeof(options)))))
+    {
+        state = done;
+        network_game_server_pause_countdown(server, FALSE);
+        error(_error_silent, "launcher match: lobby changed; start from the original menus");
+        return;
+    }
+    machine = network_game_client_get_local_machine_index();
+    if (machine == NONE)
+        return;
+    for (index = 0; index < NUMBEROF(game->players); index++)
+    {
+        struct network_player *player = &game->players[index];
+        if (network_player_is_valid(player) && player->machine_index == machine &&
+            player->controller_index == 0)
+            local_player = TRUE;
+    }
+    if (!local_player)
+    {
+        /* Native add-player is throttled; retry until the host confirms. */
+        network_game_client_add_player(client, 0);
+        return;
+    }
+    if (game->player_count < 1 + bots_wanted_count() ||
+        !network_game_server_port_ok_to_countdown(server))
+        return;
+    network_game_server_pause_countdown(server, FALSE);
+    network_game_client_request_immediate_start();
+    state = starting;
+}
+#endif
+
 void main_loop(
 	void)
 {
@@ -3601,6 +3815,9 @@ static boolean main_loop_iteration(
 
 			/* automated system link tests (port/linux/game/network_test.c) */
 			network_test_update(main_globals.main_menu_scenario_loaded, main_globals.seconds_elapsed);
+#ifdef HALO_ANDROID
+            launcher_match_update(main_globals.main_menu_scenario_loaded);
+#endif
 			/* port: a dedicated server's hosting, rotation and commands
 			(port/linux/game/server_director.c) */
 			server_update(main_globals.main_menu_scenario_loaded, main_globals.seconds_elapsed);

@@ -1,0 +1,46 @@
+from pathlib import Path
+import unittest
+ROOT=Path(__file__).resolve().parents[1]
+APP=ROOT/"port/android/app/src/main/java/com/halo/decomp"
+class UnifiedLobbyTest(unittest.TestCase):
+    def test_tab_order_and_classic_fallback(self):
+        s=(APP/"LauncherActivity.java").read_text()
+        self.assertIn('"Leaderboard", "Lobby", "Offline Match", "Tools"',s)
+        self.assertIn("lanMode.isChecked() ? 1 : 2",s)
+        self.assertIn('backToLobby.setText("BACK TO LOBBIES")',s)
+        self.assertIn("lobbyPanel.setVisibility(lobbyVisible ?",s)
+        self.assertIn("if (lobbyUi != null) lobbyUi.suspend();",s)
+        self.assertIn("lobbyUi.hasSession()",s)
+    def test_one_acknowledged_session_and_role_controls(self):
+        s=(APP/"LauncherLobbyUi.java").read_text()
+        self.assertIn("opened.open();",s)
+        self.assertIn("opened.join(name,color)",s)
+        self.assertIn("host=result;snapshot=s",s)
+        self.assertIn("guest=result;snapshot=s",s)
+        self.assertIn("private void refreshShared()",s)
+        self.assertIn("private void teamRows(",s)
+        self.assertIn("if(host!=null&&side!=LobbyModel.NO_TEAM)",s)
+        self.assertIn('button("CANCEL LOBBY"',s)
+        self.assertIn('button("LEAVE LOBBY"',s)
+        self.assertIn('start.setEnabled(false)',s)
+        self.assertIn('button("PLAYER NAME / COLOR"',s)
+        self.assertIn("MatchWorkshopUi.attach",s)
+        self.assertIn('button("START",this::reviewStart)',s)
+        self.assertIn('setPositiveButton("START ANYWAY"',s)
+        self.assertIn("host.model.authorizeStart(review,override",s)
+        self.assertIn("snapshot.notReady().size()",s)
+        self.assertIn("catch(LobbyModel.StartNotReady warning)",s)
+    def test_private_transport_and_permissions(self):
+        s=(APP/"LanLobbyTransport.java").read_text()
+        self.assertIn("static final int PORT=5167",s)
+        self.assertIn("LanUpdateProtocol.lanInterface",s)
+        self.assertIn("link.accepts(socket.getInetAddress().getAddress())",s)
+        self.assertIn("server.bind(new InetSocketAddress(link.ip,PORT)",s)
+        self.assertIn("new ArrayBlockingQueue<>(12)",s)
+        self.assertIn("deadline.schedule(()->shut(socket),6,TimeUnit.SECONDS)",s)
+        w=(APP/"LobbyWire.java").read_text()
+        self.assertIn("readFrame(in,1024)",w)
+        self.assertNotIn("model.setPlan(",w)
+        self.assertNotIn("model.setTeam(",w)
+        self.assertIn("r.knownRevision",w)
+if __name__=="__main__":unittest.main()

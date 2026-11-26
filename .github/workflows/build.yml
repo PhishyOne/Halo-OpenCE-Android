@@ -257,6 +257,9 @@ jobs:
           python3 -m unittest tools.test_v68_original_title -v
           python3 -m unittest tools.test_v70_launcher_polish -v
           python3 -m unittest tools.test_v71_native_title -v
+          python3 -m unittest tools.test_v73_direct_match -v
+          python3 -m unittest tools.test_v73_unified_lobby -v
+          python3 -m unittest tools.test_v73_native_rules -v
           python3 tools/test_highlight_moments.py -v
           python3 tools/test_v42_highlights_integration.py -v
           python3 tools/test_android_experiment_package.py -v
@@ -264,6 +267,21 @@ jobs:
           python3 tools/test_campaign_save_backup.py -v
           python3 tools/test_campaign_map_transfer.py -v
           mkdir -p "$RUNNER_TEMP/halo-test-classes"
+          javac -d "$RUNNER_TEMP/halo-test-classes" \
+            port/android/app/src/main/java/com/halo/decomp/LauncherMatch.java \
+            port/android/app/src/main/java/com/halo/decomp/MatchWorkshop.java \
+            port/android/app/src/main/java/com/halo/decomp/NativeMatchRules.java \
+            tools/lan/LauncherMatchTest.java tools/lan/NativeMatchRulesTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LauncherMatchTest
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.NativeMatchRulesTest
+          javac -d "$RUNNER_TEMP/halo-test-classes" \
+            port/android/app/src/main/java/com/halo/decomp/MatchWorkshop.java \
+            port/android/app/src/main/java/com/halo/decomp/LobbyModel.java \
+            port/android/app/src/main/java/com/halo/decomp/LobbyWire.java \
+            tools/lan/MatchWorkshopTest.java tools/lan/LobbyModelTest.java tools/lan/LobbyStartTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.MatchWorkshopTest
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LobbyModelTest
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LobbyStartTest
           javac -d "$RUNNER_TEMP/halo-test-classes" \
             port/android/app/src/main/java/com/halo/decomp/TitleBackdropFiles.java \
             tools/lan/TitleBackdropFilesTest.java

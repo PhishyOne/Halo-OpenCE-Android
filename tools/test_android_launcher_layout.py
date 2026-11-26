@@ -17,7 +17,7 @@ class HaloLauncherLayoutTests(unittest.TestCase):
 
     def test_compact_mode_navigation_above_one_play(self):
         s = self.source
-        self.assertIn('"Leaderboard", "Offline Match", "Host", "Join", "Tools"', s)
+        self.assertIn('"Leaderboard", "Lobby", "Offline Match", "Tools"', s)
         self.assertIn('socialUi = new LanBoardUi(this, dataRoot, dashboardPanel, scroll)', s)
         self.assertIn('final boolean[] homeVisible = { !invitePending };', s)
         self.assertIn('Button[] modeTabs = new Button[modeNames.length];', s)
@@ -55,8 +55,10 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         s = self.source
         self.assertIn('getSharedPreferences("offline_bots", MODE_PRIVATE)', s)
         self.assertIn('HaloActivity.OFFLINE_BOT_ARGUMENTS', s)
-        self.assertIn('"--offline-bots", Integer.toString(count)', s)
-        self.assertIn('Boolean.toString(crews)', s)
+        match = (ROOT / "port/android/app/src/main/java/com/halo/decomp/LauncherMatch.java").read_text()
+        self.assertIn('match.arguments()', s)
+        self.assertIn('"--offline-bots", Integer.toString(botCount)', match)
+        self.assertIn('Boolean.toString(vehicleCrews)', match)
         self.assertNotIn('showOfflineBotOptions(', s)
         self.assertNotIn('.setTitle("Offline Bot Match")', s)
 

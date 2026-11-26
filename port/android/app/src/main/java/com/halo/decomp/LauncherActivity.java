@@ -96,6 +96,7 @@ public class LauncherActivity extends Activity {
     private LinearLayout stockMapResults;
     private LinearLayout dashboardPanel;
     private LanBoardUi socialUi;
+    private LauncherLobbyUi lobbyUi;
     private Runnable openSocial;
     private LanMapRepair lanMapRepair;
     private LanBoardServer lanBoardServer;
@@ -265,6 +266,10 @@ public class LauncherActivity extends Activity {
     }
 
     private void startGame(Intent intent) {
+        if (lobbyUi != null && lobbyUi.hasSession()) {
+            HaloNotice.makeText(this, "Leave the launcher lobby before starting Classic Halo or Offline Match.", HaloNotice.LENGTH_LONG).show();
+            return;
+        }
         if (repairBusy) {
             HaloNotice.makeText(this, "Stop map sharing or finish the repair before playing.", HaloNotice.LENGTH_LONG).show();
             return;
@@ -536,9 +541,10 @@ public class LauncherActivity extends Activity {
     /** Compact two-column row. Selection opens only on a deliberate tap;
      * vertical swipes on the page no longer open an Android Spinner menu. */
     private final class ChoiceButton extends Button {
-        private final String[] choices;
+        private String[] choices;
         private final String prompt;
         private int selection;
+        private Runnable selectionChanged;
 
         ChoiceButton(String prompt, String[] choices, int selected) {
             super(LauncherActivity.this);
@@ -561,6 +567,7 @@ public class LauncherActivity extends Activity {
                         selection = which;
                         refresh();
                         dialog.dismiss();
+                        if (selectionChanged != null) selectionChanged.run();
                     })
                 .setNegativeButton("CANCEL", null)
                 .show());
@@ -573,6 +580,15 @@ public class LauncherActivity extends Activity {
         }
 
         int getSelectedItemPosition() { return selection; }
+        void replaceChoices(String[] values,int selected){
+            if(values.length==0)throw new IllegalArgumentException("Empty selection");
+            choices=values.clone();selection=Math.max(0,Math.min(selected,choices.length-1));refresh();
+        }
+
+        void onSelectionChanged(Runnable listener) {
+            selectionChanged = listener;
+            if (listener != null) listener.run();
+        }
     }
 
     private ChoiceButton botChoice(LinearLayout layout, String label,
@@ -712,6 +728,7 @@ public class LauncherActivity extends Activity {
         if (!launcherResumed || isFinishing() || isDestroyed() ||
                 dataRoot == null || dashboardPanel == null ||
                 titleBackdropAvailable || !haveData() ||
+                (lobbyUi != null && lobbyUi.active()) ||
                 repairBusy || gameProcessStatus() != 0 ||
                 pendingVideoLaunch != null ||
                 hasInternetInvite() || new File(dataRoot, "join_link.txt").exists())
@@ -745,6 +762,7 @@ public class LauncherActivity extends Activity {
     }
 
     private void buildLanInterface() {
+        if (lobbyUi != null) { lobbyUi.close(); lobbyUi = null; }
         if (titleBackdrop != null) titleBackdrop.pauseTitle();
         titleBackdrop = null;
         titleBackdropAvailable = TitleBackdropFiles.ready(getFilesDir());
@@ -819,12 +837,12 @@ public class LauncherActivity extends Activity {
         root.addView(accent, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, dp(1)));
 
-        // One row of choices replaces two checkboxes plus the Host/Join radios.
+        // Host and Join are roles inside a single Lobby tab.
         LinearLayout modeBar = new LinearLayout(this);
         modeBar.setOrientation(LinearLayout.HORIZONTAL);
         modeBar.setPadding(dp(6), dp(2), dp(6), dp(2));
         String[] modeNames = {
-            "Leaderboard", "Offline Match", "Host", "Join", "Tools"
+            "Leaderboard", "Lobby", "Offline Match", "Tools"
         };
         Button[] modeTabs = new Button[modeNames.length];
         for (int i = 0; i < modeNames.length; i++) {
@@ -859,7 +877,10 @@ public class LauncherActivity extends Activity {
         dashboardPanel.setVisibility(View.GONE);
         content.addView(dashboardPanel);
         socialUi = new LanBoardUi(this, dataRoot, dashboardPanel, scroll);
-        // System Link panel. Host, guest and advanced controls are retained.
+        LinearLayout lobbyPanel = setupColumn();
+        lobbyPanel.setVisibility(View.GONE);
+        content.addView(lobbyPanel);
+        // Original native setup remains reachable through Classic Halo.
         LinearLayout lanPanel = hudPanel();
         lanPanel.setPadding(dp(7), dp(3), dp(7), dp(3));
         content.addView(lanPanel);
@@ -884,7 +905,12 @@ public class LauncherActivity extends Activity {
             .getString("lan_role", settings.peer.isEmpty() ? "host" : "join");
         roles.check("join".equals(rememberedRole) ?
             joinRole.getId() : hostRole.getId());
-        roles.setVisibility(View.GONE); // Host/Join are the main tabs.
+        // Visible only within the original Classic Halo setup.
+        roles.setVisibility(View.VISIBLE);
+        Button backToLobby = new Button(this);
+        backToLobby.setText("BACK TO LOBBIES");
+        hudButton(backToLobby, false);
+        roleColumn.addView(backToLobby, new LinearLayout.LayoutParams(-1, dp(setupRowHeight())));
         roleColumn.addView(roles);
 
         TextView feedback = lanText(inviteError == null
@@ -1146,6 +1172,53 @@ public class LauncherActivity extends Activity {
         String[] offlineSkills = { "Recruit", "Easy", "Normal", "Heroic", "Veteran", "Legendary" };
         ChoiceButton offlineSkill = botChoice(offlineBotOptions, "DIFFICULTY",
             offlineSkills, offlinePreferences.getInt("skill", 2));
+        // A small direct-launch proof before replacing the existing setup.
+        // Classic remains available, and only installed stock maps are offered.
+        final LauncherMatch.MapChoice[] directMaps = LauncherMatch.installedMaps(dataRoot);
+        String[] directMapLabels = new String[directMaps.length];
+        int directMapSelection = 0;
+        String rememberedMap = offlinePreferences.getString("direct_map", "");
+        for (int i = 0; i < directMaps.length; i++) {
+            directMapLabels[i] = directMaps[i].label;
+            if (directMaps[i].id.equals(rememberedMap)) directMapSelection = i;
+        }
+        LinearLayout directMatchPanel = setupColumn();
+        setupGroupBorder(directMatchPanel);
+        offlineLeft.addView(directMatchPanel);
+        ChoiceButton directMap = botChoice(directMatchPanel, "MAP",
+            directMapLabels, directMapSelection);
+        java.util.ArrayList<MatchWorkshop.Preset> directPresets=new java.util.ArrayList<>();
+        for(String base:MatchWorkshop.BASE_IDS)directPresets.add(MatchWorkshop.Preset.standard(base));
+        ChoiceButton directMode = botChoice(directMatchPanel, "GAME MODE",
+            MatchWorkshop.BASE_LABELS, Math.max(0,MatchWorkshop.baseIndex(
+                offlinePreferences.getString("direct_mode", "team_slayer"))));
+        Runnable refreshDirectPresets=()->{
+            String selected=offlinePreferences.getString("direct_mode","team_slayer");
+            if(directMode.getSelectedItemPosition()<directPresets.size()){
+                MatchWorkshop.Preset old=directPresets.get(directMode.getSelectedItemPosition());
+                if(!old.id.isEmpty())selected=old.id;
+            }
+            directPresets.clear();
+            for(String base:MatchWorkshop.BASE_IDS)directPresets.add(MatchWorkshop.Preset.standard(base));
+            try{directPresets.addAll(MatchWorkshop.read(getFilesDir()).presets);}
+            catch(java.io.IOException invalid){feedback.setText("Saved Workshop unavailable; using standard modes.");}
+            String[] names=new String[directPresets.size()];int selectedIndex=1;
+            for(int i=0;i<names.length;i++){
+                MatchWorkshop.Preset preset=directPresets.get(i);
+                String key=preset.id.isEmpty()?preset.base:preset.id;
+                names[i]=preset.name+(preset.id.isEmpty()?"":" • Custom");
+                if(key.equals(selected))selectedIndex=i;
+            }
+            directMode.replaceChoices(names,selectedIndex);
+        };
+        refreshDirectPresets.run();
+        directMode.onSelectionChanged(()->{
+            MatchWorkshop.Preset selected=directPresets.get(directMode.getSelectedItemPosition());
+            offlinePreferences.edit().putString("direct_mode",selected.id.isEmpty()?selected.base:selected.id).apply();
+        });
+        directMap.onSelectionChanged(() -> ((View) directMode.getParent()).setVisibility(
+            directMap.getSelectedItemPosition() == 0 ? View.GONE : View.VISIBLE));
+
         String[] offlineTeams = { "Balanced", "Bots vs players" };
         LinearLayout offlineTeamOptions = setupColumn();
         setupGroupBorder(offlineTeamOptions);
@@ -1336,17 +1409,24 @@ public class LauncherActivity extends Activity {
         statusScroll.addView(statusColumn);
 
         // Internal mode flags preserve the existing native launch branches.
-        // The five tabs and offline radio group are the visible controls.
+        // The four tabs and offline radio group are the visible controls.
         CheckBox offlineMode = new CheckBox(this);
         CheckBox lanMode = new CheckBox(this);
         lanMode.setChecked("lan".equals(savedMode));
         offlineMode.setChecked(!lanMode.isChecked() && botMatch.isChecked());
         final boolean[] toolsVisible = { false };
         final boolean[] homeVisible = { !invitePending };
+        final boolean[] classicLan = { invitePending };
+        if (invitePending) {
+            roles.check(joinRole.getId());
+            lanMode.setChecked(true);
+            offlineMode.setChecked(false);
+            updateRole.run();
+        }
         Runnable updateRewardVisibility = () -> {
             boolean playing = !toolsVisible[0] && !homeVisible[0];
             boolean available = playing && (offlineMode.isChecked() ||
-                (lanMode.isChecked() && hostRole.isChecked() &&
+                (lanMode.isChecked() && classicLan[0] && hostRole.isChecked() &&
                     lanOnly.isChecked() && !invitePending));
             if (available) attachSetupPanel(offlineMode.isChecked() ? offlineRight : networkColumn,
                 killstreakPanel);
@@ -1363,24 +1443,29 @@ public class LauncherActivity extends Activity {
             offlinePanel.setVisibility(playing && !lanMode.isChecked() ?
                 View.VISIBLE : View.GONE);
             offlineBotOptions.setVisibility(offlineMode.isChecked() ? View.VISIBLE : View.GONE);
+            directMatchPanel.setVisibility(offlineMode.isChecked() ? View.VISIBLE : View.GONE);
             offlineTeamOptions.setVisibility(offlineMode.isChecked() ? View.VISIBLE : View.GONE);
             campaignInfo.setVisibility(offlineMode.isChecked() ? View.GONE : View.VISIBLE);
-            lanPanel.setVisibility(playing && lanMode.isChecked() ?
+            boolean lobbyVisible = playing && lanMode.isChecked() && !classicLan[0];
+            boolean launchVisible = playing && !lobbyVisible;
+            lanPanel.setVisibility(playing && lanMode.isChecked() && classicLan[0] ?
                 View.VISIBLE : View.GONE);
+            lobbyPanel.setVisibility(lobbyVisible ? View.VISIBLE : View.GONE);
+            if (lobbyUi != null) lobbyUi.setVisible(lobbyVisible);
             toolsPage.setVisibility(toolsVisible[0] ? View.VISIBLE : View.GONE);
             dashboardPanel.setVisibility(homeVisible[0] ?
                 View.VISIBLE : View.GONE);
             if (socialUi != null) socialUi.setVisible(homeVisible[0]);
-            footer.setVisibility(playing ? View.VISIBLE : View.GONE);
-            statusScroll.setVisibility(playing ? View.VISIBLE : View.GONE);
+            footer.setVisibility(launchVisible ? View.VISIBLE : View.GONE);
+            statusScroll.setVisibility(launchVisible ? View.VISIBLE : View.GONE);
             updateRewardVisibility.run();
-            actionDock.setSetupPage(playing ?
+            actionDock.setSetupPage(launchVisible ?
                 (lanMode.isChecked() ? lanPanel : offlinePanel) : null,
-                playing ? (lanMode.isChecked() ? networkColumn : offlineRight) : null);
+                launchVisible ? (lanMode.isChecked() ? networkColumn : offlineRight) : null);
             if (playButton != null)
-                playButton.setVisibility(playing ? View.VISIBLE : View.GONE);
-            int chosen = homeVisible[0] ? 0 : toolsVisible[0] ? 4 :
-                lanMode.isChecked() ? (hostRole.isChecked() ? 2 : 3) : 1;
+                playButton.setVisibility(launchVisible ? View.VISIBLE : View.GONE);
+            int chosen = homeVisible[0] ? 0 : toolsVisible[0] ? 3 :
+                lanMode.isChecked() ? 1 : 2;
             for (int i = 0; i < modeTabs.length; i++)
                 modeTabs[i].setSelected(i == chosen);
             scroll.scrollTo(0, 0);
@@ -1401,6 +1486,16 @@ public class LauncherActivity extends Activity {
             if (!lanMode.isChecked()) offlineMode.setChecked(bots);
             updateMode.run();
         });
+        lobbyUi = new LauncherLobbyUi(this, dataRoot, lobbyPanel, () -> {
+            classicLan[0] = true;
+            updateMode.run();
+            if (joinRole.isChecked() && lanOnly.isChecked() && !invitePending)
+                hostPicker.search(false, null);
+        }, () -> !repairBusy && gameProcessStatus() == 0 && !hasInternetInvite());
+        backToLobby.setOnClickListener(view -> {
+            classicLan[0] = false;
+            updateMode.run();
+        });
         updateMode.run();
         // Keep the existing mode/configuration machinery, but use one
         // compact navigation row for all normal player decisions.
@@ -1413,27 +1508,18 @@ public class LauncherActivity extends Activity {
         modeTabs[0].setOnClickListener(view -> openLeaderboard());
         modeTabs[1].setOnClickListener(view -> {
             homeVisible[0] = toolsVisible[0] = false;
-            lanMode.setChecked(false);
-            offlineMode.setChecked(botMatch.isChecked());
+            classicLan[0] = false;
+            lanMode.setChecked(true);
             updateMode.run();
         });
         modeTabs[2].setOnClickListener(view -> {
             homeVisible[0] = toolsVisible[0] = false;
-            roles.check(hostRole.getId());
-            lanMode.setChecked(true);
+            refreshDirectPresets.run();
+            lanMode.setChecked(false);
+            offlineMode.setChecked(botMatch.isChecked());
             updateMode.run();
         });
         modeTabs[3].setOnClickListener(view -> {
-            homeVisible[0] = toolsVisible[0] = false;
-            roles.check(joinRole.getId());
-            lanMode.setChecked(true);
-            launcherPreferences.edit().putString("play_mode", "lan")
-                .putString("lan_role", "join").apply();
-            updateMode.run();
-            if (lanOnly.isChecked() && !invitePending)
-                hostPicker.search(false, null);
-        });
-        modeTabs[4].setOnClickListener(view -> {
             homeVisible[0] = false;
             toolsVisible[0] = true;
             updateMode.run();
@@ -1462,6 +1548,10 @@ public class LauncherActivity extends Activity {
         play.setText("PLAY");
         hudButton(play, true);
         play.setOnClickListener(view -> {
+            if (lobbyUi != null && lobbyUi.hasSession()) {
+                feedback.setText("Leave the launcher lobby before using Classic Halo or Offline Match.");
+                return;
+            }
             if (repairBusy) {
                 feedback.setText("Finish the file or save operation before starting Halo.");
                 return;
@@ -1494,6 +1584,18 @@ public class LauncherActivity extends Activity {
                 // to CTF/King by the native bot planner, so Slayer is unaffected.
                 boolean crews = true;
                 boolean objectives = true;
+                LauncherMatch.MapChoice map = directMaps[directMap.getSelectedItemPosition()];
+                MatchWorkshop.Preset preset=directPresets.get(directMode.getSelectedItemPosition());
+                String mode=preset.id.isEmpty()?preset.base:preset.id;
+                LauncherMatch match;
+                try {
+                    match = LauncherMatch.offlinePreset(dataRoot, map.id, preset,
+                        count, offlineSkills[skill].toLowerCase(java.util.Locale.ROOT),
+                        team == 0 ? "even" : "against", crews);
+                } catch (IllegalArgumentException unavailable) {
+                    feedback.setText(unavailable.getMessage());
+                    return;
+                }
                 try {
                     // Android's native game reads config.toml, not arbitrary
                     // --offline-bots CLI flags. Apply before its :game process
@@ -1503,7 +1605,7 @@ public class LauncherActivity extends Activity {
                         team == 0 ? "even" : "against", crews, objectives);
                     CommanderConfig.disable(new File(dataRoot, "config.toml"));
                     saveKillstreakChoices(new File(dataRoot, "config.toml"),
-                        killstreakChecks, killstreakPrefs, true);
+                        killstreakChecks, killstreakPrefs, true,match.radio);
                 } catch (java.io.IOException error) {
                     feedback.setText("Couldn't configure offline bots: " + error.getMessage());
                     return;
@@ -1513,12 +1615,9 @@ public class LauncherActivity extends Activity {
                     .putBoolean("objective_modes", objectives).apply();
                 launcherPreferences.edit().putString("play_mode", "offline").apply();
                 Intent game = new Intent(this, HaloActivity.class);
-                game.putExtra(HaloActivity.OFFLINE_BOT_ARGUMENTS, new String[] {
-                    "--offline-bots", Integer.toString(count),
-                    offlineSkills[skill].toLowerCase(java.util.Locale.ROOT),
-                    team == 0 ? "even" : "against",
-                    Boolean.toString(crews)
-                });
+                game.putExtra(HaloActivity.OFFLINE_BOT_ARGUMENTS, match.arguments());
+                offlinePreferences.edit().putString("direct_map", map.id)
+                    .putString("direct_mode", mode).apply();
                 startGame(game);
                 return;
             }
@@ -1600,7 +1699,7 @@ public class LauncherActivity extends Activity {
             handler.post(this::maybePrepareOriginalTitle);
         // Reentering Join after an in-place APK update should find a host
         // still playing without asking the host to leave the match.
-        if (lanMode.isChecked() && joinRole.isChecked() &&
+        if (classicLan[0] && lanMode.isChecked() && joinRole.isChecked() &&
             lanOnly.isChecked() && !invitePending)
             hostPicker.search(false, null);
     }
@@ -1608,6 +1707,11 @@ public class LauncherActivity extends Activity {
     /** Individual host-authoritative rewards; retired orbital stays OFF. */
     private void saveKillstreakChoices(File file, CheckBox[] checks,
             SharedPreferences preferences, boolean hosting)
+            throws java.io.IOException {
+        saveKillstreakChoices(file,checks,preferences,hosting,null);
+    }
+    private void saveKillstreakChoices(File file, CheckBox[] checks,
+            SharedPreferences preferences, boolean hosting,Boolean radioOverride)
             throws java.io.IOException {
         if (!hosting) {
             KillstreakConfig.disable(file);
@@ -1621,6 +1725,7 @@ public class LauncherActivity extends Activity {
             selected.set(key, checked);
             saved.putBoolean(key, checked);
         }
+        if(radioOverride!=null)selected.set("announcements",radioOverride);
         KillstreakConfig.save(file, selected);
         saved.apply();
     }
@@ -2178,12 +2283,14 @@ public class LauncherActivity extends Activity {
 
     @Override
     protected void onStop() {
+        if (lobbyUi != null) lobbyUi.suspend();
         stopBoardSharing();
         super.onStop();
     }
 
     @Override
     protected void onDestroy() {
+        if (lobbyUi != null) { lobbyUi.close(); lobbyUi = null; }
         if (titleBackdrop != null) titleBackdrop.pauseTitle();
         if (remoteReelPlayer != null) remoteReelPlayer.close();
         if (socialUi != null) socialUi.close();
