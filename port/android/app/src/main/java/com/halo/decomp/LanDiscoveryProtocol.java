@@ -1,13 +1,16 @@
 package com.halo.decomp;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 
 /** Minimal LAN-only, nonce-bound discovery frames. A reply is not authentication. */
 final class LanDiscoveryProtocol {
     static final int PORT = 5163; // independent of gameplay 5150/5151 and update 5162
-    static final int MAX_PACKET = 96;
+    static final int MAX_PACKET = 176; // Header, nonce and up to 32 four-byte Unicode code points.
     private static final String PROBE = "HALO-LAN-FIND-1 ";
     private static final String REPLY = "HALO-LAN-HOST-1 ";
+    private static final String LOBBY = "HALO-LOBBY-5 ";
 
     private LanDiscoveryProtocol() { }
 
@@ -41,6 +44,22 @@ final class LanDiscoveryProtocol {
     static boolean validReply(byte[] packet, int length, String expectedNonce) {
         return validNonce(expectedNonce) &&
             expectedNonce.equals(packet(packet, length, REPLY));
+    }
+
+    static byte[] lobbyReply(String nonce,String name) {
+        if(!validNonce(nonce))throw new IllegalArgumentException("Bad discovery nonce");
+        return (LOBBY+nonce+" "+LobbyName.checked(name)).getBytes(StandardCharsets.UTF_8);
+    }
+
+    static String readLobbyName(byte[] data,int length,String nonce) {
+        if(!validNonce(nonce)||data==null||length<1||length>MAX_PACKET||length>data.length)return null;
+        byte[] prefix=(LOBBY+nonce+" ").getBytes(StandardCharsets.US_ASCII);
+        if(length<=prefix.length)return null;
+        for(int i=0;i<prefix.length;i++)if(data[i]!=prefix[i])return null;
+        try {
+            String name=StandardCharsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(data,prefix.length,length-prefix.length)).toString();
+            return name.equals(LobbyName.checked(name))?name:null;
+        } catch(CharacterCodingException|IllegalArgumentException invalid){return null;}
     }
 
     /** Directed broadcast, even when an Android hotspot advertises /32. */

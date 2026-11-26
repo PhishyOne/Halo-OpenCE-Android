@@ -37,12 +37,14 @@ final class LauncherLobbyUi implements AutoCloseable {
     private LanLobbyTransport.Client guest;
     private LobbyModel.Snapshot snapshot;
     private MatchWorkshopUi hostEditor;
-    private LinearLayout summary,roster,available;
+    private LinearLayout summary,roster;
     private TextView status;
     private int generation;
     private boolean busy,closed,visible,connectionLost;
     private long lastContact;
-    private List<String> discovered=Collections.emptyList();
+    private Map<String,String> discovered=Collections.emptyMap();
+    private int searchGeneration=-1;
+    private boolean openFinder;
     private List<WorkshopMapCatalog.MapItem> sessionMaps=Collections.emptyList();
     private String notice="";
     private final Runnable tick=this::tick;
@@ -73,46 +75,65 @@ final class LauncherLobbyUi implements AutoCloseable {
         n=n.trim();if(n.length()>16)n=n.substring(0,16);
         try{return LobbyModel.name(n);}catch(IllegalArgumentException bad){return "Spartan";}
     }
-    private int profileColor(){return Math.max(0,Math.min(LobbyModel.COLORS.length-1,prefs.getInt("color",0)));}
-    private void persistAppearance(LobbyModel.Member m){prefs.edit().putString("name",m.name).putInt("color",m.color).apply();}
+    private int profileColor(){
+        if(prefs.contains("armor_color"))return Math.max(0,Math.min(LobbyModel.COLORS.length-1,prefs.getInt("armor_color",0)));
+        return LobbyModel.legacyColor(prefs.getInt("color",0));
+    }
+    private void saveAppearance(String name,int color){prefs.edit().putString("name",name).putInt("armor_color",color).apply();}
+    private void persistAppearance(LobbyModel.Member m){saveAppearance(m.name,m.color);}
     private boolean allowed(){if(closed||busy)return false;if(!canOpen.getAsBoolean()){msg("Close the game or finish file operations before opening a lobby.");return false;}return true;}
     void setVisible(boolean value){
         visible=value;
-        if(value&&!closed&&snapshot==null&&!busy&&discovered.isEmpty())search();
+        if(!value)openFinder=false;
+        else if(!closed&&snapshot==null&&!busy&&discovered.isEmpty())search(false);
     }
     private void showSelection(){
         body.removeAllViews();hostEditor=null;summary=roster=null;
-        LinearLayout selection=col();
-        body.addView(scrollPane(selection),new LinearLayout.LayoutParams(-1,-1));
-        selection.addView(text("LOBBIES",14,HaloTheme.FOCUS_TEXT,true));
-        status=text(notice.isEmpty()?"Choose an existing lobby or create one.":notice,11,HaloTheme.MUTED,false);selection.addView(status);
+        body.addView(text("LOBBIES",14,HaloTheme.FOCUS_TEXT,true));
+        status=text(notice.isEmpty()?"Choose an existing lobby or create one.":notice,11,HaloTheme.MUTED,false);body.addView(status);
         LinearLayout left=panel(),right=panel();
-        left.addView(text("AVAILABLE LOBBIES",12,HaloTheme.FOCUS_TEXT,true));
-        left.addView(button("FIND LOBBIES",this::search));
-        available=col();left.addView(available);showAvailable();
-        left.addView(button("JOIN BY IP",this::manualJoin));
-        right.addView(button("CREATE LOBBY",this::create));
+        left.addView(button("PLAYER NAME / COLOR",this::appearance));
+        left.addView(button("MATCH RECORDING",this::recording));
+        left.addView(new Space(activity),new LinearLayout.LayoutParams(1,0,1));
+        left.addView(button("CLASSIC HALO",classic));
+        right.addView(button("FIND LOBBY",()->search(true)));
+        right.addView(button("JOIN BY IP",this::manualJoin));
+        right.addView(button("CREATE LOBBY",this::nameLobby));
         right.addView(button("MATCH WORKSHOP",()->MatchWorkshopUi.show(activity,dataRoot)));
-        right.addView(button("PLAYER NAME / COLOR",this::appearance));
-        right.addView(button("MATCH RECORDING",this::recording));
-        label(right,"Classic Halo still uses the original hosting/joining menus.");
-        right.addView(button("CLASSIC HALO",classic));
-        pair(selection,left,right);
+        LinearLayout columns=row();
+        columns.addView(scrollPane(left),new LinearLayout.LayoutParams(0,-1,1));
+        LinearLayout.LayoutParams rightSize=new LinearLayout.LayoutParams(0,-1,1);
+        rightSize.leftMargin=dp(5);columns.addView(scrollPane(right),rightSize);
+        body.addView(columns,new LinearLayout.LayoutParams(-1,0,1));
     }
     private void showAvailable(){
-        if(available==null)return;available.removeAllViews();
-        if(discovered.isEmpty()){label(available,"No new lobby discovered.");return;}
-        for(String ip:discovered)available.addView(button("Join "+ip,()->join(ip)));
+        HaloDialog.Builder picker=new HaloDialog.Builder(activity).setTitle("FIND LOBBY")
+            .setNegativeButton("CLOSE",null).setNeutralButton("REFRESH",(d,w)->search(true));
+        if(discovered.isEmpty())picker.setMessage("No lobbies replied on this LAN.").setPositiveButton("JOIN BY IP",(d,w)->manualJoin());
+        else{
+            List<String> ips=new ArrayList<>(discovered.keySet());
+            String[] items=new String[ips.size()];
+            for(int i=0;i<items.length;i++){
+                String ip=ips.get(i),name=discovered.get(ip);
+                items[i]=(name.isEmpty()?"Older Halo lobby":name)+"  ·  "+ip;
+            }
+            picker.setItems(items,(d,i)->join(ips.get(i)));
+        }
+        picker.show();
     }
-    private void search(){
+    private void search(boolean show){
         if(closed||busy||snapshot!=null)return;
-        busy=true;int g=generation;
-        if(status!=null)status.setText("Searching this LAN…");
+        openFinder|=show;
+        if(searchGeneration==generation)return;
+        final int g=generation;searchGeneration=g;
+        status.setText("Searching this LAN…");
         work.execute(()->{
-            List<String> found=LanDiscoveryClient.scan(activity.getApplicationContext(),LanLobbyTransport.PORT);
+            Map<String,String> found=LanDiscoveryClient.findLobbies(activity.getApplicationContext());
             ui.post(()->{
-                if(closed||g!=generation)return;busy=false;discovered=found;
-                showAvailable();if(status!=null)status.setText(found.isEmpty()?"No pregame lobby found. Manual IP is available.":"Select a lobby to join.");
+                if(closed||g!=generation)return;
+                searchGeneration=-1;discovered=found;
+                status.setText(found.isEmpty()?"No lobby found on this LAN.":found.size()+(found.size()==1?" lobby found":" lobbies found"));
+                if(openFinder&&visible){openFinder=false;showAvailable();}
             });
         });
     }
@@ -127,7 +148,18 @@ final class LauncherLobbyUi implements AutoCloseable {
             dialog.dismiss();join(address);
         });
     }
-    private void create(){
+    private void nameLobby(){
+        if(!allowed()||snapshot!=null)return;
+        EditText field=new EditText(activity);field.setSingleLine(true);field.setSelectAllOnFocus(true);
+        field.setText(prefs.getString("last_lobby_name",profileName()+"'s lobby"));
+        HaloDialog dialog=new HaloDialog.Builder(activity).setTitle("LOBBY NAME").setView(field)
+            .setNegativeButton("CANCEL",null).setPositiveButton("CREATE",null).show();
+        dialog.getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener(v->{
+            try{String name=LobbyName.checked(field.getText().toString());dialog.dismiss();create(name);}
+            catch(IllegalArgumentException invalid){msg(invalid.getMessage());field.requestFocus();}
+        });
+    }
+    private void create(String lobbyName){
         if(!allowed()||snapshot!=null)return;
         busy=true;final int g=++generation;final String name=profileName();final int color=profileColor();
         status.setText("Opening lobby on this LAN…");
@@ -135,11 +167,11 @@ final class LauncherLobbyUi implements AutoCloseable {
             LanLobbyTransport.Host opened=null;
             try{
                 MatchWorkshop.Library lib=MatchWorkshop.read(activity.getFilesDir());
-                LobbyModel model=new LobbyModel(name,color,LobbyModel.Plan.from(lib));
+                LobbyModel model=new LobbyModel(lobbyName,name,color,LobbyModel.Plan.from(lib));
                 opened=new LanLobbyTransport.Host(model);opened.open();
                 LobbyModel.Snapshot s=model.hostSnapshot(LanLobbyTransport.now());
                 final LanLobbyTransport.Host result=opened;
-                ui.post(()->{if(closed||g!=generation){result.close();return;}host=result;snapshot=s;busy=false;connectionLost=false;lastContact=LanLobbyTransport.now();showSession();schedule();});
+                ui.post(()->{if(closed||g!=generation){result.close();return;}host=result;snapshot=s;prefs.edit().putString("last_lobby_name",s.lobbyName).apply();busy=false;connectionLost=false;lastContact=LanLobbyTransport.now();showSession();schedule();});
             }catch(IOException|RuntimeException error){
                 if(opened!=null)opened.close();failedOpen(g,"Couldn't create lobby: "+error.getMessage());
             }
@@ -167,10 +199,10 @@ final class LauncherLobbyUi implements AutoCloseable {
         ui.post(()->{if(closed||g!=generation)return;busy=false;msg(error);});
     }
     private void showSession(){
-        body.removeAllViews();available=null;hostEditor=null;
+        body.removeAllViews();openFinder=false;hostEditor=null;
         boolean hosting=host!=null;
         sessionMaps=WorkshopMapCatalog.installed(dataRoot);
-        body.addView(text("LOBBY  /  "+(hosting?"HOST":"PLAYER"),14,HaloTheme.FOCUS_TEXT,true));
+        body.addView(text(snapshot.lobbyName+"  /  "+(hosting?"HOST":"PLAYER"),14,HaloTheme.FOCUS_TEXT,true));
         status=text("",11,HaloTheme.MUTED,false);body.addView(status);
         summary=panel();roster=panel();
         LinearLayout panes=row();
@@ -354,7 +386,7 @@ final class LauncherLobbyUi implements AutoCloseable {
         dialog.getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener(v->{
             try{
                 String n=LobbyModel.name(name.getText().toString());int c=LobbyModel.color(color.getSelectedItemPosition());
-                if(snapshot==null)prefs.edit().putString("name",n).putInt("color",c).apply();
+                if(snapshot==null)saveAppearance(n,c);
                 else {LobbyModel.Member self=snapshot.me();changeSelf(n,c,self.ready,self.requestedTeam);}
                 dialog.dismiss();
             }catch(IllegalArgumentException invalid){msg(invalid.getMessage());}
@@ -476,9 +508,9 @@ final class LauncherLobbyUi implements AutoCloseable {
     }
     /** Selection and current session share a tab; moving to another tab
      * doesn't leave. Leaving foreground closes this first-phase lobby. */
-    void suspend(){if(!inGame&&(snapshot!=null||busy))leave(false,"Lobby closed when launcher left foreground.");}
+    void suspend(){openFinder=false;if(!inGame&&(snapshot!=null||busy))leave(false,"Lobby closed when launcher left foreground.");}
     private void leave(boolean notify,String message){
-        generation++;ui.removeCallbacks(tick);busy=false;connectionLost=false;inGame=false;launchArgs=null;preparedRound=launchedRound=localFailure=returnRound="";
+        generation++;openFinder=false;discovered=Collections.emptyMap();ui.removeCallbacks(tick);busy=false;connectionLost=false;inGame=false;launchArgs=null;preparedRound=launchedRound=localFailure=returnRound="";
         if(host!=null){host.close();host=null;}
         LanLobbyTransport.Client old=guest;guest=null;
         if(old!=null){

@@ -2,6 +2,7 @@ package com.halo.decomp;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Collections;
 
 /** Exact wire-format, nonce and private subnet preflight. */
 public final class LanDiscoveryProtocolTest {
@@ -45,6 +46,20 @@ public final class LanDiscoveryProtocolTest {
                 "invalid nonce " + invalid);
         }
 
+        String display="🎮 Phish’s lobby";
+        byte[] named=LanDiscoveryProtocol.lobbyReply(token,display);
+        check(display.equals(LanDiscoveryProtocol.readLobbyName(named,named.length,token)),"Unicode name round trip");
+        check(LanDiscoveryProtocol.readLobbyName(named,named.length,other)==null,"stale named reply");
+        check(LanDiscoveryProtocol.readLobbyName(response,response.length,token)==null,"classic has no advertised name");
+        String limit=String.join("",Collections.nCopies(32,"🎮"));
+        byte[] longest=LanDiscoveryProtocol.lobbyReply(token,limit);
+        check(limit.equals(LanDiscoveryProtocol.readLobbyName(longest,longest.length,token)),"32 four-byte characters");
+        check(LanDiscoveryProtocol.readLobbyName(longest,longest.length-1,token)==null,"reject clipped UTF-8");
+        named[named.length-1]=10;
+        check(LanDiscoveryProtocol.readLobbyName(named,named.length,token)==null,"reject newline");
+        for(String bad:new String[]{"  ",limit+"x","a\nb","a\u2028b"}){
+            try{LobbyName.checked(bad);throw new AssertionError("invalid lobby name");}catch(IllegalArgumentException expected){checked++;}
+        }
         byte[] local = LanUpdateProtocol.privateAddress("192.168.43.77");
         byte[] peer = LanUpdateProtocol.privateAddress("192.168.43.1");
         byte[] otherSubnet = LanUpdateProtocol.privateAddress("192.168.44.1");

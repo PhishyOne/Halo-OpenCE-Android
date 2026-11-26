@@ -6,7 +6,7 @@ import java.util.*;
 /** Bounded versioned LAN lobby frames. No host-only commands on the wire,
  * no file operations, and never send another member's secret token. */
 final class LobbyWire {
-    static final int MAGIC=0x484c5034, MAX_FRAME=1024*1024;
+    static final int MAGIC=0x484c5035, MAX_FRAME=1024*1024;
     static final int JOIN=1,POLL=2,UPDATE=3,LEAVE=4,ACK=5,RETURN=6;
     static final class Request {
         final int op;final long knownRevision;final String secret,name;final int color,requestTeam;final boolean ready;
@@ -82,7 +82,7 @@ final class LobbyWire {
             d.writeUTF(r.error);d.writeUTF(r.secret);d.writeBoolean(r.snapshot!=null);
             if(r.snapshot==null)return;
             LobbyModel.Snapshot s=r.snapshot;
-            d.writeUTF(s.session);d.writeUTF(s.self);d.writeLong(s.revision);
+            d.writeUTF(s.session);d.writeUTF(s.self);d.writeUTF(s.lobbyName);d.writeLong(s.revision);
             d.writeUTF(s.round);d.writeInt(s.startIndex);d.writeBoolean(s.released);d.writeUTF(s.startMessage);
             d.writeBoolean(s.hostBack);d.writeInt(s.nextIndex);d.writeInt(s.secondsToNext);
             d.writeUTF(s.plan.title);d.writeBoolean(s.plan.playlist);d.writeBoolean(s.plan.shuffle);d.writeBoolean(s.plan.loop);
@@ -102,7 +102,7 @@ final class LobbyWire {
                 throw new IOException("Invalid lobby response");
             LobbyModel.Snapshot snapshot=null;
             if(has){
-                String session=in.readUTF(),self=in.readUTF();long revision=in.readLong();
+                String session=in.readUTF(),self=in.readUTF(),lobbyName=in.readUTF();long revision=in.readLong();
                 String round=in.readUTF();int startIndex=in.readInt();boolean released=in.readBoolean();String message=in.readUTF();
                 boolean hostBack=in.readBoolean();int nextIndex=in.readInt(),secondsToNext=in.readInt();
                 String title=in.readUTF();boolean playlist=in.readBoolean(),shuffle=in.readBoolean(),loop=in.readBoolean();
@@ -113,7 +113,7 @@ final class LobbyWire {
                 int count=in.readInt();if(count<1||count>LobbyModel.MAX_HUMANS)throw new IOException("Invalid lobby roster");
                 ArrayList<LobbyModel.Member> members=new ArrayList<>();
                 for(int i=0;i<count;i++)members.add(new LobbyModel.Member(in.readUTF(),in.readUTF(),in.readUnsignedByte(),in.readByte(),in.readByte(),in.readBoolean(),in.readBoolean()));
-                snapshot=new LobbyModel.Snapshot(session,self,revision,p,members,round,startIndex,released,message,hostBack,nextIndex,secondsToNext);
+                snapshot=new LobbyModel.Snapshot(session,self,lobbyName,revision,p,members,round,startIndex,released,message,hostBack,nextIndex,secondsToNext);
             }
             end(in);return new Response(secret,snapshot,error);
         }catch(EOFException closed){throw new IOException("Host closed the connection. Check that both phones use the same Halo build.",closed);}

@@ -22,6 +22,8 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.Set;
 
 /** UDP LAN discovery. No subnet sweep or cloud service is required.
@@ -116,12 +118,17 @@ final class LanDiscoveryClient {
         return new ArrayList<>(addresses);
     }
 
-    static List<String> scan(Context context) { return scan(context,LanDiscoveryProtocol.PORT); }
-    static List<String> scan(Context context,int port) {
-        if(port!=LanDiscoveryProtocol.PORT&&port!=LanLobbyTransport.PORT)throw new IllegalArgumentException("Invalid discovery port");
+    static List<String> scan(Context context) {
+        return new ArrayList<>(discover(context,LanDiscoveryProtocol.PORT).keySet());
+    }
+    static Map<String,String> findLobbies(Context context) {
+        return discover(context,LanLobbyTransport.PORT);
+    }
+    private static Map<String,String> discover(Context context,int port) {
         List<LocalLink> links = localLinks();
-        if (links.isEmpty()) return Collections.emptyList();
-        Set<String> results = new LinkedHashSet<>();
+        if (links.isEmpty()) return Collections.emptyMap();
+        Map<String,String> results = new TreeMap<>();
+        boolean lobby=port==LanLobbyTransport.PORT;
         WifiManager.MulticastLock lock = null;
         try {
             WifiManager wifi = (WifiManager)context.getSystemService(Context.WIFI_SERVICE);
@@ -145,7 +152,7 @@ final class LanDiscoveryClient {
             byte[] probe = LanDiscoveryProtocol.probe(challenge);
             List<String> destinations = targets(context, links);
             byte[] answer = new byte[LanDiscoveryProtocol.MAX_PACKET + 1];
-            for (int round = 0; round < 3 && results.size() < 8; round++) {
+            for (int round = 0; round < 3 && (lobby || results.size() < 8); round++) {
                 for (String address : destinations) {
                     try {
                         InetAddress target = InetAddress.getByName(address);
@@ -155,18 +162,17 @@ final class LanDiscoveryClient {
                 }
                 long deadline = android.os.SystemClock.elapsedRealtime() + 440;
                 while (android.os.SystemClock.elapsedRealtime() < deadline &&
-                       results.size() < 8) {
+                       (lobby || results.size() < 8)) {
                     DatagramPacket packet = new DatagramPacket(answer, answer.length);
                     try {
                         socket.receive(packet);
                         InetAddress from = packet.getAddress();
-                        if (!(from instanceof Inet4Address) ||
-                            LanUpdateProtocol.privateAddress(from.getHostAddress()) == null ||
-                            !isLocalPeer(from.getAddress(), links) ||
-                            !LanDiscoveryProtocol.validReply(
-                                packet.getData(), packet.getLength(), challenge))
-                            continue;
-                        results.add(from.getHostAddress());
+                        if (!(from instanceof Inet4Address) || !isLocalPeer(from.getAddress(),links)) continue;
+                        String ip=from.getHostAddress();
+                        String name=lobby?LanDiscoveryProtocol.readLobbyName(packet.getData(),packet.getLength(),challenge):null;
+                        if(name!=null)results.put(ip,name);
+                        else if(LanDiscoveryProtocol.validReply(packet.getData(),packet.getLength(),challenge))
+                            results.putIfAbsent(ip,"");
                     } catch (SocketTimeoutException idle) {
                         // Wait for another response until the short round ends.
                     } catch (Exception unavailable) {
@@ -179,8 +185,6 @@ final class LanDiscoveryClient {
         } finally {
             if (lock != null && lock.isHeld()) lock.release();
         }
-        List<String> sorted = new ArrayList<>(results);
-        Collections.sort(sorted);
-        return sorted;
+        return results;
     }
 }

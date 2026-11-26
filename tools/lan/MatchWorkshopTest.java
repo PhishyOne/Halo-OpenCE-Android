@@ -13,7 +13,18 @@ public final class MatchWorkshopTest {
         check(MatchWorkshop.BASE_IDS.length==35,"standard and OpenCE presets");
         check(!MatchWorkshop.Preset.standard("king_pro").teams(),"King Pro FFA");
         check(MatchWorkshop.family("stalker")==MatchWorkshop.Family.ODDBALL,"Stalker oddball");
-        Set<String> keys=new HashSet<>();for(MatchWorkshop.Rule r:MatchWorkshop.RULES)check(keys.add(r.key),"unique rule "+r.key);
+        Set<String> keys=new HashSet<>();
+        for(MatchWorkshop.Rule r:MatchWorkshop.RULES){
+            check(keys.add(r.key),"unique rule "+r.key);
+            check(r.description.length()>=16&&!r.label.startsWith("No "),"positive documented rule "+r.key);
+        }
+        for(String key:new String[]{"no_shields","no_map_weapons","no_kill_penalty","no_death_bonus"}){
+            MatchWorkshop.Rule r=MatchWorkshop.rule(key);
+            check(r.choices[0]==1&&r.display(1).equals("Off")&&r.choices[1]==0&&r.display(0).equals("On"),"saved/native polarity "+key);
+            for(int value:r.choices)check(MatchWorkshop.Preset.standard("slayer").saveAs("Test",Collections.singletonMap(key,value)).overrides.get(key)==value,"keeps raw override "+key);
+        }
+        check(MatchWorkshop.rule("weapon_set").display(10).equals("Grenades excluded"),"native weapon enum");
+        check(MatchWorkshop.rule("speed_with_ball").display(0).equals("Slow"),"native ball speed");
         MatchWorkshop.Preset slayer=MatchWorkshop.Preset.standard("team_slayer");
         Map<String,Integer> rules=new LinkedHashMap<>();rules.put("score_to_win",75);rules.put("friendly_fire",1);
         MatchWorkshop.Preset custom=slayer.saveAs("Heavy Slayer",rules);

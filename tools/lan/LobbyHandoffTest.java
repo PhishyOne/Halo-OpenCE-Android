@@ -20,9 +20,9 @@ public final class LobbyHandoffTest {
     }
     public static void main(String[] args)throws Exception {
         LobbyModel.Plan p=LobbyModel.Plan.from(MatchWorkshop.Library.empty());
-        LobbyModel host=new LobbyModel("12345678901ABC",7,p);
-        LobbyModel.Joined a=host.join("12345678901XYZ",10,1,"192.168.43.1","192.168.43.2");
-        LobbyModel.Joined b=host.join("Guest",11,1,"192.168.43.1","192.168.43.3");
+        LobbyModel host=new LobbyModel("Phish’s LAN","12345678901ABC",17,p);
+        LobbyModel.Joined a=host.join("12345678901XYZ",7,1,"192.168.43.1","192.168.43.2");
+        LobbyModel.Joined b=host.join("Guest",14,1,"192.168.43.1","192.168.43.3");
         check(host.nativeInterface("10.0.0.1").equals("192.168.43.1"),"uses the interface guests joined");
         LobbyModel.StartReview review=host.reviewStart(2,new Random(0));
         check(review.notReady.size()==2,"named unready guests");
@@ -33,6 +33,7 @@ public final class LobbyHandoffTest {
         check(!ack(host,a.secret,offer.round,true,5).released,"one guest missing");
         check(!ack(host,a.secret,offer.round,true,6).released,"retry does not count twice");
         LobbyModel.Snapshot release=ack(host,b.secret,offer.round,true,7);
+        check(release.lobbyName.equals("Phish’s LAN"),"named lobby sent to peers");
         check(release.released&&release.members.size()==3,"all guests included despite unready");
         check(ack(host,b.secret,offer.round,true,8).round.equals(offer.round),"lost release can be retried");
         check(ack(host,a.secret,offer.round,false,9).released,"late decline does not retract dispatched launch");
@@ -42,7 +43,7 @@ public final class LobbyHandoffTest {
         check(h[5].equals("0")&&g[5].equals("2")&&h[6].equals(g[6]),"distinct seats sharing actual roster");
         String[] rows=h[6].split(",");
         check(rows.length==3&&!rows[0].substring(3).equals(rows[1].substring(3))&&rows[1].endsWith("007e0032"),"truncated names remain distinct");
-        check(rows[0].substring(1,3).equals("0b")&&rows[1].substring(1,3).equals("07")&&rows[2].substring(1,3).equals("0e"),"actual Halo armor indices");
+        check(rows[0].substring(1,3).equals("11")&&rows[1].substring(1,3).equals("07")&&rows[2].substring(1,3).equals("0e"),"actual Halo armor indices");
         check(h[14].equals("00000000c0a82b02c0a82b03")&&g[14].isEmpty(),"only host gets observed native seat addresses");
         check(g[10].equals("192.168.43.1")&&h[10].isEmpty()&&g[13].equals("192.168.43.3"),"guest binds LAN and targets host");
         check(host.hostSnapshot(100000).members.size()==3,"OS activity stop during match does not expire seats");

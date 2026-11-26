@@ -14,8 +14,6 @@ import java.util.Set;
  * units; the full lobby name and career identity are never rewritten. */
 final class NativeLobbyMatch {
     private static final String HEX="0123456789abcdef";
-    // Native armor palette (player_profile.c), indexed by the launcher's palette.
-    private static final int[] ARMOR={0,1,2,3,4,5,6,11,8,9,7,14};
     private NativeLobbyMatch() {}
 
     static void checkMap(File root,String map) throws IOException {
@@ -86,7 +84,7 @@ final class NativeLobbyMatch {
             if(member.host!=(i==0))throw new IllegalArgumentException("Invalid host seat");
             if(member.id.equals(snapshot.self))seat=i;
             if(i!=0)roster.append(',');
-            int armor=ARMOR[member.color];
+            int armor=member.color;
             roster.append(member.team==LobbyModel.NO_TEAM?'2':(char)('0'+member.team))
                 .append(HEX.charAt(armor>>>4)).append(HEX.charAt(armor&15));
             String name=uniqueName(member.name,names);

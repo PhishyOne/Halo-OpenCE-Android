@@ -10,8 +10,8 @@ import java.util.*;
 final class WorkshopMapCatalog {
     static final int MAX_CUSTOM=128;
     static final class MapItem {
-        final String id,name; final File preview;
-        MapItem(String id,String name,File preview){this.id=id;this.name=name;this.preview=preview;}
+        final String id,name; final File file,preview;
+        MapItem(String id,String name,File file,File preview){this.id=id;this.name=name;this.file=file;this.preview=preview;}
     }
     static List<MapItem> installed(File root){
         ArrayList<MapItem> out=new ArrayList<>();
@@ -20,7 +20,7 @@ final class WorkshopMapCatalog {
             if(map.id.isEmpty())continue;
             File file=new File(root,"maps/"+map.id+".map");
             if(Files.isSymbolicLink(file.toPath()))continue;
-            out.add(new MapItem(map.id,map.label,preview(new File(root,"maps"),map.id)));
+            out.add(new MapItem(map.id,map.label,file,preview(new File(root,"maps"),map.id)));
         }
         File folder=new File(root,"custom_maps");
         if(!folder.isDirectory()||Files.isSymbolicLink(folder.toPath()))return out;
@@ -37,15 +37,20 @@ final class WorkshopMapCatalog {
                 try(RandomAccessFile in=new RandomAccessFile(map,"r")){
                     in.seek(0x60); if(in.readUnsignedByte()!=1||in.readUnsignedByte()!=0)continue;
                 }
-                out.add(new MapItem(key,id,preview(folder,id)));added++;
+                out.add(new MapItem(key,id,map,preview(folder,id)));added++;
             }catch(IOException|IllegalArgumentException ignored){}
         }
         return out;
     }
     private static File preview(File dir,String id){
-        File file=new File(dir,id+".bmp");
-        try{CustomMapImporter.validateImport(file,file.getName());return file;}
-        catch(IOException|RuntimeException unavailable){return null;}
+        // Maps copied over LAN may carry an underscore and eight digest digits.
+        String base=id.replaceFirst("_[0-9a-f]{8}$","");
+        for(String name:base.equals(id)?new String[]{id}:new String[]{id,base}){
+            File file=new File(dir,name+".bmp");
+            try{CustomMapImporter.validateImport(file,file.getName());return file;}
+            catch(IOException|RuntimeException unavailable){}
+        }
+        return null;
     }
     static String label(List<MapItem> maps,String id){
         for(MapItem m:maps)if(m.id.equals(id))return m.name;
