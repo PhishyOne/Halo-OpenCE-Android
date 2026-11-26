@@ -6,5 +6,6 @@ struct network_player;
 boolean launcher_lan_machine_name(wchar_t *name);
 boolean launcher_lan_admit(struct network_game *game, struct network_player *player);
 boolean launcher_lan_countdown_allowed(struct network_game *game);
+void launcher_lan_decline_next(void);
 short launcher_lan_bot_team(long bot);
 #endif

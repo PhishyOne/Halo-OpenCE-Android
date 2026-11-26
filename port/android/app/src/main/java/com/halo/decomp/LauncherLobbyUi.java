@@ -24,6 +24,8 @@ final class LauncherLobbyUi implements AutoCloseable {
     private final MatchLauncher launcher;
     private final BooleanSupplier canOpen;
     private String preparedRound="", launchedRound="", localFailure="";
+    private String returnRound="";
+    private boolean returnCompleted;
     private String[] launchArgs;
     private boolean inGame;
     private final SharedPreferences prefs;
@@ -163,14 +165,22 @@ final class LauncherLobbyUi implements AutoCloseable {
         body.addView(text("LOBBY  /  "+(hosting?"HOST":"PLAYER"),14,HaloTheme.FOCUS_TEXT,true));
         status=text("",11,HaloTheme.MUTED,false);body.addView(status);
         summary=panel();roster=panel();
+        if(snapshot.secondsToNext>=0){
+            LobbyModel.StartReview preview=LobbyModel.StartReview.upcoming(snapshot);
+            MatchWorkshop.Entry next=preview.entry;
+            body.addView(text(WorkshopMapCatalog.label(sessionMaps,next.map)+" · "+next.preset.name,14,HaloTheme.TEXT,true));
+            label(body,snapshot.plan.title+" · Entry "+(snapshot.nextIndex+1)+" of "+snapshot.plan.entries.size());
+            label(body,preview.members.size()+" players · "+preview.allocation.bots()+" bots");
+            if(hosting)body.addView(button("PAUSE PLAYLIST",()->pauseStart("Playlist paused.")));
+            else body.addView(button("LEAVE LOBBY",()->leave(true,"Left lobby.")));
+            refreshStatus();return;
+        }
         if(!snapshot.round.isEmpty()){
             LobbyModel.StartReview selected=LobbyModel.StartReview.selected(snapshot);
             body.addView(text(WorkshopMapCatalog.label(sessionMaps,selected.entry.map)+" · "+selected.entry.preset.name,14,HaloTheme.TEXT,true));
             label(body,selected.members.size()+" players · "+selected.allocation.bots()+" bots");
-            if(hosting&&!snapshot.released)body.addView(button("CANCEL START",()->{
-                host.model.resetStart("Start canceled.",LanLobbyTransport.now());
-                applySnapshot(host.model.hostSnapshot(LanLobbyTransport.now()));
-            }));
+            if(hosting&&!snapshot.released)body.addView(button("CANCEL START",()->pauseStart("Start canceled.")));
+            if(hosting&&snapshot.hostBack)body.addView(button("BACK TO SETUP",()->pauseStart("Back in setup.")));
             if(!hosting&&!inGame)body.addView(button("LEAVE LOBBY",()->leave(true,"Left lobby.")));
             refreshStatus();
             return;
@@ -194,32 +204,38 @@ final class LauncherLobbyUi implements AutoCloseable {
     private void refreshStatus(){
         if(status==null||snapshot==null)return;
         if(connectionLost){status.setText("Connection interrupted · waiting for host");return;}
+        if(snapshot.secondsToNext>=0){
+            status.setText("Next match in "+snapshot.secondsToNext+" s");return;
+        }
         if(!snapshot.round.isEmpty()){
-            status.setText(snapshot.released?(inGame?"Match in progress":"Starting Halo…"):snapshot.startMessage);
+            if(snapshot.hostBack||!snapshot.released)status.setText(snapshot.startMessage);
+            else if(!inGame&&snapshot.round.equals(launchedRound))status.setText("Waiting for the host to return.");
+            else status.setText(inGame?"Match in progress":"Starting Halo…");
             return;
         }
         int guests=snapshot.members.size()-1;
         int ready=guests-snapshot.notReady().size();
         status.setText((host!=null?"Your IP: "+host.address():"Host: "+guest.address)+" · "+
             snapshot.members.size()+" connected · "+ready+"/"+guests+" guests ready · "+snapshot.plan.title+
-            (snapshot.startMessage.isEmpty()?"":" · "+snapshot.startMessage));
+            (snapshot.startMessage.isEmpty()?"":" · "+snapshot.startMessage)+
+            (snapshot.nextIndex<0?"":" · Up next: "+WorkshopMapCatalog.label(sessionMaps,snapshot.plan.entries.get(snapshot.nextIndex).map)));
     }
     private void refreshShared(){
         if(snapshot==null)return;
         refreshStatus();
-        if(!snapshot.round.isEmpty())return;
+        if(!snapshot.round.isEmpty()||snapshot.secondsToNext>=0)return;
         if(guest!=null){
             summary.removeAllViews();
             LobbyModel.Plan p=snapshot.plan;
             summary.addView(text(p.title,13,HaloTheme.FOCUS_TEXT,true));
             label(summary,p.playlist?"Playlist · Shuffle "+(p.shuffle?"On":"Off")+" · Loop "+(p.loop?"On":"Off"):"Quick match");
             if(p.first()!=null){
-                MatchWorkshop.Entry e=p.first();
+                MatchWorkshop.Entry e=snapshot.nextIndex<0?p.first():p.entries.get(snapshot.nextIndex);
                 List<WorkshopMapCatalog.MapItem> maps=sessionMaps;
                 summary.addView(text(WorkshopMapCatalog.label(maps,e.map),13,HaloTheme.TEXT,true));
                 label(summary,e.preset.name+" · "+e.bots.description());
                 label(summary,"Killstreak rewards "+(e.killstreak?"On":"Off"));
-                if(p.shuffle)label(summary,"First listed match; shuffled start not yet selected.");
+                if(p.shuffle&&snapshot.nextIndex<0)label(summary,"The host draws the first match at Start.");
                 if(!e.preset.overrides.isEmpty())summary.addView(button("VIEW CUSTOM RULES",()->viewRules(e.preset)));
                 if(p.playlist)for(int i=0;i<p.entries.size();i++){
                     MatchWorkshop.Entry next=p.entries.get(i);
@@ -285,14 +301,21 @@ final class LauncherLobbyUi implements AutoCloseable {
     private void confirmStart(LobbyModel.StartReview review,boolean override){
         if(host==null||closed)return;
         try{
-            if(!canOpen.getAsBoolean()){msg("Finish the current game or file operation first.");return;}
+            if(!review.blocker.isEmpty())throw new IOException(review.blocker);
+            if(!canOpen.getAsBoolean())throw new IOException("Finish the current game or file operation first.");
             host.nativeInterface();
             NativeLobbyMatch.checkMap(dataRoot,review.entry.map);
             NativeMatchRules.encode(review.entry.preset);
             applySnapshot(host.model.beginStart(review,override,LanLobbyTransport.now()));
-        }catch(IOException|IllegalArgumentException invalid){msg(invalid.getMessage());
         }catch(LobbyModel.StartNotReady warning){showStartWarning(warning.review);}
-        catch(IllegalStateException changed){msg(changed.getMessage());}
+        catch(IOException|IllegalArgumentException|IllegalStateException failed){
+            if(snapshot.secondsToNext>=0)pauseStart(failed.getMessage());
+            else msg(failed.getMessage());
+        }
+    }
+    private void pauseStart(String reason){
+        long now=LanLobbyTransport.now();
+        host.model.resetStart(reason,now);applySnapshot(host.model.hostSnapshot(now));
     }
 
     private void assign(String id,int side){
@@ -356,7 +379,8 @@ final class LauncherLobbyUi implements AutoCloseable {
     }
     /** A committed snapshot can arrive again after a dropped response. Launch once per ticket. */
     private void applySnapshot(LobbyModel.Snapshot next){
-        boolean phase=snapshot==null||!snapshot.round.equals(next.round)||snapshot.released!=next.released;
+        boolean phase=snapshot==null||!snapshot.round.equals(next.round)||snapshot.released!=next.released||
+            snapshot.hostBack!=next.hostBack||(snapshot.secondsToNext>=0)!=(next.secondsToNext>=0);
         snapshot=next;
         if(phase)showSession();else refreshShared();
         if(next.round.isEmpty()){
@@ -364,7 +388,7 @@ final class LauncherLobbyUi implements AutoCloseable {
             if(!localFailure.isEmpty()){msg(localFailure);localFailure="";}
             return;
         }
-        if(inGame||next.round.equals(launchedRound))return;
+        if(inGame||next.hostBack||next.round.equals(launchedRound))return;
         if(!next.round.equals(preparedRound)){
             preparedRound=next.round;launchArgs=null;localFailure="";
             try{
@@ -388,27 +412,42 @@ final class LauncherLobbyUi implements AutoCloseable {
     void returned(){
         if(!inGame||snapshot==null)return;
         inGame=false;busy=false;lastContact=LanLobbyTransport.now();
-        String result=NativeLobbyMatch.returnMessage(activity.getFilesDir(),launchedRound);
+        NativeLobbyMatch.Result result=NativeLobbyMatch.result(activity.getFilesDir(),launchedRound);
         if(host!=null){
-            host.model.resetStart(result,lastContact);
-            applySnapshot(host.model.hostSnapshot(lastContact));
-        }else {refreshStatus();msg(result);}
+            applySnapshot(host.model.hostReturned(launchedRound,result.completed,result.message,lastContact));
+        }else {
+            returnRound=launchedRound;returnCompleted=result.completed;refreshStatus();
+            if(!result.completed)msg(result.message);
+        }
         schedule();
     }
-    private void schedule(){ui.removeCallbacks(tick);if(!closed&&!inGame&&snapshot!=null)ui.postDelayed(tick,snapshot.round.isEmpty()?1500:600);}
+    private void schedule(){
+        ui.removeCallbacks(tick);
+        if(!closed&&!inGame&&snapshot!=null)ui.postDelayed(tick,
+            snapshot.round.isEmpty()&&snapshot.secondsToNext<0?1500:500);
+    }
     private void tick(){
         if(closed||snapshot==null||inGame)return;
         if(host!=null){
-            LobbyModel.Snapshot next=host.model.hostSnapshot(LanLobbyTransport.now());
+            long now=LanLobbyTransport.now();
+            LobbyModel.Snapshot next=host.model.hostSnapshot(now);
             if(next.revision!=snapshot.revision)applySnapshot(next);
+            LobbyModel.StartReview due=host.model.dueStart(now);
+            if(due!=null)confirmStart(due,true);
         }else if(guest!=null&&!busy){
             busy=true;int g=generation;LanLobbyTransport.Client client=guest;long rev=snapshot.revision;
             String ack=(!snapshot.released&&snapshot.round.equals(preparedRound))?preparedRound:"";
             boolean accepted=launchArgs!=null;
+            String returning=returnRound;boolean completed=returnCompleted;
             work.execute(()->{
-                try{LobbyModel.Snapshot next=ack.isEmpty()?client.poll(rev):client.acknowledge(ack,accepted);
+                try{
+                    LobbyModel.Snapshot next;
+                    if(!returning.isEmpty())next=client.returned(returning,completed);
+                    else if(!ack.isEmpty())next=client.acknowledge(ack,accepted);
+                    else next=client.poll(rev);
                     ui.post(()->{
                         if(closed||g!=generation)return;
+                        if(returning.equals(returnRound))returnRound="";
                         boolean recovered=connectionLost;busy=false;connectionLost=false;lastContact=LanLobbyTransport.now();
                         if(next!=null)applySnapshot(next);else if(recovered)refreshShared();
                     });
@@ -427,7 +466,7 @@ final class LauncherLobbyUi implements AutoCloseable {
      * doesn't leave. Leaving foreground closes this first-phase lobby. */
     void suspend(){if(!inGame&&(snapshot!=null||busy))leave(false,"Lobby closed when launcher left foreground.");}
     private void leave(boolean notify,String message){
-        generation++;ui.removeCallbacks(tick);busy=false;connectionLost=false;inGame=false;launchArgs=null;preparedRound=launchedRound=localFailure="";
+        generation++;ui.removeCallbacks(tick);busy=false;connectionLost=false;inGame=false;launchArgs=null;preparedRound=launchedRound=localFailure=returnRound="";
         if(host!=null){host.close();host=null;}
         LanLobbyTransport.Client old=guest;guest=null;
         if(old!=null){

@@ -543,6 +543,7 @@ symbols in this file:
 #ifdef HALO_ANDROID
 #include "career_record.h"
 #include "network_group_rating.h"
+#include "launcher_lan.h" /* port: Android playlist choice at the scoreboard */
 #endif
 #include "infection.h" /* port: port/linux/game/infection.c */
 #include "cseries_windows.h"
@@ -5414,6 +5415,10 @@ void game_engine_update_non_deterministic(
 			else if (test_any_gamepad_button(1) || test_any_gamepad_button(13) ||
 				touch_postgame_pressed(_gamepad_analog_button_b))
 			{
+#ifdef HALO_ANDROID
+                /* port: keep a player who chose to leave out of the next automatic launch. */
+                launcher_lan_decline_next();
+#endif
 				network_game_abort();
 			}
 			break;

@@ -312,22 +312,33 @@ final class MatchWorkshop {
      * occurs once per pass, and a looping shuffle cannot immediately repeat
      * the previous entry when there is more than one entry. */
     static final class Rotation {
-        private final Playlist list; private final Random random;
+        private final List<Entry> entries;
+        private final boolean shuffle, loop;
+        private final Random random;
         private final ArrayList<Integer> order=new ArrayList<>();
         private int position,last=-1;
-        Rotation(Playlist p,Random rng){list=p;random=Objects.requireNonNull(rng);begin();}
+        Rotation(Playlist p,Random rng){this(p.entries,p.shuffle,p.loop,rng);}
+        Rotation(List<Entry> entries,boolean shuffle,boolean loop,Random random){
+            this.entries=entries;this.shuffle=shuffle;this.loop=loop;
+            this.random=Objects.requireNonNull(random);begin();
+        }
         private void begin(){
-            order.clear();for(int i=0;i<list.entries.size();i++)order.add(i);
-            if(list.shuffle){
-                Collections.shuffle(order,random);
+            order.clear();for(int i=0;i<entries.size();i++)order.add(i);
+            if(shuffle){
+                for(int i=0;i+1<order.size();i++)Collections.swap(order,i,i+random.nextInt(order.size()-i));
                 if(order.size()>1&&order.get(0)==last)Collections.swap(order,0,1+random.nextInt(order.size()-1));
             }
             position=0;
         }
+        int peekIndex(){
+            if(order.isEmpty())return -1;
+            if(position==order.size()){if(!loop)return -1;begin();}
+            return order.get(position);
+        }
         Entry next(){
-            if(order.isEmpty())return null;
-            if(position==order.size()){if(!list.loop)return null;begin();}
-            last=order.get(position++);return list.entries.get(last);
+            int index=peekIndex();
+            if(index<0)return null;
+            last=index;position++;return entries.get(index);
         }
     }
     static final class Library {

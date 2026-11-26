@@ -8,7 +8,7 @@ struct launcher_seat {
     unsigned long address;
 };
 static struct {
-    boolean active, configured, played;
+    boolean active, configured, played, completed, declined;
     int local, count, bots, red;
     unsigned long peer;
     char round[LAUNCHER_ROUND_CHARS+1], path[128];
@@ -209,8 +209,12 @@ boolean launcher_lan_countdown_allowed(struct network_game *game)
         (!launcher_lan.variant.universal_variant.teams || red==launcher_lan.red);
 }
 
-/* A fixed app-private receipt lets the launcher explain a failed handoff
- * after the game process exits. The launcher accepts only its own round. */
+void launcher_lan_decline_next(void)
+{
+    if (launcher_lan.active) launcher_lan.declined=TRUE;
+}
+
+/* Only a receipt for this round can advance the launcher's playlist. */
 static void launcher_lan_return(char const *reason)
 {
     char const *root=getenv("HALO_RATING_PRIVATE_ROOT"), *round=getenv("HALO_LOBBY_ROUND");
@@ -218,7 +222,11 @@ static void launcher_lan_return(char const *reason)
     if (root && round && strlen(round)==LAUNCHER_ROUND_CHARS &&
         snprintf(path,sizeof(path),"%s/lobby-return.txt",root)<(int)sizeof(path)) {
         FILE *f=fopen(path,"w");
-        if (f) {fprintf(f,"%s\n%s\n",round,reason);fclose(f);}
+        if (f) {
+            fprintf(f,"%s\n%s\n%s\n",round,launcher_lan.completed&&!launcher_lan.declined?"complete":"stopped",
+                launcher_lan.declined?"Left at the scoreboard.":reason);
+            fclose(f);
+        }
     }
     platform_request_quit();
 }
@@ -227,7 +235,8 @@ static void launcher_lan_update(boolean menu)
 {
     enum { unused, wait_menu, wait_client, wait_match, finished };
     static int state=unused;
-    static unsigned long began,last_add;
+    static unsigned long began,last_add,scoreboard_at,last_reset;
+    static boolean playlist,scoreboard,reset_sent;
     wchar_t tag[16];
     struct network_game_client *client;
     struct network_game_server *server;
@@ -239,12 +248,32 @@ static void launcher_lan_update(boolean menu)
     if (state==unused) {
         if (!getenv("HALO_LOBBY_ROUND")) {state=finished;return;}
         if (!launcher_lan_decode()) {state=finished;launcher_lan_return("Invalid match settings.");return;}
+        playlist=getenv("HALO_LOBBY_PLAYLIST") && !strcmp(getenv("HALO_LOBBY_PLAYLIST"),"1");
         state=wait_menu;began=system_milliseconds();
     }
     now=system_milliseconds();
-    if (state>=wait_client && !menu && game_engine_running()) launcher_lan.played=TRUE;
+    if (state>=wait_client && !menu && game_engine_running()) {
+        launcher_lan.played=TRUE;
+        if (!game_engine_in_play()) launcher_lan.completed=TRUE;
+    }
     if (launcher_lan.played) {
-        if (menu) {state=finished;launcher_lan_return("Match ended.");}
+        if (menu) {
+            state=finished;launcher_lan_return(launcher_lan.completed?"Match complete.":"Left before the match ended.");
+        } else if (playlist && game_engine_showing_postgame()) {
+            /* The engine finalizes scores before showing the scoreboard.
+             * Use the same server transition as the host's Continue button. */
+            if (!scoreboard) {scoreboard=TRUE;scoreboard_at=now;}
+            if (!launcher_lan.local && !reset_sent && now-scoreboard_at>=8000UL && now-last_reset>=1000UL) {
+                server=global_network_game_server_get();
+                if (server) reset_sent=network_game_server_reset_to_pregame(server);
+                last_reset=now;
+            }
+            /* If the game link drops during postgame, the launcher still
+             * verifies everyone's return before it opens the next round. */
+            if (now-scoreboard_at>=20000UL) {
+                state=finished;launcher_lan_return("Match complete.");
+            }
+        }
         return;
     }
     if (now-began>120000UL) {

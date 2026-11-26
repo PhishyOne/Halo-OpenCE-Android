@@ -52,16 +52,23 @@ final class NativeLobbyMatch {
         }
         return candidate;
     }
-    static String returnMessage(File directory,String round){
+    static final class Result {
+        final boolean completed;
+        final String message;
+        Result(boolean completed,String message){this.completed=completed;this.message=message;}
+    }
+    static Result result(File directory,String round){
         File receipt=new File(directory,"lobby-return.txt");
         if(receipt.length()>0&&receipt.length()<512){
             try(java.io.BufferedReader reader=Files.newBufferedReader(receipt.toPath(),StandardCharsets.UTF_8)){
-                String tag=reader.readLine(),message=reader.readLine();
-                if(tag!=null&&tag.length()==13&&round.replace("-","").startsWith(tag)&&message!=null&&message.length()<=150)
-                    return message;
+                String tag=reader.readLine(),outcome=reader.readLine(),message=reader.readLine();
+                if(tag!=null&&tag.length()==13&&round.replace("-","").startsWith(tag)&&
+                        ("complete".equals(outcome)||"stopped".equals(outcome))&&
+                        message!=null&&!message.isEmpty()&&message.length()<=150&&reader.readLine()==null)
+                    return new Result("complete".equals(outcome),message);
             }catch(IOException ignored){}
         }
-        return "Back in the lobby.";
+        return new Result(false,"Halo closed without confirming the match result.");
     }
 
     static String[] arguments(LobbyModel.Snapshot snapshot,String local,String peer,List<String> guestAddresses){
@@ -101,7 +108,7 @@ final class NativeLobbyMatch {
             }
         }
         Boolean radio=NativeMatchRules.radio(e.preset);
-        return new String[]{"--launcher-lan",e.map,e.preset.base,NativeMatchRules.encode(e.preset),
+        return new String[]{snapshot.plan.playlist?"--launcher-playlist":"--launcher-lan",e.map,e.preset.base,NativeMatchRules.encode(e.preset),
             snapshot.round.replace("-","").substring(0,13),Integer.toString(seat),roster.toString(),
             Integer.toString(review.allocation.bots()),Integer.toString(review.allocation.red),
             MatchWorkshop.DIFFICULTIES[e.bots.difficulty].toLowerCase(Locale.ROOT),

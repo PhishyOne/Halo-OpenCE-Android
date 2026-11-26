@@ -15,7 +15,7 @@ public final class LobbyModelTest {
         try{run.run();throw new AssertionError(label);}
         catch(IllegalArgumentException expected){checks++;}
     }
-    private static LobbyWire.Response exchange(LobbyModel model,LobbyWire.Request request,long now)throws Exception{
+    static LobbyWire.Response exchange(LobbyModel model,LobbyWire.Request request,long now)throws Exception{
         try(ServerSocket listener=new ServerSocket(0,1,InetAddress.getLoopbackAddress())){
             ExecutorService worker=Executors.newSingleThreadExecutor();
             Future<?> served=worker.submit(()->{

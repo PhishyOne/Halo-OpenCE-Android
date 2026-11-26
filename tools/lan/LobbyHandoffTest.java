@@ -78,6 +78,17 @@ public final class LobbyHandoffTest {
             try{NativeLobbyMatch.checkMap(root.toFile(),"bloodgulch");throw new AssertionError("missing map accepted");}
             catch(IOException expected){checks++;}
             Files.delete(maps);
+            Path receipt=root.resolve("lobby-return.txt");
+            String tag=offer.round.replace("-","").substring(0,13);
+            Files.writeString(receipt,tag+"\ncomplete\nMatch complete.\n");
+            check(NativeLobbyMatch.result(root.toFile(),offer.round).completed,"matched native postgame receipt");
+            check(!NativeLobbyMatch.result(root.toFile(),second.round).completed,"stale receipt cannot advance");
+            Files.writeString(receipt,tag+"\nstopped\nMatch interrupted.\n");
+            check(!NativeLobbyMatch.result(root.toFile(),offer.round).completed,"native abort pauses");
+            Files.writeString(receipt,tag+"\ncomplete\n");
+            check(!NativeLobbyMatch.result(root.toFile(),offer.round).completed,"truncated receipt cannot advance");
+            Files.delete(receipt);
+            check(!NativeLobbyMatch.result(root.toFile(),offer.round).completed,"process death has no completion receipt");
         }finally{Files.delete(root);}
         System.out.println("LobbyHandoffTest PASS ("+checks+" checks)");
     }

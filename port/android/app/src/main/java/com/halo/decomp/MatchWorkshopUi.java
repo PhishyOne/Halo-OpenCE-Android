@@ -167,7 +167,7 @@ final class MatchWorkshopUi {
     }
     private void home(){
         body.removeAllViews();
-        if(!embedded)label(body,"Saved match settings • native LAN start not connected yet");
+        if(!embedded)label(body,"Start your saved match or playlist from the Lobby.");
         Button q=button("QUICK MATCH",()->{if(save(library.select(false,library.playlistId)))home();});
         Button r=button("PLAYLIST",()->{if(save(library.select(true,library.playlistId)))home();});
         q.setSelected(!library.playlistMode);r.setSelected(library.playlistMode);pair(body,q,r);
@@ -191,7 +191,7 @@ final class MatchWorkshopUi {
                 label(left,list.entries.size()+" matches · Shuffle "+(list.shuffle?"On":"Off")+" · Loop "+(list.loop?"On":"Off"));
                 for(MatchWorkshop.Entry e:list.entries)left.addView(entryRow(e,null));
                 if(!embedded&&!list.entries.isEmpty())plannedRoster(right,list.entries.get(0),true);
-                else label(right,"Add matches to the playlist.");
+                else if(list.entries.isEmpty())label(right,"Add matches to the playlist.");
             }else label(right,"No playlist selected.");
         }
         if(embedded)body.addView(left);else pair(body,left,right);
@@ -208,7 +208,7 @@ final class MatchWorkshopUi {
     private void ruleEditor(MatchWorkshop.Preset base,Consumer<MatchWorkshop.Preset> saved,Runnable back){
         body.removeAllViews();
         label(body,"GAME MODE WORKSHOP · Base: "+MatchWorkshop.BASE_LABELS[MatchWorkshop.baseIndex(base.base)]);
-        label(body,"Unset rules inherit the original mode. Saved modes can be selected in Offline Match; native LAN handoff is pending.");
+        label(body,"Unset rules inherit the original mode. Saved modes are available in Lobby and Offline Match.");
         EditText name=input(base.id.isEmpty()?base.name+" Custom":base.name,false);body.addView(name);
         LinkedHashMap<String,Integer> rules=new LinkedHashMap<>(base.overrides);
         LinkedHashMap<String,List<MatchWorkshop.Rule>> sections=new LinkedHashMap<>();

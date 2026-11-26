@@ -146,6 +146,11 @@ final class LanLobbyTransport {
             if(s==null)throw new IOException("Missing match acknowledgement");
             return s;
         }
+        LobbyModel.Snapshot returned(String round,boolean completed)throws IOException{
+            LobbyModel.Snapshot s=request(LobbyWire.Request.returned(secret,round,completed)).snapshot;
+            if(s==null)throw new IOException("Missing return acknowledgement");
+            return s;
+        }
         void leave()throws IOException{if(!secret.isEmpty())request(LobbyWire.Request.leave(secret));}
         @Override public void close(){closed=true;Socket socket=pending;if(socket!=null)shut(socket);deadline.shutdownNow();}
     }

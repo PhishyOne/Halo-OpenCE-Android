@@ -2315,6 +2315,8 @@ public class LauncherActivity extends Activity {
         if (!launcherResumed || !lobbyGameStarted || lobbyUi == null) return;
         if (gameProcessStatus() == 0) {
             lobbyGameStarted = false;
+            // The native game can exit its process before Activity.onDestroy runs.
+            stopService(new Intent(this, HaloVideoCaptureService.class));
             lobbyUi.returned();
         } else {
             getWindow().getDecorView().postDelayed(this::resumeLobbyAfterGame, 750);
@@ -2351,7 +2353,7 @@ public class LauncherActivity extends Activity {
         if (pick != null && pick.isEnabled() && haveData()) {
             pick = null;
             buildLanInterface();
-        } else if (dashboardPanel != null &&
+        } else if (dashboardPanel != null && (lobbyUi == null || !lobbyUi.hasSession()) &&
                 titleBackdropAvailable != TitleBackdropFiles.ready(getFilesDir())) {
             buildLanInterface();
         } else if (dashboardPanel != null && dashboardPanel.getVisibility() == View.VISIBLE) {
@@ -2368,7 +2370,7 @@ public class LauncherActivity extends Activity {
         super.onNewIntent(intent);
         if (intent != null && intent.hasExtra(HaloActivity.TITLE_RESULT)) {
             setIntent(intent);
-            if (dashboardPanel != null &&
+            if (dashboardPanel != null && (lobbyUi == null || !lobbyUi.hasSession()) &&
                     titleBackdropAvailable != TitleBackdropFiles.ready(getFilesDir()))
                 buildLanInterface();
             showTitleResult(intent);

@@ -317,6 +317,7 @@ static const char *launcher_match_map;
 static const char *launcher_match_mode;
 static const char *launcher_match_rules;
 static char **launcher_lan_args;
+static int launcher_playlist;
 
 #define MAIN_STACK_SIZE (16 * 1024 * 1024)
 
@@ -375,6 +376,7 @@ static void *game_main(void *launch_options)
         environment_set(&environment, "HALO_LOBBY_MODE", a[1]);
         environment_set(&environment, "HALO_LOBBY_RULES", a[2]);
         environment_set(&environment, "HALO_LOBBY_ROUND", a[3]);
+        environment_set(&environment, "HALO_LOBBY_PLAYLIST", launcher_playlist ? "1" : "0");
         environment_set(&environment, "HALO_LOBBY_SEAT", a[4]);
         environment_set(&environment, "HALO_LOBBY_ROSTER", a[5]);
         environment_set(&environment, "HALO_LOBBY_BOTS", a[6]);
@@ -538,7 +540,8 @@ int main(int argc, char *argv[])
 	/* SDLActivity prepends argv[0] to its getArguments() result. */
 	char **offline_bots = (argc == 5 || argc == 6) && !strcmp(argv[1], "--offline-bots")
         ? argv + 2 : NULL;
-    if (argc == 16 && !strcmp(argv[1], "--launcher-lan"))
+    launcher_playlist = argc == 16 && !strcmp(argv[1], "--launcher-playlist");
+    if (argc == 16 && (launcher_playlist || !strcmp(argv[1], "--launcher-lan")))
         launcher_lan_args = argv + 2;
     if (argc == 8 && !strcmp(argv[1], "--launcher-match"))
     {

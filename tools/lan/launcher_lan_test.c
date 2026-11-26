@@ -26,6 +26,7 @@ static struct network_game_server server;
 static struct network_game_client client;
 static struct player_profile profile;
 static int missing, movie, quit,playing,joined,added,starts,held,countdown=-1,local_machine;
+static int postgame, resets, reset_ok=1;
 static unsigned long now;
 static boolean launcher_match_preset_build(const char *mode,struct game_variant *v,struct game_variant_options *o){
     v->universal_variant.teams=!strcmp(mode,"ctf");v->engine=1;o->value=2;return TRUE;
@@ -38,6 +39,9 @@ static boolean bots_machine_is_bot(int m){return m>=64;}
 static void platform_request_quit(void){quit++;}
 static unsigned long system_milliseconds(void){return now;}
 static int game_engine_running(void){return playing;}
+static int game_engine_in_play(void){return !postgame;}
+static int game_engine_showing_postgame(void){return postgame==2;}
+static int network_game_server_reset_to_pregame(struct network_game_server *s){assert(s==&server);resets++;return reset_ok;}
 static int bink_playback_in_progress(void){return movie;}
 static void bink_playback_stop(void){movie=0;}
 static int ui_main_menu_music_active(void){return 1;}
@@ -83,7 +87,8 @@ static void add_seat(int slot,int machine,int seat){
     assert(launcher_lan_admit(&world,&p));world.players[slot]=p;
 }
 int main(int argc,char **argv){
-    const char *test=argv[1];int i,guest=!strcmp(test,"guest"),ffa=!strcmp(test,"ffa");
+    const char *test=argv[1];int playlist=!strncmp(test,"playlist",8);
+    int i,guest=!strcmp(test,"guest")||!strcmp(test,"playlist-guest"),ffa=!strcmp(test,"ffa");
     wchar_t own[32]={0};
     assert(argc==2);
     for(i=0;i<128;i++){world.machines[i].machine_index=-1;world.players[i].machine_index=-1;}
@@ -91,6 +96,7 @@ int main(int argc,char **argv){
         launcher_lan_update(1);assert(!launcher_lan.active&&launcher_lan_countdown_allowed(&world)&&!quit);return 0;
     }
     setenv("HALO_LOBBY_ROUND","0123456789abc",1);
+    setenv("HALO_LOBBY_PLAYLIST",playlist?"1":"0",1);
     setenv("HALO_LOBBY_MAP",!strcmp(test,"ce")?"ce:example":!strcmp(test,"path")?"ce:../bad":"bloodgulch",1);
     setenv("HALO_LOBBY_MODE",ffa?"slayer":"ctf",1);
     setenv("HALO_LOBBY_ROSTER",ffa?"20b0041,2070042":"00b0041,1070042",1);
@@ -111,7 +117,12 @@ int main(int argc,char **argv){
     now=1000;launcher_lan_update(1);
     if(guest){
         assert(!server.active&&joined==1&&!starts);launcher_lan_update(1);launcher_lan_update(1);
-        assert(joined==2&&added==1);return 0;
+        assert(joined==2&&added==1);
+        if(playlist){
+            playing=1;postgame=2;launcher_lan_update(0);now+=19999;launcher_lan_update(0);
+            assert(!resets&&!quit);now++;launcher_lan_update(0);assert(!resets&&quit==1);
+        }
+        return 0;
     }
     assert(held&&added==1&&!starts);
     if(!strcmp(test,"timeout")){now=120001;launcher_lan_update(1);assert(quit==1&&!starts);return 0;}
@@ -133,6 +144,18 @@ int main(int argc,char **argv){
     world.variant_options.value++;assert(!launcher_lan_countdown_allowed(&world));world.variant_options.value--;
     launcher_lan_update(1);launcher_lan_update(1);assert(starts==1&&countdown==3000&&!held);
     playing=1;launcher_lan_update(0);now=200000;launcher_lan_update(0);assert(!quit);
+    if(playlist){
+        postgame=1;launcher_lan_update(0);now+=16000;launcher_lan_update(0);assert(!resets);
+        postgame=2;launcher_lan_update(0);now+=7999;launcher_lan_update(0);assert(!resets&&!quit);
+        if(!strcmp(test,"playlist-quit")){
+            launcher_lan_decline_next();launcher_lan_update(1);assert(quit==1);return 0;
+        }
+        reset_ok=0;now++;launcher_lan_update(0);assert(resets==1&&!quit);
+        reset_ok=1;now+=1000;launcher_lan_update(0);now+=1000;launcher_lan_update(0);
+        assert(resets==2&&!quit);
+    }else if(!strcmp(test,"quick-finish")){
+        postgame=2;launcher_lan_update(0);now+=30000;launcher_lan_update(0);assert(!resets&&!quit);
+    }
     launcher_lan_update(1);assert(quit==1);
     return 0;
 }

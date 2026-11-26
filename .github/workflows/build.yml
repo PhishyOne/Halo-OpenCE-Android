@@ -278,10 +278,11 @@ jobs:
             port/android/app/src/main/java/com/halo/decomp/MatchWorkshop.java \
             port/android/app/src/main/java/com/halo/decomp/LobbyModel.java \
             port/android/app/src/main/java/com/halo/decomp/LobbyWire.java \
-            tools/lan/MatchWorkshopTest.java tools/lan/LobbyModelTest.java tools/lan/LobbyStartTest.java
+            tools/lan/MatchWorkshopTest.java tools/lan/LobbyModelTest.java tools/lan/LobbyStartTest.java tools/lan/LobbyPlaylistTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.MatchWorkshopTest
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LobbyModelTest
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LobbyStartTest
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LobbyPlaylistTest
           javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" \
             port/android/app/src/main/java/com/halo/decomp/LanUpdateProtocol.java \
             port/android/app/src/main/java/com/halo/decomp/CustomMapImporter.java \
