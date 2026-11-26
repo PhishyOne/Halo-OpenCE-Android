@@ -370,9 +370,26 @@ final class CareerProfile {
             "Provisional estimate only: completed classified matches with "
             + "no recorded bot kills. Does not prove a bot-free lobby.",
             11, MUTED, false));
+        TextView group = text(activity, "GROUP SR  •  LOADING", 17, GOLD, true);
+        panel.addView(group);
+        new Thread(() -> {
+            String value;
+            try {
+                GroupRatingLedger.Score rating = GroupRatingLedger.read(activity.getFilesDir())
+                    .score(LanBoardIdentity.id(activity));
+                value = "GROUP SR  " + rating.display() + "  •  " + rating.matches
+                    + " ranked  •  " + rating.forfeits + " forfeits";
+            } catch (IOException | RuntimeException unavailable) {
+                value = "GROUP SR  •  UNAVAILABLE";
+            }
+            final String display = value;
+            activity.runOnUiThread(() -> {
+                if (!activity.isDestroyed() && !activity.isFinishing()) group.setText(display);
+            });
+        }, "Halo-group-rating-profile").start();
         panel.addView(text(activity,
-            "Verified competitive Spartan Rating: UNRATED",
-            12, HaloTheme.WARNING, false));
+            "Group SR uses shared human-only LAN match results. Quitting counts as a forfeit.",
+            11, MUTED, false));
         Button standings = new Button(activity);
         standings.setText("VIEW / SYNC LAN LEADERBOARD");
         standings.setAllCaps(false);

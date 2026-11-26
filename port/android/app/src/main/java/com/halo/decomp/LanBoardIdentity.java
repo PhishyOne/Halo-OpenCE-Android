@@ -36,6 +36,30 @@ final class LanBoardIdentity {
         return generated;
     }
 
+    static synchronized void prepareForGame(Context context) throws IOException {
+        File root = context.getFilesDir();
+        File marker = new File(root, "halo-group-identity-v1.txt");
+        // Fail closed on any incomplete launch preparation.
+        java.nio.file.Files.deleteIfExists(marker.toPath());
+        if (!LanShareSettings.prepareForGame(context))
+            throw new IOException("Could not persist rating sharing policy");
+        if (!LanShareSettings.career(context)) return;
+        String local = id(context);
+        File temporary = File.createTempFile("halo-group-identity-", ".tmp", root);
+        try {
+            try (java.io.FileOutputStream out = new java.io.FileOutputStream(temporary)) {
+                out.write((local + "\n").getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+                out.getFD().sync();
+            }
+            try {
+                java.nio.file.Files.move(temporary.toPath(), marker.toPath(),
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException unsupported) {
+                java.nio.file.Files.move(temporary.toPath(), marker.toPath());
+            }
+        } finally { temporary.delete(); }
+    }
+
     static String name(Context context) {
         return LanBoardProtocol.safeName(context.getSharedPreferences(
             CAREER_PREFS, Context.MODE_PRIVATE).getString("name", "Spartan"));

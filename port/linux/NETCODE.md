@@ -1263,3 +1263,17 @@ Sharing/repairing holds launcher work exclusion and keeps the screen awake.
 Both phones should remain in the repair screen. Stop, cancellation and Activity
 destruction close sharing sockets and release leases; client reads have bounded
 timeouts and keep partial bytes. Existing Custom Edition sharing is separate.
+
+
+## Host-owned career and group rating (version 56)
+
+Version 56 includes existing career-start/result kinds 101/102. Android v62
+adds optional group challenge, identity, lock and result kinds 103–106;
+old clients ignore these new kinds and cannot enter a ranked roster.
+Only reliable ordered streams are accepted, and group rating is LAN-only.
+The host binds persistent pseudonymous identity to each original seat,
+rejects bots, missing identities and pre-lock roster changes, and persists
+a host-forfeit recovery record before locking. Confirmed departures stay
+forfeits even if a seat is later occupied again. No existing gameplay
+payload changes. Shared receipts are trusted-friends results, not a
+cryptographically authenticated public ladder.

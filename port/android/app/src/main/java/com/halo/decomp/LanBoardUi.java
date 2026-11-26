@@ -42,6 +42,8 @@ final class LanBoardUi {
     private TextView live, status, detailStatus;
     private LinearLayout detailBody;
     private String detailFingerprint;
+    private GroupRatingLedger.Snapshot groupRatings = GroupRatingLedger.empty();
+    private boolean groupRatingAvailable = true;
     private CheckBox sharing;
     private Button sync, videoOptOut;
     private EditText hostIp;
@@ -161,7 +163,7 @@ final class LanBoardUi {
     }
 
     private void buildBoard() {
-        begin(Page.BOARD, "LAN LEADERBOARD", "UNSC SERVICE RANK / PRACTICE SR • UNVERIFIED", null);
+        begin(Page.BOARD, "LAN LEADERBOARD", "GROUP SPARTAN RATING • HUMAN-ONLY LAN MATCHES", null);
         LinearLayout header = horizontal();
         live = text("CHECKING…", 12, HaloTheme.MUTED, true);
         header.addView(live, new LinearLayout.LayoutParams(0, -2, 1));
@@ -189,7 +191,7 @@ final class LanBoardUi {
         LinearLayout headings = horizontal();
         headings.setPadding(dp(9), 0, dp(20), 0);
         cell(headings, "PLAYER / STATUS", 3.4f, 10, HaloTheme.MUTED, true);
-        cell(headings, "PRACTICE SR", 1.25f, 10, HaloTheme.MUTED, true);
+        cell(headings, "GROUP SR", 1.25f, 10, HaloTheme.MUTED, true);
         cell(headings, "K/D", .9f, 10, HaloTheme.MUTED, true);
         cell(headings, "WINS", .85f, 10, HaloTheme.MUTED, true);
         cell(headings, "XP", 1.15f, 10, HaloTheme.MUTED, true);
@@ -277,21 +279,36 @@ final class LanBoardUi {
         new Thread(() -> {
             List<LanBoardProtocol.Entry> result = null;
             LanBoardProtocol.Entry self = null;
+            GroupRatingLedger.Snapshot ranked = null;
+            try { ranked = GroupRatingLedger.read(activity.getFilesDir()); }
+            catch (IOException | RuntimeException unavailable) { }
             try {
                 self = LanBoardIdentity.card(activity, root);
                 result = LanBoardStore.read(root);
                 final String id = self.id;
                 result.removeIf(e -> e.id.equals(id));
                 result.add(self);
-                LanBoardStore.order(result);
+                final GroupRatingLedger.Snapshot standings = ranked == null ?
+                    GroupRatingLedger.empty() : ranked;
+                result.sort(java.util.Comparator
+                    .comparingInt((LanBoardProtocol.Entry e) -> standings.score(e.id).matches > 0 ? 1 : 0)
+                    .reversed()
+                    .thenComparing(java.util.Comparator.comparingInt(
+                        (LanBoardProtocol.Entry e) -> standings.score(e.id).value).reversed())
+                    .thenComparing(java.util.Comparator.comparingLong(
+                        (LanBoardProtocol.Entry e) -> e.xp).reversed())
+                    .thenComparing(e -> e.id));
             } catch (IOException | RuntimeException unavailable) { result = null; }
             final List<LanBoardProtocol.Entry> board = result;
             final LanBoardProtocol.Entry local = self;
+            final GroupRatingLedger.Snapshot shared = ranked;
             activity.runOnUiThread(() -> {
                 loading = false;
                 if (closed || !visible) return;
                 if (board != null) {
                     own = local; shown = board;
+                    groupRatingAvailable = shared != null;
+                    groupRatings = shared == null ? GroupRatingLedger.empty() : shared;
                     if (page == Page.BOARD) drawBoard();
                     else if (page == Page.PLAYER) {
                         updateDetailStatus();
@@ -337,7 +354,9 @@ final class LanBoardUi {
                 "○ NOT DETECTED • saved career", 10, peer != null ? GREEN : HaloTheme.MUTED, false));
             identity.addView(names, new LinearLayout.LayoutParams(0, -2, 1));
             row.addView(identity, new LinearLayout.LayoutParams(0, -2, 3.4f));
-            cell(row, e.ratedGames > 0 ? Integer.toString(e.rating) : "—", 1.25f, 14, HaloTheme.TEXT, true);
+            GroupRatingLedger.Score ranked = groupRatings.score(e.id);
+            cell(row, groupRatingAvailable && ranked.matches > 0 ? Integer.toString(ranked.value) : "—",
+                1.25f, 14, HaloTheme.TEXT, true);
             cell(row, kd(e), .9f, 13, HaloTheme.TEXT, true);
             cell(row, count(e.wins), .85f, 13, HaloTheme.TEXT, true);
             cell(row, count(e.xp), 1.15f, 13, HaloTheme.TEXT, true);
@@ -362,9 +381,11 @@ final class LanBoardUi {
         }
         if (rows.getChildCount() == 0)
             rows.addView(text("Loading players…", 12, HaloTheme.MUTED, false));
-        if (!syncing) status.setText(LanShareSettings.career(activity) ?
-            "Automatic career sync • select a player for their service record" :
-            "Sharing off • saved standings remain available");
+        if (!syncing) status.setText(!groupRatingAvailable ? "Group rating ledger unavailable; saved careers kept." :
+            groupRatings.conflicts > 0 ? "Conflicting match receipts excluded from rating." :
+            LanShareSettings.career(activity) ?
+                "Automatic profile and match sync • early exits count as forfeits" :
+                "Sharing off • saved standings remain available");
         scroll.post(() -> { if (page == Page.BOARD) scroll.scrollTo(0, oldY); });
     }
 
@@ -405,7 +426,8 @@ final class LanBoardUi {
     private void renderRemoteReport() {
         if (page != Page.PLAYER || mine || detailBody == null) return;
         LanBoardProtocol.Entry e = entry();
-        String fingerprint = e == null ? "pending" : LanBoardProtocol.row(e);
+        String fingerprint = (e == null ? "pending" : LanBoardProtocol.row(e)) +
+            "|" + groupRatings.digest + "|" + groupRatingAvailable;
         if (fingerprint.equals(detailFingerprint)) return;
         detailFingerprint = fingerprint;
         detailBody.removeAllViews();
@@ -428,15 +450,18 @@ final class LanBoardUi {
             detailBody.addView(text("Next promotion: " +
                 count(CareerRecords.rankThreshold(rank(e.xp) + 1) - e.xp) + " XP",
                 12, HaloTheme.MUTED, false));
-        detailBody.addView(text("CAREER TOTALS", 14, HaloTheme.FOCUS_TEXT, true));
+        detailBody.addView(text("CAREER TOTALS • UNVERIFIED SUMMARY", 14, HaloTheme.FOCUS_TEXT, true));
         metricRow("MATCHES", count(e.matches), "WINS", count(e.wins), "WIN RATE",
             e.matches == 0 ? "—" : String.format(Locale.US, "%.0f%%", 100.0 * e.wins / e.matches));
         metricRow("KILLS", count(e.kills), "DEATHS", count(e.deaths), "ASSISTS", count(e.assists));
-        metricRow("K/D", kd(e), "PRACTICE SR", e.ratedGames > 0 ? Integer.toString(e.rating) : "UNRATED",
-            "ELIGIBLE MATCHES", count(e.ratedGames));
+        GroupRatingLedger.Score ranked = groupRatings.score(e.id);
+        metricRow("K/D", kd(e), "GROUP SR", groupRatingAvailable ? ranked.display() : "UNAVAILABLE",
+            "RANKED MATCHES", count(ranked.matches));
+        metricRow("RANKED WINS", count(ranked.wins), "RANKED LOSSES", count(ranked.losses),
+            "FORFEITS", count(ranked.forfeits));
         detailBody.addView(text("Last synced: " + date(e.seenMs), 11, HaloTheme.MUTED, false));
-        detailBody.addView(text("Self-reported LAN career summary. Individual matches, accuracy and achievements "
-            + "are not transmitted by the current protocol.", 11, HaloTheme.MUTED, false));
+        detailBody.addView(text("Self-reported career totals. Full career history, accuracy and achievements "
+            + "are not shared. Group SR is replayed from host-issued LAN results, not an authenticated public ladder.", 11, HaloTheme.MUTED, false));
     }
     private void metricRow(String a, String av, String b, String bv, String c, String cv) {
         LinearLayout row = horizontal();

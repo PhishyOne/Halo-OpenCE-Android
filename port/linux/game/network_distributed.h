@@ -170,6 +170,11 @@ enum
 	/* Host match generation and frozen career result, reliable only. */
 	_distributed_message_career_start = 101,
 	_distributed_message_career_result = 102,
+    /* Optional Android LAN group ranking; old peers ignore these kinds. */
+    _distributed_message_group_challenge = 103,
+    _distributed_message_group_identity = 104,
+    _distributed_message_group_lock = 105,
+    _distributed_message_group_receipt = 106,
 
 	NUMBER_OF_DISTRIBUTED_MESSAGES
 };

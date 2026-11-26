@@ -302,11 +302,12 @@ public class LauncherActivity extends Activity {
     private void launchWithoutConsent(Intent intent) {
         // Persist the one player identity before handing off to :game.
         // A first launch must not race two random-ID initializations.
-        if (LanShareSettings.career(this)) {
-            try { LanBoardIdentity.id(this); }
-            catch (java.io.IOException unavailable) {
-                android.util.Log.w("HaloLanBoard", "Local player identity unavailable", unavailable);
-            }
+        try {
+            GroupRatingLedger.recoverAbandonedHost(getFilesDir(), LanBoardIdentity.id(this),
+                gameProcessStatus() == 0);
+            LanBoardIdentity.prepareForGame(this);
+        } catch (java.io.IOException | RuntimeException unavailable) {
+            android.util.Log.w("HaloLanBoard", "Group rating preparation unavailable", unavailable);
         }
         // Transfer the peer listener to :game; do not hold both copies
         // open on one device or rely on a cloud service.
@@ -2207,6 +2208,15 @@ public class LauncherActivity extends Activity {
     protected void onResume() {
         super.onResume();
         launcherResumed = true;
+        // A stopped host's durable pending record becomes a forfeit,
+        // not a vanished match. Never recover while the game is running.
+        try {
+            if (gameProcessStatus() == 0 &&
+                    new File(getFilesDir(), GroupRatingLedger.PENDING).isFile())
+                GroupRatingLedger.recoverAbandonedHost(getFilesDir(), LanBoardIdentity.id(this), true);
+        } catch (java.io.IOException | RuntimeException unavailable) {
+            android.util.Log.w("HaloLanBoard", "Pending ranked match retained for recovery", unavailable);
+        }
         if (livePeerMonitor != null) livePeerMonitor.resume();
         refreshBoardSharing();
         // The native game may finish a match after the recorder reached its

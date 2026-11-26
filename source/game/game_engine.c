@@ -541,6 +541,7 @@ symbols in this file:
 #include "career_results.h" /* port: immutable host results */
 #ifdef HALO_ANDROID
 #include "career_record.h"
+#include "network_group_rating.h"
 #endif
 #include "infection.h" /* port: port/linux/game/infection.c */
 #include "cseries_windows.h"
@@ -4365,6 +4366,7 @@ void game_engine_dispose_from_old_map(
 #ifdef HALO_ANDROID
     /* port: close match capture even on a quit, abort or map transition. */
     career_video_state(0, 0);
+    group_rating_abandon();
 #endif
 	if (game_engine && game_engine->dispose_from_old_map)
 		game_engine->dispose_from_old_map();
@@ -4940,6 +4942,10 @@ void game_engine_update(
 {
 	if (game_engine)
 	{
+#ifdef HALO_ANDROID
+        if (game_engine_globals.postgame_state == game_engine_mode_active)
+            group_rating_update(global_variant.game_engine_index);
+#endif
 		game_engine_update_multiplayer_sound();
 		game_engine_update_purge();
 		game_engine_update_weapons();
@@ -5032,6 +5038,9 @@ void game_engine_update(
 
 				/* port: freeze and send final results before the transition. */
 				career_results_finish(global_variant.game_engine_index);
+#ifdef HALO_ANDROID
+                group_rating_finish(global_variant.game_engine_index);
+#endif
 				server = global_network_game_server_get();
 				if (server)
 					network_game_server_switch_to_postgame(

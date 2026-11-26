@@ -90,6 +90,7 @@ their handlers open opens.
 #include "game_modes.h"
 #include "network_voice.h"
 #include "network_map_vote.h"
+#include "network_group_rating.h"
 #include "text/draw_string.h"
 /* (internet play's server browser: the platform layer's) */
 #include "../src/p2p.h"
@@ -5728,6 +5729,9 @@ static boolean pause_end_game(void)
 {
 	if (!global_network_game_server_get() || !game_engine_running())
 		return campaign_fail();
+#ifdef HALO_ANDROID
+    group_rating_host_end();
+#endif
 	game_engine_end_game();
 	return TRUE;
 }

@@ -77,6 +77,7 @@ machine (their datum identifiers need not be).
 #include "network_coop.h"
 #include "network_distributed.h"
 #include "career_results.h"
+#include "network_group_rating.h"
 #include "network_link.h"
 #include "network_voice.h"
 #include "network_chat.h"
@@ -4733,7 +4734,14 @@ void network_distributed_handle_message(
 	short index;
 	word entry_size;
 
-	/* Results belong only to the host's ordered connection, never a batch. */
+	/* Group profile IDs and receipts must travel on the ordered stream. */
+#ifdef HALO_ANDROID
+    if (group_rating_handle(machine_index, message, size,
+        !distributed_handling_batch && (machine_index == NONE ?
+        !network_connection_last_read_was_unreliable() : distributed_handling_stream_message)))
+        return;
+#endif
+    /* Results belong only to the host's ordered connection, never a batch. */
     if (career_results_handle(machine_index, message, size,
         !distributed_handling_batch && machine_index == NONE &&
         !network_connection_last_read_was_unreliable()))

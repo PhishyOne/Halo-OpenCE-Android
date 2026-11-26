@@ -75,8 +75,17 @@ final class LanBoardClient {
                 throw new IOException("Expected nearby player did not respond");
         }
         if (!LanShareSettings.career(context)) throw new IOException("Career sharing disabled");
-        return LanBoardStore.merge(root, self, received,
+        List<LanBoardProtocol.Entry> board = LanBoardStore.merge(root, self, received,
             System.currentTimeMillis());
+        // Old peers still exchange career cards. New named peers also
+        // reconcile the immutable group-match ledger automatically.
+        if (expectedId != null && LanShareSettings.career(context)) {
+            try { GroupRatingSync.exchange(context, ip, expectedId); }
+            catch (IOException | RuntimeException unavailable) {
+                android.util.Log.d("HaloLanBoard", "Group receipt sync unavailable for peer");
+            }
+        }
+        return board;
     }
 
     private static String timedLine(Socket socket, long deadline) throws IOException {

@@ -29,6 +29,7 @@ symbols in this file:
 #include "bots.h" /* port: actual bot machine IDs */
 #ifdef HALO_ANDROID
 #include "career_record.h" /* port: Android-only career journal */
+#include "network_group_rating.h"
 #endif
 
 /* ---------- constants */
@@ -53,6 +54,7 @@ void game_statistics_start(
 	career_results_start();
 #ifdef HALO_ANDROID
 	career_record_start();
+    group_rating_start();
 #endif
 	game_statistics_active = TRUE;
 

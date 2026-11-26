@@ -344,6 +344,11 @@ static void *game_main(void *launch_options)
 
 	environment_set(&environment, "HOME", save_root);
 	environment_set(&environment, "HALO_DATA_ROOT", data_root);
+    {
+        const char *private_files = SDL_GetAndroidInternalStoragePath();
+        if (private_files && *private_files)
+            environment_set(&environment, "HALO_RATING_PRIVATE_ROOT", private_files);
+    }
 	environment_set(&environment, "HALO_SAVE_ROOT", save_root);
 	/* These overrides apply only to the launcher-selected offline session. */
 	if (offline_bots)

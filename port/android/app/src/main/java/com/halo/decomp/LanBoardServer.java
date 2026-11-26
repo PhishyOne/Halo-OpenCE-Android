@@ -211,6 +211,10 @@ final class LanBoardServer {
     private void handle(Socket socket) throws IOException {
         String request = LanBoardProtocol.boundedLine(socket.getInputStream());
         if (stopped || !LanShareSettings.career(context)) return;
+        if (GroupRatingWire.isQuery(request)) {
+            GroupRatingSync.serve(context, request, socket);
+            return;
+        }
         String ping = LanBoardPresence.readQuery(request);
         if (ping != null) {
             // A live presence reply uses identity only, no career read,

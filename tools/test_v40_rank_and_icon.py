@@ -46,11 +46,15 @@ class RankArtAndRatings(unittest.TestCase):
         self.assertIn('default: // Legend', self.badges)
         self.assertIn('canvas.scale(scale, scale)', self.badges)
 
-    def test_skill_rating_is_unrated_until_verified_host_results(self):
+    def test_skill_rating_comes_from_group_match_receipts_not_career_totals(self):
         self.assertIn('"SPARTAN RATING"', self.profile)
-        # The v53 Practice SR estimate is explicitly NOT a certified Elo.
-        # Keep the safety assertion on the true competitive rating.
-        self.assertIn('Verified competitive Spartan Rating: UNRATED', self.profile)
+        # Practice SR remains separate; actual group SR is replayed from
+        # host-issued match receipts and is unrated without any results.
+        self.assertIn('GroupRatingLedger.read(activity.getFilesDir())', self.profile)
+        self.assertIn('GROUP SR', self.profile)
+        group = (JAVA / "GroupRatingLedger.java").read_text()
+        self.assertIn('matches==0?"UNRATED"', group)
+        self.assertIn('Math.min(delta,-K)', group)
         self.assertIn('PRACTICE SR', self.profile)
         self.assertIn('Does not prove a bot-free lobby', self.profile)
         rating = (JAVA / "LanRating.java").read_text()

@@ -30,6 +30,11 @@ final class LanShareSettings {
             return new LanShareState(false, false);
         }
     }
+    /** Materialize even the default-on state for native code. */
+    static synchronized boolean prepareForGame(Context context) {
+        return set(context, read(context));
+    }
+
     static synchronized boolean setCareer(Context context, boolean enabled) {
         return set(context, read(context).withCareer(enabled));
     }

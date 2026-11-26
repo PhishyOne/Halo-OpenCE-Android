@@ -24,7 +24,7 @@ class LanPeerRatingUiTest(unittest.TestCase):
 
     def test_rating_is_provisional_not_fake_verified(self):
         self.assertIn("PRACTICE SR",self.profile)
-        self.assertIn("Verified competitive Spartan Rating: UNRATED",self.profile)
+        self.assertIn("GROUP SR",self.profile)
         self.assertIn("VIEW / SYNC LAN LEADERBOARD",self.profile)
         self.assertIn("LanRating.calculate(career)",self.profile)
         self.assertIn("m.botKills == 0",self.rating)
