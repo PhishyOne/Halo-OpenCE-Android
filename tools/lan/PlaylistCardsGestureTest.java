@@ -53,12 +53,18 @@ public class PlaylistCardsGestureTest {
         try{grips.get(i).dispatchTouchEvent(e);}finally{e.recycle();}
     }
     void advance(int ms){shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(ms));}
-    @Test public void fullRowFollowsFingerAndNeighborsMoveBeforeRelease(){
+    Runnable pendingScroll() throws Exception {
+        java.lang.reflect.Field field=PlaylistCards.class.getDeclaredField("edgeScroll");
+        field.setAccessible(true);
+        return (Runnable)field.get(list);
+    }
+    @Test public void fullRowFollowsFingerAndNeighborsMoveBeforeRelease() throws Exception {
         View card=rows.get(0);float start=y(card);
         send(0,MotionEvent.ACTION_DOWN,start);send(0,MotionEvent.ACTION_MOVE,start+160);
         assertEquals(160,card.getTranslationY(),1);
         assertTrue(card.getTranslationZ()>0);
         assertEquals(0,moves);
+        list.removeCallbacks(pendingScroll());
         advance(200);
         assertEquals(-card.getHeight(),rows.get(1).getTranslationY(),1);
         assertEquals(-card.getHeight(),rows.get(2).getTranslationY(),1);
@@ -76,10 +82,13 @@ public class PlaylistCardsGestureTest {
         assertEquals(0,moves);assertEquals(0,rows.get(2).getTranslationY(),1);
         send(2,0,start);send(2,MotionEvent.ACTION_UP,start+1);assertEquals(1,taps);assertEquals(0,moves);
     }
-    @Test public void scrollEdgeReachesOffscreenCard(){
+    @Test public void scrollEdgeReachesOffscreenCard() throws Exception {
         layout(180);float start=y(rows.get(0));
         int[] xy=new int[2];scroll.getLocationOnScreen(xy);float edge=xy[1]+177;
-        send(0,0,start);send(0,2,edge);advance(1200);
+        send(0,0,start);send(0,2,edge);
+        Runnable frame=pendingScroll();
+        for(int i=0;i<75;i++){list.removeCallbacks(frame);frame.run();}
+        list.removeCallbacks(frame);
         assertTrue(scroll.getScrollY()>100);
         send(0,1,edge);layout(180);advance(200);
         assertSame(rows.get(0),list.getChildAt(5));assertEquals("A",order.get(5));
