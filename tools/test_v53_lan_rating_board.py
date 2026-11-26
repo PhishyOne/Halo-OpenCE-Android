@@ -44,10 +44,10 @@ class LanPeerRatingUiTest(unittest.TestCase):
         self.assertIn("LAN_BOARD_HOST",self.game)
         self.assertIn("lanBoardServer = LanBoardServer.start(this)",self.game)
         self.assertIn("lanBoardServer.stop();",self.game)
-        self.assertIn("lanSession &&",self.launcher)
+        self.assertIn("including campaign and offline bot matches",self.launcher)
         self.assertIn("port", self.server.lower())
         self.assertIn("new ServerSocket(",self.server)
-        self.assertIn("LanBoardBeacon.start()",self.server)
+        self.assertIn("LanBoardBeacon.start(context)",self.server)
 
     def test_nearby_discovery_is_nonce_bounded_and_subnet_restricted(self):
         self.assertIn("PORT = 5164",self.protocol)
@@ -89,7 +89,8 @@ class LanPeerRatingUiTest(unittest.TestCase):
         self.assertIn("SHARE MY CAREER WITH NEARBY HALO PHONES",self.ui)
         self.assertIn("REFRESH LAN",self.ui)
         self.assertIn("LanBoardNearby.refresh(",self.ui)
-        self.assertIn("if (sharing.isChecked()) synchronize();",self.ui)
+        self.assertNotIn("if (sharing.isChecked()) synchronize();",self.ui)
+        self.assertIn("sync.setOnClickListener(view -> synchronize());",self.ui)
         self.assertIn("getBoolean(\"lan_board_share\", false)",self.ui)
         self.assertIn("Peer IP (optional)",self.ui)
         self.assertIn("No central server",self.ui)

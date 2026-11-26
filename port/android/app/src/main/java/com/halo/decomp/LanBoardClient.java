@@ -68,7 +68,7 @@ final class LanBoardClient {
             System.currentTimeMillis());
     }
 
-    private static Inet4Address localInterface(byte[] target) {
+    static Inet4Address localInterface(byte[] target) {
         try {
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
             while (interfaces != null && interfaces.hasMoreElements()) {
@@ -78,6 +78,8 @@ final class LanBoardClient {
                 for (InterfaceAddress entry : nic.getInterfaceAddresses()) {
                     if (!(entry.getAddress() instanceof Inet4Address)) continue;
                     Inet4Address local = (Inet4Address)entry.getAddress();
+                    if (LanUpdateProtocol.privateAddress(local.getHostAddress()) == null ||
+                        java.util.Arrays.equals(local.getAddress(), target)) continue;
                     int prefix = LanUpdateProtocol.usableHostPrefix(
                         nic.getName(), entry.getNetworkPrefixLength());
                     if (prefix >= 0 &&

@@ -1,6 +1,8 @@
 package com.halo.decomp;
 
 import android.util.Log;
+import android.content.Context;
+import android.net.wifi.WifiManager;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -20,9 +22,10 @@ final class LanBoardBeacon {
     private volatile DatagramSocket listener;
     private volatile boolean closed;
 
-    static LanBoardBeacon start() {
+    static LanBoardBeacon start(Context context) {
         LanBoardBeacon responder = new LanBoardBeacon();
-        Thread worker = new Thread(responder::serve, "Halo-LAN-board-discovery");
+        Context app = context.getApplicationContext();
+        Thread worker = new Thread(() -> responder.serve(app), "Halo-LAN-board-discovery");
         worker.setDaemon(true);
         worker.start();
         return responder;
@@ -34,12 +37,22 @@ final class LanBoardBeacon {
         if (socket != null) socket.close();
     }
 
-    private void serve() {
+    private void serve(Context context) {
+        WifiManager.MulticastLock lock = null;
+        try {
+            WifiManager wifi = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
+            if (wifi != null) {
+                lock = wifi.createMulticastLock("halo-board-responder");
+                lock.setReferenceCounted(false);
+                lock.acquire();
+            }
+        } catch (RuntimeException unavailable) { lock = null; }
         try (DatagramSocket socket = new DatagramSocket(null)) {
             socket.setReuseAddress(true);
             socket.bind(new InetSocketAddress(LanBoardDiscovery.PORT));
             socket.setSoTimeout(900);
             listener = socket;
+            if (closed) return;
             byte[] bytes = new byte[LanBoardDiscovery.MAX_PACKET+1];
             while (!closed) {
                 DatagramPacket incoming = new DatagramPacket(bytes,bytes.length);
@@ -71,6 +84,7 @@ final class LanBoardBeacon {
                 error.getClass().getSimpleName());
         } finally {
             listener = null;
+            if (lock != null && lock.isHeld()) lock.release();
         }
     }
 

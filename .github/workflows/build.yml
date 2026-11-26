@@ -244,6 +244,7 @@ jobs:
           python3 tools/test_v55_video_playback.py -v
           python3 tools/test_v56_video_storage.py -v
           python3 tools/test_v57_match_video.py -v
+          python3 tools/test_v58_live_peers.py -v
           python3 tools/test_highlight_moments.py -v
           python3 tools/test_v42_highlights_integration.py -v
           python3 tools/test_android_experiment_package.py -v
@@ -281,6 +282,10 @@ jobs:
             port/android/app/src/main/java/com/halo/decomp/LanBoardDiscovery.java \
             tools/lan/LanBoardCoreTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LanBoardCoreTest
+          javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" \
+            port/android/app/src/main/java/com/halo/decomp/LanBoardPresence.java \
+            tools/lan/LanBoardPresenceTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LanBoardPresenceTest
           javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" \
             port/android/app/src/main/java/com/halo/decomp/VideoFrameBrightness.java \
             tools/lan/VideoFrameBrightnessTest.java

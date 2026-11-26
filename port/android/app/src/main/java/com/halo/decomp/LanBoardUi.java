@@ -70,7 +70,7 @@ final class LanBoardUi {
                 .edit().putBoolean("lan_board_share", enabled).apply();
             if (activity instanceof LauncherActivity)
                 ((LauncherActivity)activity).refreshBoardSharing();
-            if (enabled) synchronize();
+            if (enabled) status.setText("Sharing on. Tap REFRESH LAN when ready to sync.");
             else status.setText("Sharing off. Existing saved standings remain "
                 + "on this phone.");
         });
@@ -174,9 +174,8 @@ final class LanBoardUi {
                     root, local, null, System.currentTimeMillis());
                 activity.runOnUiThread(() -> {
                     if (dialog.isShowing()) {
-                        draw(board, "Saved on this phone. Searching nearby "
-                            + "peers when sharing is enabled.");
-                        if (sharing.isChecked()) synchronize();
+                        draw(board, "Saved on this phone. Check live Halo peers "
+                            + "on the launcher; tap REFRESH LAN to sync.");
                     }
                 });
             } catch (IOException failure) {
@@ -253,12 +252,16 @@ final class LanBoardUi {
             status.setText("Optional peer IP must be a private hotspot address.");
             return;
         }
+        // Reuse fresh presence addresses as fallbacks, without promoting
+        // cached standings into live players. Refresh remains user-initiated.
+        List<String> live = activity instanceof LauncherActivity ?
+            ((LauncherActivity)activity).liveBoardTargets() : java.util.Collections.emptyList();
         sync.setEnabled(false);
         status.setText("Scanning nearby Halo phones over local Wi-Fi...");
         new Thread(() -> {
             try {
                 LanBoardNearby.Result result =
-                    LanBoardNearby.refresh(activity, root, ip);
+                    LanBoardNearby.refresh(activity, root, ip, live);
                 if (!ip.isEmpty()) {
                     activity.getSharedPreferences("launcher_ui", Context.MODE_PRIVATE)
                         .edit().putString("last_host", ip).apply();

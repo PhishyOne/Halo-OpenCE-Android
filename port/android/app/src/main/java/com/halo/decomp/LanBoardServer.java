@@ -17,6 +17,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /** Explicitly opted-in peer-phone LAN leaderboard on TCP 5164.
  * Any participating device may serve cards while in launcher or game.
@@ -26,20 +28,23 @@ import java.util.List;
 final class LanBoardServer {
     private static final String TAG = "HaloLanBoard";
     private final Context context;
-    private final List<ServerSocket> bound = new ArrayList<>();
+    private final Map<String, ServerSocket> bound = new LinkedHashMap<>();
+    private final boolean gameOpen;
     private volatile boolean stopped;
+    private Thread maintenance;
     private LanBoardBeacon beacon;
 
     private LanBoardServer(Context context) {
         this.context = context.getApplicationContext();
+        gameOpen = context instanceof HaloActivity;
     }
 
     static LanBoardServer start(Context context) {
         LanBoardServer server = new LanBoardServer(context);
-        server.beacon = LanBoardBeacon.start();
-        Thread thread = new Thread(server::open, "Halo-LAN-board-start");
-        thread.setDaemon(true);
-        thread.start();
+        server.beacon = LanBoardBeacon.start(context);
+        server.maintenance = new Thread(server::open, "Halo-LAN-board-start");
+        server.maintenance.setDaemon(true);
+        server.maintenance.start();
         return server;
     }
 
@@ -49,68 +54,84 @@ final class LanBoardServer {
             beacon.stop();
             beacon = null;
         }
+        if (maintenance != null) maintenance.interrupt();
         synchronized (bound) {
-            for (ServerSocket listener : bound)
+            for (ServerSocket listener : bound.values())
                 try { listener.close(); } catch (IOException ignored) { }
             bound.clear();
         }
     }
 
+    /** Refresh only local interface bindings, not remote clients. Allows
+     * a phone to join a hotspot after opening Halo, without relaunching. */
     private void open() {
-        try {
-            int listeners = 0;
-            for (int retry = 0; retry < 6 && !stopped && listeners == 0; retry++) {
-                Enumeration<NetworkInterface> interfaces =
-                    NetworkInterface.getNetworkInterfaces();
+        while (!stopped) {
+            try {
+                Map<String, Inet4Address> current = new LinkedHashMap<>();
+                Map<String, Integer> prefixes = new LinkedHashMap<>();
+                Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
                 while (!stopped && interfaces != null && interfaces.hasMoreElements() &&
-                       listeners < 6) {
+                       current.size() < 6) {
                     NetworkInterface nic = interfaces.nextElement();
                     if (!nic.isUp() || nic.isLoopback() ||
                         !LanUpdateProtocol.lanInterface(nic.getName())) continue;
                     for (InterfaceAddress address : nic.getInterfaceAddresses()) {
-                        if (stopped || listeners >= 6) break;
+                        if (stopped || current.size() >= 6) break;
                         if (!(address.getAddress() instanceof Inet4Address)) continue;
                         Inet4Address local = (Inet4Address)address.getAddress();
                         int prefix = LanUpdateProtocol.usableHostPrefix(
                             nic.getName(), address.getNetworkPrefixLength());
                         if (prefix < 0 ||
-                            LanUpdateProtocol.privateAddress(local.getHostAddress()) == null)
-                            continue;
+                            LanUpdateProtocol.privateAddress(local.getHostAddress()) == null) continue;
+                        String key = local.getHostAddress() + "/" + prefix;
+                        current.put(key, local);
+                        prefixes.put(key, prefix);
+                    }
+                }
+                synchronized (bound) {
+                    if (stopped) return;
+                    java.util.Iterator<Map.Entry<String, ServerSocket>> old = bound.entrySet().iterator();
+                    while (old.hasNext()) {
+                        Map.Entry<String, ServerSocket> e = old.next();
+                        if (!current.containsKey(e.getKey()) || e.getValue().isClosed()) {
+                            try { e.getValue().close(); } catch (IOException ignored) { }
+                            old.remove();
+                        }
+                    }
+                    for (Map.Entry<String, Inet4Address> address : current.entrySet()) {
+                        if (stopped || bound.containsKey(address.getKey())) continue;
+                        Inet4Address local = address.getValue();
+                        int prefix = prefixes.get(address.getKey());
+                        ServerSocket listener = null;
                         try {
-                            ServerSocket listener = new ServerSocket(
-                                LanBoardProtocol.PORT, 8, local);
+                            listener = new ServerSocket(LanBoardProtocol.PORT, 8, local);
                             listener.setSoTimeout(1000);
-                            synchronized (bound) {
-                                if (stopped) { listener.close(); break; }
-                                bound.add(listener);
-                            }
-                            listeners++;
+                            final ServerSocket accepted = listener;
+                            bound.put(address.getKey(), listener);
                             Thread worker = new Thread(
-                                () -> accept(listener, local.getAddress(), prefix),
+                                () -> accept(accepted, local.getAddress(), prefix),
                                 "Halo-LAN-board-listener");
                             worker.setDaemon(true);
                             worker.start();
                             Log.i(TAG, "Opt-in local standings ready on " +
                                 local.getHostAddress() + ":" + LanBoardProtocol.PORT);
                         } catch (IOException noPort) {
-                            Log.i(TAG, "Leaderboard interface/port not available");
+                            if (listener != null)
+                                try { listener.close(); } catch (IOException ignored) { }
                         }
                     }
                 }
-                if (listeners == 0 && retry < 5 && !stopped)
-                    Thread.sleep(900);
+            } catch (Exception unavailable) {
+                if (!stopped) Log.i(TAG, "Local board interface temporarily unavailable");
             }
-            if (listeners == 0 && !stopped)
-                Log.w(TAG, "No private hotspot address available for LAN board");
-        } catch (InterruptedException stoppedEarly) {
-            Thread.currentThread().interrupt();
-        } catch (Exception failure) {
-            if (!stopped) Log.w(TAG, "Host LAN board unavailable", failure);
+            if (!stopped)
+                try { Thread.sleep(3000); }
+                catch (InterruptedException done) { return; }
         }
     }
 
     private void accept(ServerSocket listener, byte[] local, int prefix) {
-        while (!stopped) {
+        while (!stopped && !listener.isClosed()) {
             try {
                 Socket client = listener.accept();
                 try (Socket socket = client) {
@@ -118,6 +139,7 @@ final class LanBoardServer {
                     if (!(socket.getInetAddress() instanceof Inet4Address)) continue;
                     String peer = socket.getInetAddress().getHostAddress();
                     if (LanUpdateProtocol.privateAddress(peer) == null ||
+                        java.util.Arrays.equals(local, socket.getInetAddress().getAddress()) ||
                         !LanUpdateProtocol.sameSubnet(local,
                             socket.getInetAddress().getAddress(), prefix))
                         continue;
@@ -126,7 +148,7 @@ final class LanBoardServer {
             } catch (SocketTimeoutException idle) {
                 // Recheck stop flag, no thread or socket growth.
             } catch (IOException failed) {
-                if (!stopped)
+                if (!stopped && !listener.isClosed())
                     Log.i(TAG, "LAN board connection ended: " +
                         failed.getClass().getSimpleName());
             }
@@ -135,6 +157,17 @@ final class LanBoardServer {
 
     private void handle(Socket socket) throws IOException {
         String request = LanBoardProtocol.boundedLine(socket.getInputStream());
+        if (stopped) return;
+        String ping = LanBoardPresence.readQuery(request);
+        if (ping != null) {
+            // A live presence reply uses identity only, no career read,
+            // LanBoardStore merge, stats transmission or sync timestamp.
+            String reply = LanBoardPresence.answer(ping, LanBoardIdentity.id(context),
+                LanBoardIdentity.name(context), gameOpen);
+            socket.getOutputStream().write(reply.getBytes(StandardCharsets.US_ASCII));
+            socket.getOutputStream().flush();
+            return;
+        }
         String[] parts = request.split("\\|", -1);
         if (parts.length != 12 || !LanBoardProtocol.CARD.equals(parts[0]) ||
             !LanBoardProtocol.nonceValid(parts[1])) return;

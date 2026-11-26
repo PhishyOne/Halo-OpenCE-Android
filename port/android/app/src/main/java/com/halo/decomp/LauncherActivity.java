@@ -92,6 +92,8 @@ public class LauncherActivity extends Activity {
     private LinearLayout dashboardPanel;
     private LanMapRepair lanMapRepair;
     private LanBoardServer lanBoardServer;
+    private LanBoardPresenceMonitor livePeerMonitor;
+    private boolean launcherResumed;
     private ChoiceButton stockCampaignMapChoice;
     private Button stockCampaignAuditButton;
     private Button stockCampaignImportButton;
@@ -262,10 +264,11 @@ public class LauncherActivity extends Activity {
         boolean lanSession = "lan".equals(getSharedPreferences("launcher_ui",
             MODE_PRIVATE).getString("play_mode", "standard"));
         intent.putExtra(HaloActivity.NETWORK_SESSION, lanSession);
-        // Any opted-in phone can serve LAN standings, host or guest,
-        // while its native Halo game process is running.
+        // Any opted-in phone may answer local leaderboard presence while
+        // its game is open, including campaign and offline bot matches.
+        // This does not enable network gameplay or public sharing.
         intent.putExtra(HaloActivity.LAN_BOARD_HOST,
-            lanSession && getSharedPreferences("launcher_ui",
+            getSharedPreferences("launcher_ui",
                 MODE_PRIVATE).getBoolean("lan_board_share", false));
         if (getSharedPreferences("reel_settings", MODE_PRIVATE)
                 .getBoolean("record_opt_in", false)) {
@@ -618,7 +621,27 @@ public class LauncherActivity extends Activity {
         LinearLayout.LayoutParams subtitleLayout = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         subtitleLayout.leftMargin = dp(14);
+        // The status strip stays visible on every launcher tab, including
+        // Profile. Keep it one line so landscape game setup doesn't grow.
+        subtitle.setSingleLine(true);
+        subtitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        subtitleLayout.width = 0;
+        subtitleLayout.weight = 0.65f;
         masthead.addView(subtitle, subtitleLayout);
+        Button livePeers = new Button(this);
+        hudButton(livePeers, false);
+        livePeers.setAllCaps(false);
+        livePeers.setSingleLine(true);
+        livePeers.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        livePeers.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        livePeers.setMinWidth(0);
+        livePeers.setMinimumWidth(0);
+        LinearLayout.LayoutParams liveParams = new LinearLayout.LayoutParams(0, dp(38), 1f);
+        liveParams.leftMargin = dp(8);
+        masthead.addView(livePeers, liveParams);
+        if (livePeerMonitor != null) livePeerMonitor.close();
+        livePeerMonitor = new LanBoardPresenceMonitor(this, livePeers);
+        if (launcherResumed) livePeerMonitor.resume();
         root.addView(masthead);
         View accent = new View(this);
         accent.setBackgroundColor(HUD_ACCENT);
@@ -714,10 +737,10 @@ public class LauncherActivity extends Activity {
             .getBoolean("lan_update_share", true));
         hudCheck(shareUpdates);
         hostPanel.addView(shareUpdates);
-        // Only the LAN host's phone may publish its career board. Disabled
-        // by default; every guest chooses separately whether to sync.
+        // Each phone independently opts in to local career/presence sharing.
+        // This is separate from the game host or APK update service.
         CheckBox shareStandings = new CheckBox(this);
-        shareStandings.setText("SHARE PROVISIONAL LAN LEADERBOARD (OPT-IN)");
+        shareStandings.setText("SHARE LAN LEADERBOARD / LIVE NAME (OPT-IN)");
         shareStandings.setChecked(getSharedPreferences("launcher_ui", MODE_PRIVATE)
             .getBoolean("lan_board_share", false));
         hudCheck(shareStandings);
@@ -2150,8 +2173,27 @@ public class LauncherActivity extends Activity {
         pick.requestFocus();
     }
 
+    java.util.List<String> liveBoardTargets() {
+        return livePeerMonitor == null ? java.util.Collections.emptyList() :
+            livePeerMonitor.liveTargets();
+    }
+
+    @Override
+    protected void onPause() {
+        launcherResumed = false;
+        if (livePeerMonitor != null) livePeerMonitor.pause();
+        super.onPause();
+    }
+
+    @Override
+    protected void onStop() {
+        stopBoardSharing();
+        super.onStop();
+    }
+
     @Override
     protected void onDestroy() {
+        if (livePeerMonitor != null) livePeerMonitor.close();
         stopBoardSharing();
         if (lanMapRepair != null) lanMapRepair.destroy();
         super.onDestroy();
@@ -2160,6 +2202,8 @@ public class LauncherActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        launcherResumed = true;
+        if (livePeerMonitor != null) livePeerMonitor.resume();
         refreshBoardSharing();
         // The native game may finish a match after the recorder reached its
         // time cap. Reconcile locally saved raw MP4 with durable HLM1 results

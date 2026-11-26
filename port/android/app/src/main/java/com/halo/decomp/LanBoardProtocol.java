@@ -91,12 +91,12 @@ final class LanBoardProtocol {
         return filtered.isEmpty() ? "Spartan" : filtered;
     }
 
-    private static String nameWire(String name) {
+    static String nameWire(String name) {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(
             name.getBytes(StandardCharsets.UTF_8));
     }
 
-    private static String readName(String encoded) throws IOException {
+    static String readName(String encoded) throws IOException {
         if (!encoded.matches("[A-Za-z0-9_-]{2,100}"))
             throw new IOException("Invalid encoded name");
         byte[] bytes;
