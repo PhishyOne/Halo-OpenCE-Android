@@ -53,8 +53,8 @@ class DiscoveryAndLauncherTests(unittest.TestCase):
         self.assertIn('LanUpdateProtocol.privateAddress(\n', self.launcher)
 
     def test_tools_separate_from_game_modes(self):
-        self.assertIn('"Leaderboard", "Offline Match", "Campaign", "Host", "Join", "Tools"', self.launcher)
-        for name in ('mapsToggle', 'repairPanel', 'customMapsToggle',
+        self.assertIn('"Leaderboard", "Offline Match", "Host", "Join", "Tools"', self.launcher)
+        for name in ('repairPanel', 'advancedMaps', 'customMapsPanel',
                      'campaignSavesPanel', 'diagnostics'):
             self.assertIn(f'toolsPage.addView({name});', self.launcher)
         self.assertIn('toolsPage.setVisibility(toolsVisible[0] ? View.VISIBLE : View.GONE);',

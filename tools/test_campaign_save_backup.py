@@ -19,7 +19,7 @@ class CampaignSaveBackupTest(unittest.TestCase):
     def test_launcher_uses_android_file_picker_and_confirmation(self):
         s = LAUNCHER.read_text()
         for item in (
-            'savesToggle.setText("CAMPAIGN SAVES")',
+            'campaignSavesPanel.addView(hudSection("CAMPAIGN SAVES"))',
             'campaignBackupButton.setText("BACK UP CAMPAIGN PROGRESS")',
             'campaignRestoreButton.setText("RESTORE CAMPAIGN BACKUP")',
             'Intent.ACTION_CREATE_DOCUMENT',

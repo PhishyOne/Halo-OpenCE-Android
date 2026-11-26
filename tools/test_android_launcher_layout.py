@@ -17,12 +17,12 @@ class HaloLauncherLayoutTests(unittest.TestCase):
 
     def test_compact_mode_navigation_above_one_play(self):
         s = self.source
-        self.assertIn('"Leaderboard", "Offline Match", "Campaign", "Host", "Join", "Tools"', s)
+        self.assertIn('"Leaderboard", "Offline Match", "Host", "Join", "Tools"', s)
         self.assertIn('socialUi = new LanBoardUi(this, dataRoot, dashboardPanel, scroll)', s)
         self.assertIn('final boolean[] homeVisible = { !invitePending };', s)
         self.assertIn('Button[] modeTabs = new Button[modeNames.length];', s)
-        self.assertIn('offlineMode.setText("OFFLINE BOTS");', s)
-        self.assertIn('lanMode.setText("LAN / SYSTEM LINK");', s)
+        self.assertIn('botMatch.setText("BOT MATCH");', s)
+        self.assertIn('campaign.setText("CAMPAIGN");', s)
         self.assertIn('play.setText("PLAY");', s)
         self.assertLess(s.index('root.addView(modeBar);'), s.index('footer.addView(play, playParams);'))
         self.assertEqual(s.count('play.setText("PLAY");'), 1)
@@ -33,7 +33,7 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         s = self.source
         self.assertIn('if (selected)\n                lanMode.setChecked(false);', s)
         self.assertIn('if (selected)\n                offlineMode.setChecked(false);', s)
-        self.assertIn('offlinePanel.setVisibility(playing && offlineMode.isChecked()', s)
+        self.assertIn('offlinePanel.setVisibility(playing && !lanMode.isChecked()', s)
         self.assertIn('lanPanel.setVisibility(playing && lanMode.isChecked()', s)
         self.assertIn('toolsPage.setVisibility(toolsVisible[0] ? View.VISIBLE : View.GONE);', s)
         self.assertIn('dashboardPanel.setVisibility(homeVisible[0] ?', s)
@@ -48,7 +48,7 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         self.assertIn('manualHostPanel.addView(hostIp);', s)
         self.assertNotIn('shareActions.addView', s)
         self.assertIn('game.putExtra(HaloActivity.LAN_DISCOVERY_HOST, true);', s)
-        self.assertIn('toolsPage.addView(mapsToggle);', s)
+        self.assertIn('toolsPage.addView(repairPanel);', s)
         self.assertIn('toolsPage.addView(diagnostics);', s)
 
     def test_offline_uses_original_native_arguments(self):
@@ -80,7 +80,7 @@ class HaloLauncherLayoutTests(unittest.TestCase):
 
     def test_xbox_maps_consolidated_without_removing_verification(self):
         s = self.source
-        self.assertIn('mapsToggle.setText("MAP REPAIR");', s)
+        self.assertIn('repairPanel.addView(hudSection("MAP REPAIR / ORIGINAL CAMPAIGN MAPS"));', s)
         self.assertNotIn('repairChooseButton.setText(', s)
         self.assertNotIn('repairCartographerChooseButton.setText(', s)
         self.assertIn('mapNames[mapNames.length - 1] = "Sidewinder  (sidewinder.map)";', s)
@@ -96,7 +96,7 @@ class HaloLauncherLayoutTests(unittest.TestCase):
 
     def test_custom_edition_import_via_document_picker(self):
         s = self.source
-        self.assertIn('customMapsToggle.setText("CUSTOM MAPS");', s)
+        self.assertIn('customMapsPanel.addView(hudSection("CUSTOM MAPS / HALO CUSTOM EDITION"));', s)
         self.assertIn('customMapImportButton.setText("IMPORT MAPS OR PREVIEW FILES");', s)
         self.assertIn('picker.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);', s)
         self.assertIn('startActivityForResult(picker, PICK_CUSTOM_MAPS);', s)
@@ -155,7 +155,7 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         self.assertNotIn('commanderToggle', s)
         self.assertNotIn('commanderChecks', s)
         self.assertNotIn('saveCommanderChoices(', s)
-        self.assertIn('killstreakToggle.setText("KILLSTREAK REWARDS: "', s)
+        self.assertIn('killstreakPanel.addView(hudSection("INDIVIDUAL KILLSTREAK REWARDS"));', s)
         self.assertIn('CheckBox[] killstreakChecks = new CheckBox[KillstreakConfig.KEYS.length];', s)
         self.assertIn('killstreakChecks[0].isChecked()', s)
         self.assertIn('God Mode (60s)', s)
@@ -166,9 +166,10 @@ class HaloLauncherLayoutTests(unittest.TestCase):
         self.assertIn('KillstreakConfig.save(file, selected);', s)
         self.assertIn('KillstreakConfig.disable(file);', s)
         self.assertNotIn('targeted orbital strike.', s)
-        self.assertIn('toggleSection(killstreakToggle, killstreakPanel)', s)
-        self.assertIn('toggleSection(customMapsToggle, customMapsPanel)', s)
-        self.assertIn('toggleSection(mapsToggle, repairPanel)', s)
+        self.assertIn('killstreakPanel.setVisibility(available ? View.VISIBLE : View.GONE)', s)
+        self.assertIn('toolsPage.addView(customMapsPanel);', s)
+        self.assertIn('toolsPage.addView(repairPanel);', s)
+        self.assertNotIn('toggleSection(', s)
 
     def test_disc_import_is_preserved(self):
         s = self.source

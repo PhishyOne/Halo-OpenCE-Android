@@ -247,6 +247,7 @@ jobs:
           python3 tools/test_v58_live_peers.py -v
           python3 tools/test_v59_social_hub.py -v
           python3 tools/test_v60_theme_privacy.py -v
+          python3 tools/test_v61_flat_launcher.py -v
           python3 tools/test_highlight_moments.py -v
           python3 tools/test_v42_highlights_integration.py -v
           python3 tools/test_android_experiment_package.py -v

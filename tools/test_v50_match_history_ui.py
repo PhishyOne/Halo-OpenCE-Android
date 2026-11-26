@@ -56,17 +56,14 @@ class MatchHistoryUiTest(unittest.TestCase):
         self.assertIn("android.R.attr.state_selected", self.arrow)
         self.assertIn("HaloTheme.HIGHLIGHT_TEXT", self.arrow)
         self.assertIn("void setCardExpanded(boolean open)", self.arrow)
-        self.assertIn("button.setSelected(open);", self.launcher)
 
     def test_arrows_only_for_expandable_sections(self):
-        names = ["advancedToggle", "killstreakToggle", "mapsToggle",
-                 "mapAdvancedToggle", "customMapsToggle", "savesToggle"]
-        found = re.findall(r"DisclosureChevron\.attach\((\w+)\);",
-                           self.launcher)
-        self.assertCountEqual(names, found)
-        for name in names:
-            self.assertIn("DisclosureChevron.attach(" + name + ");",
-                          self.launcher)
+        found = re.findall(r"DisclosureChevron\.attach\((\w+)\);", self.launcher)
+        self.assertEqual(found, [], "Launcher sections are visible, not expandable")
+        self.assertNotIn("toggleSection(", self.launcher)
+        # Match history still uses its disclosure arrows; only launcher
+        # section toggles are removed.
+        self.assertIn("h.chevron.setCardExpanded(open)", self.view)
         for action in ["stockCampaignImportButton", "playButton",
                        "stockCampaignAuditButton", "customMapImportButton",
                        "campaignBackupButton"]:

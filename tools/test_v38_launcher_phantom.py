@@ -22,7 +22,7 @@ class V38Tests(unittest.TestCase):
         cls.voice_script = (ROOT / "tools/generate_phantom_audio.py").read_text()
 
     def test_profile_is_primary_screen(self):
-        self.assertIn('"Leaderboard", "Offline Match", "Campaign", "Host", "Join", "Tools"',
+        self.assertIn('"Leaderboard", "Offline Match", "Host", "Join", "Tools"',
                       self.launcher)
         self.assertIn("socialUi = new LanBoardUi(this, dataRoot, dashboardPanel, scroll)", self.launcher)
         self.assertIn("final boolean[] homeVisible = { !invitePending };", self.launcher)
@@ -46,11 +46,8 @@ class V38Tests(unittest.TestCase):
                       (APP / "CampaignMapTransfer.java").read_text())
         self.assertNotIn("b40.map and c10.map failed", self.launcher)
 
-    def test_expanded_sections_are_highlighted(self):
-        self.assertIn("button.setSelected(open);", self.launcher)
+    def test_selected_tabs_and_visible_sections(self):
         self.assertIn("modeTabs[i].setSelected(i == chosen);", self.launcher)
-        self.assertIn("advancedToggle.setSelected(advanced.getVisibility() == View.VISIBLE);", self.launcher)
-        self.assertIn("killstreakToggle.setSelected(false);", self.launcher)
         action_style = self.launcher.split("private void hudButton(", 1)[1].split("private void ", 1)[0]
         self.assertIn("HaloTheme.menuButtonColors(button)", action_style)
         self.assertNotIn("setSelected", action_style)
@@ -60,11 +57,12 @@ class V38Tests(unittest.TestCase):
         self.assertIn("fill.addState(StateSet.WILD_CARD, surface(CONTROL_TOP, CONTROL_BOTTOM,", theme)
         self.assertLess(theme.index("fill.addState(disabled"), theme.index("fill.addState(selected"))
         self.assertNotIn("hostHintsToggle", self.launcher)
-        for control in ("advancedToggle, advanced",
-                        "killstreakToggle, killstreakPanel", "mapsToggle, repairPanel",
-                        "customMapsToggle, customMapsPanel",
-                        "savesToggle, campaignSavesPanel"):
-            self.assertIn("toggleSection(" + control + ")", self.launcher)
+        self.assertNotIn("toggleSection(", self.launcher)
+        self.assertIn('advanced.addView(hudSection("NETWORK OPTIONS"))', self.launcher)
+        self.assertIn("killstreakPanel.setVisibility(available ? View.VISIBLE : View.GONE)", self.launcher)
+        for panel in ("repairPanel", "advancedMaps", "customMapsPanel", "campaignSavesPanel"):
+            self.assertIn("toolsPage.addView(" + panel + ");", self.launcher)
+            self.assertNotIn(panel + ".setVisibility(View.GONE)", self.launcher)
 
     def test_commander_and_orbital_actually_disabled(self):
         self.assertNotIn("commanderToggle", self.launcher)

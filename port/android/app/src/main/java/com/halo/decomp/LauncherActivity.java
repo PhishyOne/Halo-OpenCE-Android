@@ -582,8 +582,8 @@ public class LauncherActivity extends Activity {
         return choice;
     }
 
-    /** Native OpenCE-style tabs for Profile, Offline Match, Campaign,
-     * Host, Join and Tools. */
+    /** Native OpenCE-style tabs for Leaderboard, Offline Match, Host,
+     * Join and Tools. Campaign is a choice within Offline Match. */
     private void hudTab(Button button) {
         button.setAllCaps(false);
         HaloTheme.font(button, true);
@@ -591,13 +591,6 @@ public class LauncherActivity extends Activity {
         HaloTheme.menuButtonColors(button);
         button.setMinHeight(dp(39));
         button.setPadding(dp(2), dp(3), dp(2), dp(3));
-    }
-
-    /** A disclosure control stays visually selected while its section is open. */
-    private void toggleSection(Button button, View section) {
-        boolean open = section.getVisibility() != View.VISIBLE;
-        section.setVisibility(open ? View.VISIBLE : View.GONE);
-        button.setSelected(open);
     }
 
     private void buildLanInterface() {
@@ -667,7 +660,7 @@ public class LauncherActivity extends Activity {
         modeBar.setOrientation(LinearLayout.HORIZONTAL);
         modeBar.setPadding(dp(8), dp(5), dp(8), dp(5));
         String[] modeNames = {
-            "Leaderboard", "Offline Match", "Campaign", "Host", "Join", "Tools"
+            "Leaderboard", "Offline Match", "Host", "Join", "Tools"
         };
         Button[] modeTabs = new Button[modeNames.length];
         for (int i = 0; i < modeNames.length; i++) {
@@ -842,6 +835,34 @@ public class LauncherActivity extends Activity {
             new LinearLayout.LayoutParams(0, dp(46), 1f);
         updateButtonParams.leftMargin = dp(8);
         joinActions.addView(checkHostUpdate, updateButtonParams);
+        // These are global recorder preferences, not a join-only recording mode.
+        // Store on change so Host and offline multiplayer use the same choices.
+        joinPanel.addView(hudSection("MATCH RECORDING"));
+        joinPanel.addView(lanText("Applies to multiplayer in every mode, including Host and Offline Match. "
+            + "Campaign and co-op are not recorded.", 11));
+        CheckBox recordHighlights = new CheckBox(this);
+        recordHighlights.setText("RECORD MULTIPLAYER MATCHES (OPT-IN • SILENT)");
+        recordHighlights.setChecked(getSharedPreferences("reel_settings",
+            MODE_PRIVATE).getBoolean("record_opt_in", false));
+        hudCheck(recordHighlights);
+        joinPanel.addView(recordHighlights);
+
+        CheckBox keepFullVideo = new CheckBox(this);
+        keepFullVideo.setText("KEEP FULL MATCH RECORDINGS");
+        keepFullVideo.setChecked(getSharedPreferences("reel_settings", MODE_PRIVATE)
+            .getBoolean("keep_full_match", false));
+        hudCheck(keepFullVideo);
+        keepFullVideo.setOnCheckedChangeListener((view, checked) ->
+            getSharedPreferences("reel_settings", MODE_PRIVATE).edit()
+                .putBoolean("keep_full_match", checked).apply());
+        joinPanel.addView(keepFullVideo);
+        keepFullVideo.setEnabled(recordHighlights.isChecked());
+        recordHighlights.setOnCheckedChangeListener((view, checked) -> {
+            getSharedPreferences("reel_settings", MODE_PRIVATE).edit()
+                .putBoolean("record_opt_in", checked).apply();
+            keepFullVideo.setEnabled(checked);
+        });
+
         lanPanel.addView(joinPanel);
 
         Runnable updateRole = () -> {
@@ -850,13 +871,9 @@ public class LauncherActivity extends Activity {
         };
         updateRole.run();
 
-        Button advancedToggle = new Button(this);
-        advancedToggle.setText("NETWORK OPTIONS");
-        hudButton(advancedToggle, false);
-        DisclosureChevron.attach(advancedToggle);
-        lanPanel.addView(advancedToggle);
         LinearLayout advanced = new LinearLayout(this);
         advanced.setOrientation(LinearLayout.VERTICAL);
+        advanced.addView(hudSection("NETWORK OPTIONS"));
         advanced.addView(lanText("LOCAL ADDRESS OVERRIDE", 12));
         EditText local = new EditText(this);
         local.setSingleLine(true);
@@ -871,11 +888,6 @@ public class LauncherActivity extends Activity {
         hudCheck(lanOnly);
         advanced.addView(lanOnly);
         advanced.addView(lanText("Host port 5150. Joining client 5151.", 11));
-        advanced.setVisibility(invitePending || !settings.lanOnly
-            ? View.VISIBLE : View.GONE);
-        advancedToggle.setSelected(advanced.getVisibility() == View.VISIBLE);
-        advancedToggle.setOnClickListener(view ->
-            toggleSection(advancedToggle, advanced));
         lanPanel.addView(advanced);
 
         if (invitePending) {
@@ -900,26 +912,50 @@ public class LauncherActivity extends Activity {
         SharedPreferences offlinePreferences = getSharedPreferences("offline_bots", MODE_PRIVATE);
         LinearLayout offlinePanel = hudPanel();
         content.addView(offlinePanel);
-        offlinePanel.addView(hudSection("OFFLINE BOT MATCH"));
+        offlinePanel.addView(hudSection("OFFLINE MATCH"));
+        SharedPreferences launcherPreferences = getSharedPreferences("launcher_ui", MODE_PRIVATE);
+        String savedMode = invitePending ? "lan" :
+            launcherPreferences.getString("play_mode", "lan");
+        RadioGroup offlineType = new RadioGroup(this);
+        offlineType.setOrientation(LinearLayout.HORIZONTAL);
+        RadioButton botMatch = new RadioButton(this);
+        botMatch.setId(View.generateViewId());
+        botMatch.setText("BOT MATCH");
+        botMatch.setTextColor(HUD_TEXT);
+        botMatch.setButtonTintList(HaloTheme.CHECK_TINT);
+        HaloTheme.font(botMatch, true);
+        RadioButton campaign = new RadioButton(this);
+        campaign.setId(View.generateViewId());
+        campaign.setText("CAMPAIGN");
+        campaign.setTextColor(HUD_TEXT);
+        campaign.setButtonTintList(HaloTheme.CHECK_TINT);
+        HaloTheme.font(campaign, true);
+        offlineType.addView(botMatch, new RadioGroup.LayoutParams(0, dp(44), 1f));
+        offlineType.addView(campaign, new RadioGroup.LayoutParams(0, dp(44), 1f));
+        String offlineChoice = launcherPreferences.getString("offline_game_type",
+            "standard".equals(savedMode) ? "campaign" : "bots");
+        offlineType.check("campaign".equals(offlineChoice) ? campaign.getId() : botMatch.getId());
+        offlinePanel.addView(offlineType);
+        TextView campaignInfo = lanText("Launch the original Halo campaign. "
+            + "Your existing profiles and checkpoints are kept.", 12);
+        offlinePanel.addView(campaignInfo);
+        LinearLayout offlineBotOptions = new LinearLayout(this);
+        offlineBotOptions.setOrientation(LinearLayout.VERTICAL);
+        offlinePanel.addView(offlineBotOptions);
         String[] offlineCounts = new String[127];
         for (int i = 0; i < offlineCounts.length; i++)
             offlineCounts[i] = Integer.toString(i + 1);
-        ChoiceButton offlineCount = botChoice(offlinePanel, "BOT COUNT",
+        ChoiceButton offlineCount = botChoice(offlineBotOptions, "BOT COUNT",
             offlineCounts, offlinePreferences.getInt("count", 3) - 1);
         String[] offlineSkills = { "Recruit", "Easy", "Normal", "Heroic", "Veteran", "Legendary" };
-        ChoiceButton offlineSkill = botChoice(offlinePanel, "DIFFICULTY",
+        ChoiceButton offlineSkill = botChoice(offlineBotOptions, "DIFFICULTY",
             offlineSkills, offlinePreferences.getInt("skill", 2));
         String[] offlineTeams = { "Balanced teams", "Bots against players" };
-        ChoiceButton offlineTeam = botChoice(offlinePanel, "TEAM ASSIGNMENT",
+        ChoiceButton offlineTeam = botChoice(offlineBotOptions, "TEAM ASSIGNMENT",
             offlineTeams, offlinePreferences.getInt("team", 0));
 
         /* The inactive 2142 commander experiment is retired. Keep only
          * individual host-authorized killstreak rewards in this launcher. */
-        Button killstreakToggle = new Button(this);
-        killstreakToggle.setText("KILLSTREAK REWARDS");
-        hudButton(killstreakToggle, false);
-        DisclosureChevron.attach(killstreakToggle);
-        content.addView(killstreakToggle);
         LinearLayout killstreakPanel = hudPanel();
         killstreakPanel.setVisibility(View.GONE);
         content.addView(killstreakPanel);
@@ -951,8 +987,6 @@ public class LauncherActivity extends Activity {
         }
         Runnable updateKillstreakChecks = () -> {
             boolean enabled = killstreakChecks[0].isChecked();
-            killstreakToggle.setText("KILLSTREAK REWARDS: "
-                + (enabled ? "ON" : "OFF") + " / OPTIONS");
             for (int i = 1; i < killstreakChecks.length; i++)
                 killstreakChecks[i].setEnabled(enabled);
         };
@@ -960,27 +994,16 @@ public class LauncherActivity extends Activity {
             check.setOnCheckedChangeListener((button, checked) ->
                 updateKillstreakChecks.run());
         updateKillstreakChecks.run();
-        killstreakToggle.setOnClickListener(view ->
-            toggleSection(killstreakToggle, killstreakPanel));
         killstreakPanel.addView(lanText(
-            "3 kills: camo + overshield. 5 kills: refresh + recon. "
-            + "10 kills: 60 seconds as an invisible, invulnerable Phantom. "
-            + "Deaths, match end and expiry revoke the protection.", 11));
+            "3: camo + overshield. 5: refresh + recon. "
+            + "10: invisible and invulnerable for 60 seconds. "
+            + "Death or match end cancels protection.", 11));
 
-        // Collapsed utility, out of the way of normal Play. Android's picker
-        // grants this app read access to a selected .map; this app alone
-        // writes its own protected Android/data/<package>/files/maps folder.
-        Button mapsToggle = new Button(this);
-        mapsToggle.setText("MAP REPAIR");
-        hudButton(mapsToggle, false);
-        DisclosureChevron.attach(mapsToggle);
-        toolsPage.addView(mapsToggle);
+        // All tools are visible on their page; dangerous operations still
+        // require their existing confirmation and file-picker grants.
         LinearLayout repairPanel = hudPanel();
-        repairPanel.setVisibility(View.GONE);
         toolsPage.addView(repairPanel);
-        mapsToggle.setOnClickListener(view ->
-            toggleSection(mapsToggle, repairPanel));
-        repairPanel.addView(hudSection("ORIGINAL CAMPAIGN MAPS"));
+        repairPanel.addView(hudSection("MAP REPAIR / ORIGINAL CAMPAIGN MAPS"));
         repairPanel.addView(lanText("Check your maps, then import replacements for any failures. "
             + "Choose .map files or a repair ZIP. Halo matches the levels automatically.", 13));
         stockCampaignAuditButton = new Button(this);
@@ -1022,15 +1045,9 @@ public class LauncherActivity extends Activity {
         stockMapResults.setOrientation(LinearLayout.VERTICAL);
         repairPanel.addView(stockMapResults);
 
-        Button mapAdvancedToggle = new Button(this);
-        mapAdvancedToggle.setText("SHARE MAPS & BACKUPS");
-        hudButton(mapAdvancedToggle, false);
-        DisclosureChevron.attach(mapAdvancedToggle);
-        repairPanel.addView(mapAdvancedToggle);
         LinearLayout advancedMaps = hudPanel();
-        advancedMaps.setVisibility(View.GONE);
-        repairPanel.addView(advancedMaps);
-        mapAdvancedToggle.setOnClickListener(view -> toggleSection(mapAdvancedToggle, advancedMaps));
+        toolsPage.addView(advancedMaps);
+        advancedMaps.addView(hudSection("SHARE MAPS & BACKUPS"));
         String[] mapNames = new String[SidewinderRepair.CAMPAIGN_MAP_FILES.length + 1];
         for (int i = 0; i < SidewinderRepair.CAMPAIGN_MAP_FILES.length; i++)
             mapNames[i] = SidewinderRepair.CAMPAIGN_MAP_TITLES[i]
@@ -1120,17 +1137,9 @@ public class LauncherActivity extends Activity {
                 .show();
         });
         advancedMaps.addView(restoreVerifiedMap);
-        Button customMapsToggle = new Button(this);
-        customMapsToggle.setText("CUSTOM MAPS");
-        hudButton(customMapsToggle, false);
-        DisclosureChevron.attach(customMapsToggle);
-        toolsPage.addView(customMapsToggle);
         LinearLayout customMapsPanel = hudPanel();
-        customMapsPanel.setVisibility(View.GONE);
         toolsPage.addView(customMapsPanel);
-        customMapsToggle.setOnClickListener(view ->
-            toggleSection(customMapsToggle, customMapsPanel));
-        customMapsPanel.addView(hudSection("HALO CUSTOM EDITION"));
+        customMapsPanel.addView(hudSection("CUSTOM MAPS / HALO CUSTOM EDITION"));
         customMapsPanel.addView(lanText(
             "Custom Edition maps, resources and preview pictures. Import a preview ZIP once; pictures appear in Halo's map menu.", 12));
         customMapImportButton = new Button(this);
@@ -1213,17 +1222,9 @@ public class LauncherActivity extends Activity {
         // Campaign progress is in save/u and save/z under app-owned storage.
         // An update preserves these, but Android uninstall/clear-data does
         // not. Offer a portable backup in a player-selected external location.
-        Button savesToggle = new Button(this);
-        savesToggle.setText("CAMPAIGN SAVES");
-        hudButton(savesToggle, false);
-        DisclosureChevron.attach(savesToggle);
-        toolsPage.addView(savesToggle);
         LinearLayout campaignSavesPanel = hudPanel();
-        campaignSavesPanel.setVisibility(View.GONE);
         toolsPage.addView(campaignSavesPanel);
-        savesToggle.setOnClickListener(view ->
-            toggleSection(savesToggle, campaignSavesPanel));
-        campaignSavesPanel.addView(hudSection("KEEP YOUR CAMPAIGN PROGRESS"));
+        campaignSavesPanel.addView(hudSection("CAMPAIGN SAVES"));
         campaignSavesPanel.addView(lanText(
             "Normal Android UPDATE preserves progress. Never uninstall Halo "
             + "to update it. If a reinstall is unavoidable, first back up "
@@ -1312,39 +1313,20 @@ public class LauncherActivity extends Activity {
         footer.setBackground(hudSurface(HaloTheme.PANEL_TOP,
             HaloTheme.PANEL_BOTTOM, HUD_BORDER));
 
-        LinearLayout choices = new LinearLayout(this);
-        choices.setOrientation(LinearLayout.HORIZONTAL);
+        // Internal mode flags preserve the existing native launch branches.
+        // The five tabs and offline radio group are the visible controls.
         CheckBox offlineMode = new CheckBox(this);
-        offlineMode.setText("OFFLINE BOTS");
-        hudCheck(offlineMode);
-        offlineMode.setBackground(hudSurface(Color.rgb(24, 42, 52),
-            Color.rgb(14, 27, 36), HUD_BORDER));
-        choices.addView(offlineMode, new LinearLayout.LayoutParams(
-            0, dp(39), 1.0f));
-
         CheckBox lanMode = new CheckBox(this);
-        lanMode.setText("LAN / SYSTEM LINK");
-        hudCheck(lanMode);
-        lanMode.setBackground(hudSurface(Color.rgb(24, 42, 52),
-            Color.rgb(14, 27, 36), HUD_BORDER));
-        LinearLayout.LayoutParams lanModeParams = new LinearLayout.LayoutParams(
-            0, dp(39), 1.0f);
-        lanModeParams.leftMargin = dp(8);
-        choices.addView(lanMode, lanModeParams);
-        // Legacy checkbox state is kept for the stable config/launch logic,
-        // but the new mode bar selects it without displaying two controls.
-        SharedPreferences launcherPreferences = getSharedPreferences("launcher_ui", MODE_PRIVATE);
-        String savedMode = invitePending ? "lan" :
-            launcherPreferences.getString("play_mode", "lan");
-        offlineMode.setChecked("offline".equals(savedMode));
         lanMode.setChecked("lan".equals(savedMode));
+        offlineMode.setChecked(!lanMode.isChecked() && botMatch.isChecked());
+        final boolean[] toolsVisible = { false };
+        final boolean[] homeVisible = { !invitePending };
         Runnable updateRewardVisibility = () -> {
-            boolean available = offlineMode.isChecked() ||
+            boolean playing = !toolsVisible[0] && !homeVisible[0];
+            boolean available = playing && (offlineMode.isChecked() ||
                 (lanMode.isChecked() && hostRole.isChecked() &&
-                    lanOnly.isChecked() && !invitePending);
-            killstreakToggle.setVisibility(available ? View.VISIBLE : View.GONE);
-            killstreakPanel.setVisibility(View.GONE);
-            killstreakToggle.setSelected(false);
+                    lanOnly.isChecked() && !invitePending));
+            killstreakPanel.setVisibility(available ? View.VISIBLE : View.GONE);
         };
         roles.setOnCheckedChangeListener((group, id) -> {
             updateRole.run();
@@ -1352,12 +1334,12 @@ public class LauncherActivity extends Activity {
         });
         lanOnly.setOnCheckedChangeListener((button, checked) ->
             updateRewardVisibility.run());
-        final boolean[] toolsVisible = { false };
-        final boolean[] homeVisible = { !invitePending };
         Runnable updateMode = () -> {
             boolean playing = !toolsVisible[0] && !homeVisible[0];
-            offlinePanel.setVisibility(playing && offlineMode.isChecked() ?
+            offlinePanel.setVisibility(playing && !lanMode.isChecked() ?
                 View.VISIBLE : View.GONE);
+            offlineBotOptions.setVisibility(offlineMode.isChecked() ? View.VISIBLE : View.GONE);
+            campaignInfo.setVisibility(offlineMode.isChecked() ? View.GONE : View.VISIBLE);
             lanPanel.setVisibility(playing && lanMode.isChecked() ?
                 View.VISIBLE : View.GONE);
             toolsPage.setVisibility(toolsVisible[0] ? View.VISIBLE : View.GONE);
@@ -1366,14 +1348,10 @@ public class LauncherActivity extends Activity {
             if (socialUi != null) socialUi.setVisible(homeVisible[0]);
             footer.setVisibility(homeVisible[0] ? View.GONE : View.VISIBLE);
             updateRewardVisibility.run();
-            if (!playing) killstreakToggle.setVisibility(View.GONE);
-            killstreakPanel.setVisibility(View.GONE);
-            killstreakToggle.setSelected(false);
             if (playButton != null)
                 playButton.setVisibility(playing ? View.VISIBLE : View.GONE);
-            int chosen = homeVisible[0] ? 0 : toolsVisible[0] ? 5 :
-                offlineMode.isChecked() ? 1 :
-                lanMode.isChecked() ? (hostRole.isChecked() ? 3 : 4) : 2;
+            int chosen = homeVisible[0] ? 0 : toolsVisible[0] ? 4 :
+                lanMode.isChecked() ? (hostRole.isChecked() ? 2 : 3) : 1;
             for (int i = 0; i < modeTabs.length; i++)
                 modeTabs[i].setSelected(i == chosen);
             scroll.scrollTo(0, 0);
@@ -1388,6 +1366,12 @@ public class LauncherActivity extends Activity {
                 offlineMode.setChecked(false);
             updateMode.run();
         });
+        offlineType.setOnCheckedChangeListener((group, selected) -> {
+            boolean bots = selected == botMatch.getId();
+            launcherPreferences.edit().putString("offline_game_type", bots ? "bots" : "campaign").apply();
+            if (!lanMode.isChecked()) offlineMode.setChecked(bots);
+            updateMode.run();
+        });
         updateMode.run();
         // Keep the existing mode/configuration machinery, but use one
         // compact navigation row for all normal player decisions.
@@ -1400,22 +1384,17 @@ public class LauncherActivity extends Activity {
         modeTabs[0].setOnClickListener(view -> openLeaderboard());
         modeTabs[1].setOnClickListener(view -> {
             homeVisible[0] = toolsVisible[0] = false;
-            offlineMode.setChecked(true);
+            lanMode.setChecked(false);
+            offlineMode.setChecked(botMatch.isChecked());
             updateMode.run();
         });
         modeTabs[2].setOnClickListener(view -> {
-            homeVisible[0] = toolsVisible[0] = false;
-            offlineMode.setChecked(false);
-            lanMode.setChecked(false);
-            updateMode.run();
-        });
-        modeTabs[3].setOnClickListener(view -> {
             homeVisible[0] = toolsVisible[0] = false;
             roles.check(hostRole.getId());
             lanMode.setChecked(true);
             updateMode.run();
         });
-        modeTabs[4].setOnClickListener(view -> {
+        modeTabs[3].setOnClickListener(view -> {
             homeVisible[0] = toolsVisible[0] = false;
             roles.check(joinRole.getId());
             lanMode.setChecked(true);
@@ -1425,7 +1404,7 @@ public class LauncherActivity extends Activity {
             if (lanOnly.isChecked() && !invitePending)
                 hostPicker.search(false, null);
         });
-        modeTabs[5].setOnClickListener(view -> {
+        modeTabs[4].setOnClickListener(view -> {
             homeVisible[0] = false;
             toolsVisible[0] = true;
             updateMode.run();
@@ -1440,29 +1419,6 @@ public class LauncherActivity extends Activity {
             new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                 Uri.parse("package:" + getPackageName()))));
         footer.addView(appSettings);
-
-        CheckBox recordHighlights = new CheckBox(this);
-        recordHighlights.setText("RECORD MULTIPLAYER MATCHES (OPT-IN • SILENT)");
-        recordHighlights.setChecked(getSharedPreferences("reel_settings",
-            MODE_PRIVATE).getBoolean("record_opt_in", false));
-        hudCheck(recordHighlights);
-        footer.addView(recordHighlights);
-
-        CheckBox keepFullVideo = new CheckBox(this);
-        keepFullVideo.setText("KEEP FULL MATCH RECORDINGS");
-        keepFullVideo.setChecked(getSharedPreferences("reel_settings", MODE_PRIVATE)
-            .getBoolean("keep_full_match", false));
-        hudCheck(keepFullVideo);
-        keepFullVideo.setOnCheckedChangeListener((view, checked) ->
-            getSharedPreferences("reel_settings", MODE_PRIVATE).edit()
-                .putBoolean("keep_full_match", checked).apply());
-        footer.addView(keepFullVideo);
-        keepFullVideo.setVisibility(recordHighlights.isChecked() ? View.VISIBLE : View.GONE);
-        recordHighlights.setOnCheckedChangeListener((view, checked) -> {
-            getSharedPreferences("reel_settings", MODE_PRIVATE).edit()
-                .putBoolean("record_opt_in", checked).apply();
-            keepFullVideo.setVisibility(checked ? View.VISIBLE : View.GONE);
-        });
 
         Button play = new Button(this);
         playButton = play;
@@ -1561,7 +1517,7 @@ public class LauncherActivity extends Activity {
                     roleState.putString("last_host", hostIp.getText().toString().trim());
                 roleState.apply();
             } else {
-                // No box checked: launch ordinary Halo with no synthetic
+                // Campaign selected: launch ordinary Halo with no synthetic
                 // offline bots, while preserving network setup and saves.
                 try {
                     OfflineBotConfig.disable(new File(dataRoot, "config.toml"));
