@@ -34,6 +34,24 @@ class OriginalTitleTest(unittest.TestCase):
         self.assertIn('Java_com_halo_decomp_HaloActivity_finishTitleAudio',s)
         self.assertIn('atomic_store(&title_audio_recording, 0)',s)
 
+    def test_automatic_preparation_no_button_or_startup_loop(self):
+        launcher=(J/"LauncherActivity.java").read_text()
+        files=(J/"TitleBackdropFiles.java").read_text()
+        method=launcher.split("private void maybePrepareOriginalTitle()",1)[1].split("private void buildLanInterface()",1)[0]
+        for guard in ("!launcherResumed", "isFinishing()", "isDestroyed()", "!haveData()",
+                      "repairBusy || gameProcessStatus() != 0", "pendingVideoLaunch != null",
+                      "hasInternetInvite()", 'new File(dataRoot, "join_link.txt").exists()'):
+            self.assertIn(guard,method)
+        self.assertIn('TitleBackdropFiles.shouldPrepare(titleBackdropAvailable,',method)
+        self.assertLess(method.index('putLong("attempted_version", version).commit()'),
+                        method.index('startActivity(new Intent(this, HaloActivity.class)'))
+        self.assertIn("attemptedVersion != installedVersion",files)
+        self.assertIn("!ready && installedVersion >= 0",files)
+        self.assertNotIn('prepareTitle.setText("ORIGINAL TITLE")',launcher)
+        self.assertNotIn('setTitle("Use the original Halo title?")',launcher)
+        self.assertIn("handler.post(this::maybePrepareOriginalTitle)",launcher)
+        self.assertIn("maybePrepareOriginalTitle();",launcher)
+
     def test_capture_and_launcher_lifecycle(self):
         activity=(J/"HaloActivity.java").read_text()
         capture=(J/"TitleBackdropCapture.java").read_text()

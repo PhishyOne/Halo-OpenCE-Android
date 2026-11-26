@@ -18,6 +18,13 @@ final class TitleBackdropFiles {
     static final long MAX_AUDIO = 44L + 48000L * 4 * SECONDS;
     private TitleBackdropFiles() { }
 
+    /** One automatic attempt per installed version; valid caches take
+     * priority even after an update. New versions may fix capture failures. */
+    static boolean shouldPrepare(boolean ready, long attemptedVersion, long installedVersion) {
+        return !ready && installedVersion >= 0 && attemptedVersion != installedVersion;
+    }
+
+
     static File pending(File root) { return new File(root, PENDING); }
     static File directory(File root) { return new File(root, FINAL); }
 

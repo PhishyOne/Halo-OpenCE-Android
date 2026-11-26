@@ -35,6 +35,11 @@ public final class TitleBackdropFilesTest {
             File r=root.toFile();
             Files.write(root.resolve("keep-game-data"),new byte[]{42});
             check(!TitleBackdropFiles.ready(r),"missing cache does not appear ready");
+            check(TitleBackdropFiles.shouldPrepare(false,-1,69),"first startup prepares");
+            check(!TitleBackdropFiles.shouldPrepare(false,69,69),"cancel/crash cannot loop");
+            check(TitleBackdropFiles.shouldPrepare(false,69,70),"updated build can retry");
+            check(!TitleBackdropFiles.shouldPrepare(true,69,70),"valid cache survives update");
+            check(!TitleBackdropFiles.shouldPrepare(false,-1,-1),"unknown version fails closed");
             TitleBackdropFiles.prepare(r);
             File pending=TitleBackdropFiles.pending(r);
             check(pending.isDirectory(),"staging created");

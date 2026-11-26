@@ -694,31 +694,39 @@ public class LauncherActivity extends Activity {
         button.setPadding(dp(2), dp(3), dp(2), dp(3));
     }
 
-    private void prepareOriginalTitle() {
-        if (repairBusy || gameProcessStatus() != 0) {
-            HaloNotice.makeText(this, "Close Halo and finish file operations before preparing its title.", HaloNotice.LENGTH_LONG).show();
+    /** Prepare once automatically after the first usable foreground launch.
+     * Remember the attempt before starting the separate native process: a
+     * canceled, crashed, or failed capture must not create a startup loop. */
+    private void maybePrepareOriginalTitle() {
+        if (!launcherResumed || isFinishing() || isDestroyed() ||
+                dataRoot == null || dashboardPanel == null ||
+                titleBackdropAvailable || !haveData() ||
+                repairBusy || gameProcessStatus() != 0 ||
+                pendingVideoLaunch != null ||
+                hasInternetInvite() || new File(dataRoot, "join_link.txt").exists())
+            return;
+        SharedPreferences prefs = getSharedPreferences("launcher_title", MODE_PRIVATE);
+        long version;
+        try {
+            version = getPackageManager().getPackageInfo(getPackageName(), 0)
+                .getLongVersionCode();
+        } catch (android.content.pm.PackageManager.NameNotFoundException unavailable) {
             return;
         }
-        if (hasInternetInvite() || new File(dataRoot, "join_link.txt").exists()) {
-            HaloNotice.makeText(this, "Finish the pending game invitation first.", HaloNotice.LENGTH_LONG).show();
+        if (!TitleBackdropFiles.shouldPrepare(titleBackdropAvailable,
+                prefs.getLong("attempted_version", -1), version))
             return;
+        // Synchronously persist before launching: survives process death.
+        if (!prefs.edit().putLong("attempted_version", version).commit()) return;
+        try {
+            TitleBackdropFiles.prepare(getFilesDir());
+            startActivity(new Intent(this, HaloActivity.class)
+                .putExtra(HaloActivity.TITLE_CAPTURE, true));
+        } catch (Exception unavailable) {
+            HaloNotice.makeText(this, "Original title unavailable; Halo still works. " +
+                (unavailable.getMessage() == null ? "" : unavailable.getMessage()),
+                HaloNotice.LENGTH_LONG).show();
         }
-        new HaloDialog.Builder(this).setTitle("Use the original Halo title?")
-            .setMessage("Halo will render its real animated background and title music once from your installed game data. " +
-                "Keep this screen open during preparation. The local cache uses no extra download and no screen recording permission.")
-            .setNegativeButton("CANCEL", null)
-            .setPositiveButton("PREPARE", (dialog, which) -> {
-                if (repairBusy || gameProcessStatus() != 0 || hasInternetInvite() ||
-                        new File(dataRoot, "join_link.txt").exists()) return;
-                try {
-                    TitleBackdropFiles.prepare(getFilesDir());
-                    startActivity(new Intent(this, HaloActivity.class)
-                        .putExtra(HaloActivity.TITLE_CAPTURE, true));
-                } catch (Exception unavailable) {
-                    HaloNotice.makeText(this, unavailable.getMessage() == null ?
-                        "Could not prepare the title." : unavailable.getMessage(), HaloNotice.LENGTH_LONG).show();
-                }
-            }).show();
     }
 
     private void buildLanInterface() {
@@ -773,22 +781,7 @@ public class LauncherActivity extends Activity {
         subtitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
         subtitleLayout.width = 0;
         subtitleLayout.weight = 0.65f;
-        if (titleBackdropAvailable) {
-            masthead.addView(subtitle, subtitleLayout);
-        } else {
-            Button prepareTitle = new Button(this);
-            prepareTitle.setText("ORIGINAL TITLE");
-            hudButton(prepareTitle, false);
-            prepareTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
-            prepareTitle.setMinWidth(0);
-            prepareTitle.setMinimumWidth(0);
-            prepareTitle.setPadding(dp(3), 0, dp(3), 0);
-            prepareTitle.setSingleLine(true);
-            prepareTitle.setContentDescription("Prepare original Halo animated background and music");
-            prepareTitle.setOnClickListener(v -> prepareOriginalTitle());
-            subtitleLayout.height = dp(setupRowHeight());
-            masthead.addView(prepareTitle, subtitleLayout);
-        }
+        masthead.addView(subtitle, subtitleLayout);
         Button livePeers = new Button(this);
         hudButton(livePeers, false);
         livePeers.setAllCaps(false);
@@ -1561,6 +1554,8 @@ public class LauncherActivity extends Activity {
         setContentView(stage);
         if (launcherResumed && titleBackdrop != null) titleBackdrop.resumeTitle();
         updateMode.run(); // hide PLAY on the default leaderboard screen
+        if (launcherResumed && !titleBackdropAvailable)
+            handler.post(this::maybePrepareOriginalTitle);
         // Reentering Join after an in-place APK update should find a host
         // still playing without asking the host to leave the match.
         if (lanMode.isChecked() && joinRole.isChecked() &&
@@ -2189,6 +2184,7 @@ public class LauncherActivity extends Activity {
         }
         if (titleBackdrop != null) titleBackdrop.resumeTitle();
         showTitleResult(getIntent());
+        maybePrepareOriginalTitle();
     }
 
     @Override
