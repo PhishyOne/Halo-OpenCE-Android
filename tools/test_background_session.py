@@ -18,6 +18,19 @@ typedef int SDL_Window;
 static SDL_Window window;
 enum { _handle_window };
 static int surface, lose_during_pump, swaps;
+static int host_title_capture_mode, capture_requested, captures;
+static int captured_before_swap;
+static int host_title_capture_requested(void) { return capture_requested; }
+static int SDL_GetWindowSizeInPixels(SDL_Window *w, int *width, int *height) {
+    assert(w && surface); *width = 1536; *height = 686; return 1;
+}
+static void host_title_capture_present(int width, int height) {
+    assert(surface && width == 1536 && height == 686);
+    assert(host_title_capture_mode && capture_requested);
+    captured_before_swap = swaps;
+    captures++;
+}
+
 static void *handle_get(uint32_t id, int kind) { (void)kind; return id ? &window : 0; }
 static void SDL_PumpEvents(void) { if (lose_during_pump) surface = 0; }
 static void *SDL_GL_GetCurrentContext(void) { return surface ? &window : 0; }
@@ -31,6 +44,21 @@ int main(void) {
     lose_during_pump = 0; surface = 1;
     assert(host_sdl_gl_swap_window(1)); assert(swaps == 2);
     assert(!host_sdl_gl_swap_window(0)); assert(swaps == 2);
+    /* An outstanding request cannot affect an ordinary gameplay swap. */
+    capture_requested = 1;
+    assert(host_sdl_gl_swap_window(1)); assert(swaps == 3 && captures == 0);
+    host_title_capture_mode = 1;
+    capture_requested = 0;
+    assert(host_sdl_gl_swap_window(1)); assert(swaps == 4 && captures == 0);
+    capture_requested = 1;
+    assert(host_sdl_gl_swap_window(1));
+    assert(swaps == 5 && captures == 1 && captured_before_swap == 4);
+    /* Context loss must prevent readback as well as the actual swap. */
+    lose_during_pump = 1;
+    assert(host_sdl_gl_swap_window(1)); assert(swaps == 5 && captures == 1);
+    lose_during_pump = 0; surface = 1;
+    assert(!host_sdl_gl_swap_window(0)); assert(swaps == 5 && captures == 1);
+
     return 0;
 }
 '''
