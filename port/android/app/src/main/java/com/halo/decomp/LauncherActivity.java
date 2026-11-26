@@ -1019,7 +1019,7 @@ public class LauncherActivity extends Activity {
         addSetupCheck(recordingChecks, recordHighlights);
 
         CheckBox keepFullVideo = new CheckBox(this);
-        keepFullVideo.setText("KEEP FULL");
+        keepFullVideo.setText("KEEP FULL RECORDING");
         keepFullVideo.setContentDescription("Keep full match recordings");
         keepFullVideo.setChecked(getSharedPreferences("reel_settings", MODE_PRIVATE)
             .getBoolean("keep_full_match", false));
@@ -1027,6 +1027,14 @@ public class LauncherActivity extends Activity {
             getSharedPreferences("reel_settings", MODE_PRIVATE).edit()
                 .putBoolean("keep_full_match", checked).apply());
         addSetupCheck(recordingChecks, keepFullVideo);
+        // Give the longer label more of the existing row; allow wrapping
+        // at large font scales rather than shrinking or clipping the text.
+        LinearLayout.LayoutParams fullRecordingParams =
+            (LinearLayout.LayoutParams) keepFullVideo.getLayoutParams();
+        fullRecordingParams.weight = 1.25f;
+        keepFullVideo.setLayoutParams(fullRecordingParams);
+        keepFullVideo.setSingleLine(false);
+        recordHighlights.setSingleLine(false);
         keepFullVideo.setEnabled(recordHighlights.isChecked());
         recordHighlights.setOnCheckedChangeListener((view, checked) -> {
             getSharedPreferences("reel_settings", MODE_PRIVATE).edit()

@@ -46,6 +46,10 @@ class CompactLauncherTest(unittest.TestCase):
         self.assertIn("int count = hosting ?", self.s)
         self.assertIn("addSetupCheck(recordingChecks, recordHighlights)", self.s)
         self.assertIn("addSetupCheck(recordingChecks, keepFullVideo)", self.s)
+        self.assertIn('keepFullVideo.setText("KEEP FULL RECORDING");', self.s)
+        self.assertIn("fullRecordingParams.weight = 1.25f", self.s)
+        self.assertIn("keepFullVideo.setSingleLine(false)", self.s)
+        self.assertIn('putBoolean("keep_full_match", checked)', self.s)
 
     def test_tools_actions_consolidated_and_no_disclosures(self):
         self.assertIn("toolsPage.addView(repairPanel)", self.s)
