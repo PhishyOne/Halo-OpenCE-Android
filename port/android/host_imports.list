@@ -75,3 +75,4 @@ host_touch_lobby_take_delta
 host_https_get
 
 host_errno
+host_android_title_ready

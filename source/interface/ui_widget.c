@@ -680,6 +680,11 @@ struct widget_instance;
 #include "text/text_group.h"
 #include "text/unicode.h"
 #include "ui_widget.h"
+#ifdef HALO_ANDROID
+#include <stdlib.h>
+extern void host_android_title_ready(void);
+#endif
+
 /* port: port/linux/game/menu_functions.c: a text's colour in place of its
 own (the server browser's pings) */
 boolean pc_menu_text_color(struct widget_instance *widget, real_argb_color *color);
@@ -4322,6 +4327,16 @@ void draw_string_and_hack_in_icons(
 	return;
 }
 
+boolean ui_launcher_title_capture_active(void)
+{
+#ifdef HALO_ANDROID
+	const char *mode = getenv("HALO_LAUNCHER_TITLE_CAPTURE");
+	return mode && !strcmp(mode, "1");
+#else
+	return FALSE;
+#endif
+}
+
 void ui_start_main_menu_music(
 	void)
 {
@@ -4332,6 +4347,10 @@ void ui_start_main_menu_music(
 		if (sound_definition_index != NONE)
 		{
 			error(_error_silent, "starting main menu music");
+#ifdef HALO_ANDROID
+			if (ui_launcher_title_capture_active())
+				host_android_title_ready();
+#endif
 			scripted_looping_sound_start(sound_definition_index, NONE, 1.0f);
 			widget_globals.main_menu_music_active = TRUE;
 		}
@@ -5002,7 +5021,12 @@ void main_screen_shell_load(
 	{
 		char const *command_line = shell_get_command_line();
 
-		if (command_line && _stricmp(command_line, "xdemo") == 0)
+		if (ui_launcher_title_capture_active())
+		{
+			/* Keep the real title scenario and its ring camera script;
+			 * omit only the unrelated startup movie. */
+		}
+		else if (command_line && _stricmp(command_line, "xdemo") == 0)
 		{
 			error(_error_silent, "xbox command line= '%s'", command_line);
 		}
@@ -5041,6 +5065,8 @@ void main_screen_shell_load(
 		if (!widget_globals.main_menu_music_active)
 			ui_start_main_menu_music();
 		reset_last_player1_profile_index();
+		if (ui_launcher_title_capture_active())
+			ui_widgets_inhibit_processing(TRUE);
 	}
 	if (!virtual_keyboard_initialize())
 		error(_error_silent, "failed to initialize the virtual keyboard");
@@ -7417,6 +7443,11 @@ void render_ui_widgets(
 		window_bounds != NULL);
 	local_player_index_for_draw_string_and_hack_in_icons =
 		local_player_index == NONE ? 0 : local_player_index;
+	/* Only the local title capture hides the native menu widgets. The
+	 * scenario/camera, scripts and title soundtrack remain the real game. */
+	if (we_are_at_the_main_menu && widget_globals.main_menu_music_active &&
+		ui_launcher_title_capture_active())
+		return;
 	if (bink_playback_ui_rendering_inhibited())
 		return;
 	if (!virtual_keyboard_active())

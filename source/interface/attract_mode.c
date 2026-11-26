@@ -42,6 +42,9 @@ boolean attract_mode_should_start(
 {
 	boolean should_start = FALSE;
 	real progress;
+	/* The launcher wants the title animation, never a demo movie. */
+	if (ui_launcher_title_capture_active())
+		return FALSE;
 
 	if (cache_files_precache_in_progress() &&
 		cache_files_precache_map_status(&progress)==1)

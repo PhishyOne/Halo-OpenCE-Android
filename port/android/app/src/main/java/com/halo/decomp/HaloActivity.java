@@ -31,6 +31,12 @@ import org.libsdl.app.SDLActivity;
  * loads the game image from the APK's assets.
  */
 public class HaloActivity extends SDLActivity {
+    static final String TITLE_CAPTURE = "com.halo.decomp.TITLE_CAPTURE";
+    static final String TITLE_RESULT = "com.halo.decomp.TITLE_RESULT";
+    private boolean titleCaptureMode, titleReturning, titleForeground;
+    private TitleBackdropCapture titleCapture;
+    native int finishTitleAudio(boolean keep);
+
     static final String NETWORK_SESSION = "com.halo.decomp.NETWORK_SESSION";
     static final String OFFLINE_BOT_ARGUMENTS = "com.halo.decomp.OFFLINE_BOT_ARGUMENTS";
     static final String LAN_UPDATE_HOST = "com.halo.decomp.LAN_UPDATE_HOST";
@@ -74,15 +80,22 @@ public class HaloActivity extends SDLActivity {
 
     @Override
     protected String[] getArguments() {
+        if (getIntent().getBooleanExtra(TITLE_CAPTURE, false))
+            return new String[] { "--launcher-title-capture" };
         String[] arguments = getIntent().getStringArrayExtra(OFFLINE_BOT_ARGUMENTS);
         return arguments == null ? super.getArguments() : arguments;
     }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        titleCaptureMode = getIntent().getBooleanExtra(TITLE_CAPTURE, false);
         super.onCreate(savedInstanceState);
         // SDL loads here, before its game thread starts on resume/surface ready.
         SDLActivity.nativeSetenv("SDL_ANDROID_BLOCK_ON_PAUSE", "0");
+        if (titleCaptureMode) {
+            showTitlePreparation();
+            return;
+        }
         if (savedInstanceState != null)
             pendingLayoutExport = savedInstanceState.getString("pending-layout-export");
         if (mLayout != null) {
@@ -108,6 +121,85 @@ public class HaloActivity extends SDLActivity {
         updateLanShare(getIntent());
     }
 
+    private void showTitlePreparation() {
+        if (mLayout == null) {
+            returnFromTitleCapture(false, "SDL title surface unavailable.");
+            return;
+        }
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        android.widget.LinearLayout overlay = new android.widget.LinearLayout(this);
+        overlay.setOrientation(android.widget.LinearLayout.VERTICAL);
+        overlay.setGravity(Gravity.BOTTOM);
+        overlay.setClickable(true); // do not send menu input through the overlay
+        android.widget.LinearLayout strip = new android.widget.LinearLayout(this);
+        strip.setGravity(Gravity.CENTER_VERTICAL);
+        strip.setPadding(12, 8, 12, 8);
+        strip.setBackgroundColor(0xc0102235);
+        android.widget.TextView status = new android.widget.TextView(this);
+        status.setText("Loading the original Halo title...");
+        status.setTextColor(0xffd4eaff);
+        status.setTextSize(14);
+        HaloTheme.font(status, false);
+        strip.addView(status, new android.widget.LinearLayout.LayoutParams(0, -2, 1f));
+        android.widget.Button cancel = new android.widget.Button(this);
+        cancel.setText("CANCEL");
+        HaloTheme.menuButtonColors(cancel);
+        HaloTheme.font(cancel, true);
+        strip.addView(cancel);
+        overlay.addView(strip, new android.widget.LinearLayout.LayoutParams(-1, -2));
+        mLayout.addView(overlay, new android.widget.FrameLayout.LayoutParams(-1, -1));
+        titleCapture = new TitleBackdropCapture(this, mLayout, status);
+        cancel.setOnClickListener(v -> titleCapture.cancel());
+    }
+
+    /** Called by the native host only for a dedicated title launch, when
+     * the original title1 looping-sound tag starts. */
+    public void onNativeTitleReady(boolean audioReady) {
+        runOnUiThread(() -> {
+            if (titleCaptureMode && titleCapture != null && !titleReturning)
+                titleCapture.ready(audioReady);
+        });
+    }
+
+    void returnFromTitleCapture(boolean success, String message) {
+        if (!titleCaptureMode || titleReturning) return;
+        titleReturning = true;
+        android.content.Intent launcher = new android.content.Intent(this, LauncherActivity.class)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK |
+                android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP |
+                android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(TITLE_RESULT, message);
+        if (titleForeground)
+            try { startActivity(launcher); } catch (RuntimeException ignored) { }
+        // This :game process contains only the read-only title preview, never
+        // a match. End it so the ordinary launcher can start a fresh game.
+        finishAndRemoveTask();
+        android.os.Process.killProcess(android.os.Process.myPid());
+    }
+
+    @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        if (titleCaptureMode) {
+            int key = event.getKeyCode();
+            if (key == android.view.KeyEvent.KEYCODE_VOLUME_UP ||
+                key == android.view.KeyEvent.KEYCODE_VOLUME_DOWN ||
+                key == android.view.KeyEvent.KEYCODE_VOLUME_MUTE)
+                return super.dispatchKeyEvent(event);
+            if (event.getKeyCode() == android.view.KeyEvent.KEYCODE_BACK &&
+                    event.getAction() == android.view.KeyEvent.ACTION_UP && titleCapture != null)
+                titleCapture.cancel();
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
+    @Override public void onBackPressed() {
+        if (titleCaptureMode) {
+            if (titleCapture != null) titleCapture.cancel();
+            return;
+        }
+        super.onBackPressed();
+    }
+
     /** Single-instance Android activities are reused after returning to
      * the launcher. v23-v30 started the listener only in onCreate(), so a
      * reused :game Activity could host matches with no update endpoint.
@@ -116,6 +208,7 @@ public class HaloActivity extends SDLActivity {
     @Override
     public void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        if (titleCaptureMode) return;
         if ("com.halo.decomp.RESUME_SESSION".equals(intent.getAction())) return;
         publishVideoVisibility(false);
         setIntent(intent);
@@ -363,6 +456,7 @@ public class HaloActivity extends SDLActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (titleCaptureMode) { titleForeground = true; return; }
         HaloNotice.foreground(this);
         refreshSocialSharing();
         publishVideoVisibility(getWindow().getDecorView().hasWindowFocus());
@@ -381,6 +475,12 @@ public class HaloActivity extends SDLActivity {
 
     @Override
     protected void onPause() {
+        if (titleCaptureMode) {
+            titleForeground = false;
+            if (!titleReturning && titleCapture != null) titleCapture.cancel();
+            super.onPause();
+            return;
+        }
         HaloNotice.background(this);
         publishVideoVisibility(false);
         rewardActivityResumed = false;
@@ -407,6 +507,11 @@ public class HaloActivity extends SDLActivity {
 
     @Override
     protected void onDestroy() {
+        if (titleCaptureMode) {
+            if (!titleReturning && titleCapture != null) titleCapture.cancel();
+            super.onDestroy();
+            return;
+        }
         publishVideoVisibility(false);
         // Finalize the opt-in screen recording when gameplay closes.
         // This is a separate service in the launcher process; normal Halo

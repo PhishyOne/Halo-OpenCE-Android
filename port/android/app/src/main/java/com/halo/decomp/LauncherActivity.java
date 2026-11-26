@@ -83,6 +83,8 @@ public class LauncherActivity extends Activity {
 
 
     private File dataRoot;
+    private LauncherBackdrop titleBackdrop;
+    private boolean titleBackdropAvailable;
     private TextView status;
     private ProgressBar progress;
     private Button pick;
@@ -455,8 +457,10 @@ public class LauncherActivity extends Activity {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(14), dp(10), dp(14), dp(12));
-        panel.setBackground(hudSurface(HaloTheme.PANEL_TOP,
-            HaloTheme.PANEL_BOTTOM, HUD_BORDER));
+        panel.setBackground(hudSurface(
+            titleBackdropAvailable ? (HaloTheme.PANEL_TOP & 0x00ffffff) | 0xb8000000 : HaloTheme.PANEL_TOP,
+            titleBackdropAvailable ? (HaloTheme.PANEL_BOTTOM & 0x00ffffff) | 0xb8000000 : HaloTheme.PANEL_BOTTOM,
+            HUD_BORDER));
         return panel;
     }
 
@@ -690,7 +694,37 @@ public class LauncherActivity extends Activity {
         button.setPadding(dp(2), dp(3), dp(2), dp(3));
     }
 
+    private void prepareOriginalTitle() {
+        if (repairBusy || gameProcessStatus() != 0) {
+            HaloNotice.makeText(this, "Close Halo and finish file operations before preparing its title.", HaloNotice.LENGTH_LONG).show();
+            return;
+        }
+        if (hasInternetInvite() || new File(dataRoot, "join_link.txt").exists()) {
+            HaloNotice.makeText(this, "Finish the pending game invitation first.", HaloNotice.LENGTH_LONG).show();
+            return;
+        }
+        new HaloDialog.Builder(this).setTitle("Use the original Halo title?")
+            .setMessage("Halo will render its real animated background and title music once from your installed game data. " +
+                "Keep this screen open during preparation. The local cache uses no extra download and no screen recording permission.")
+            .setNegativeButton("CANCEL", null)
+            .setPositiveButton("PREPARE", (dialog, which) -> {
+                if (repairBusy || gameProcessStatus() != 0 || hasInternetInvite() ||
+                        new File(dataRoot, "join_link.txt").exists()) return;
+                try {
+                    TitleBackdropFiles.prepare(getFilesDir());
+                    startActivity(new Intent(this, HaloActivity.class)
+                        .putExtra(HaloActivity.TITLE_CAPTURE, true));
+                } catch (Exception unavailable) {
+                    HaloNotice.makeText(this, unavailable.getMessage() == null ?
+                        "Could not prepare the title." : unavailable.getMessage(), HaloNotice.LENGTH_LONG).show();
+                }
+            }).show();
+    }
+
     private void buildLanInterface() {
+        if (titleBackdrop != null) titleBackdrop.pauseTitle();
+        titleBackdrop = null;
+        titleBackdropAvailable = TitleBackdropFiles.ready(getFilesDir());
         LanConfig.Settings settings = new LanConfig.Settings();
         String warning = "";
         try {
@@ -705,9 +739,16 @@ public class LauncherActivity extends Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+        android.widget.FrameLayout stage = new android.widget.FrameLayout(this);
+        stage.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
             new int[] { HaloTheme.BACKGROUND_TOP, HaloTheme.BACKGROUND_CENTER,
                 HaloTheme.BACKGROUND_BOTTOM }));
+        if (titleBackdropAvailable) {
+            titleBackdrop = new LauncherBackdrop(this, getFilesDir());
+            stage.addView(titleBackdrop, new android.widget.FrameLayout.LayoutParams(-1, -1));
+            root.setBackgroundColor(0x60091320);
+        }
+        stage.addView(root, new android.widget.FrameLayout.LayoutParams(-1, -1));
 
         LinearLayout masthead = new LinearLayout(this);
         masthead.setOrientation(LinearLayout.HORIZONTAL);
@@ -732,7 +773,22 @@ public class LauncherActivity extends Activity {
         subtitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
         subtitleLayout.width = 0;
         subtitleLayout.weight = 0.65f;
-        masthead.addView(subtitle, subtitleLayout);
+        if (titleBackdropAvailable) {
+            masthead.addView(subtitle, subtitleLayout);
+        } else {
+            Button prepareTitle = new Button(this);
+            prepareTitle.setText("ORIGINAL TITLE");
+            hudButton(prepareTitle, false);
+            prepareTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+            prepareTitle.setMinWidth(0);
+            prepareTitle.setMinimumWidth(0);
+            prepareTitle.setPadding(dp(3), 0, dp(3), 0);
+            prepareTitle.setSingleLine(true);
+            prepareTitle.setContentDescription("Prepare original Halo animated background and music");
+            prepareTitle.setOnClickListener(v -> prepareOriginalTitle());
+            subtitleLayout.height = dp(setupRowHeight());
+            masthead.addView(prepareTitle, subtitleLayout);
+        }
         Button livePeers = new Button(this);
         hudButton(livePeers, false);
         livePeers.setAllCaps(false);
@@ -1502,7 +1558,8 @@ public class LauncherActivity extends Activity {
             LinearLayout.LayoutParams.MATCH_PARENT, dp(Math.max(44, setupRowHeight() + 4)));
         footer.addView(play, playParams);
         actionDock.setActions(footer, statusScroll, statusColumn);
-        setContentView(root);
+        setContentView(stage);
+        if (launcherResumed && titleBackdrop != null) titleBackdrop.resumeTitle();
         updateMode.run(); // hide PLAY on the default leaderboard screen
         // Reentering Join after an in-place APK update should find a host
         // still playing without asking the host to leave the match.
@@ -2076,6 +2133,7 @@ public class LauncherActivity extends Activity {
     @Override
     protected void onPause() {
         launcherResumed = false;
+        if (titleBackdrop != null) titleBackdrop.pauseTitle();
         if (remoteReelPlayer != null) remoteReelPlayer.close();
         if (livePeerMonitor != null) livePeerMonitor.pause();
         super.onPause();
@@ -2089,6 +2147,7 @@ public class LauncherActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (titleBackdrop != null) titleBackdrop.pauseTitle();
         if (remoteReelPlayer != null) remoteReelPlayer.close();
         if (socialUi != null) socialUi.close();
         if (livePeerMonitor != null) livePeerMonitor.close();
@@ -2122,9 +2181,37 @@ public class LauncherActivity extends Activity {
         if (pick != null && pick.isEnabled() && haveData()) {
             pick = null;
             buildLanInterface();
+        } else if (dashboardPanel != null &&
+                titleBackdropAvailable != TitleBackdropFiles.ready(getFilesDir())) {
+            buildLanInterface();
         } else if (dashboardPanel != null && dashboardPanel.getVisibility() == View.VISIBLE) {
             if (socialUi != null) socialUi.reload();
         }
+        if (titleBackdrop != null) titleBackdrop.resumeTitle();
+        showTitleResult(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        if (intent != null && intent.hasExtra(HaloActivity.TITLE_RESULT)) {
+            setIntent(intent);
+            if (dashboardPanel != null &&
+                    titleBackdropAvailable != TitleBackdropFiles.ready(getFilesDir()))
+                buildLanInterface();
+            showTitleResult(intent);
+        } else {
+            setIntent(intent);
+            passOnInvite(intent);
+        }
+    }
+
+    private void showTitleResult(Intent intent) {
+        if (intent == null) return;
+        String message = intent.getStringExtra(HaloActivity.TITLE_RESULT);
+        if (message == null) return;
+        intent.removeExtra(HaloActivity.TITLE_RESULT);
+        HaloNotice.makeText(this, message, HaloNotice.LENGTH_LONG).show();
     }
 
     @Override

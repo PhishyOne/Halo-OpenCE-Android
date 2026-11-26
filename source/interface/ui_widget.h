@@ -142,6 +142,8 @@ void display_error_text_when_main_menu_loaded(
 void display_error_abort_to_dashboard_deferred(
 	short error_code,
 	boolean optional);
+boolean ui_launcher_title_capture_active(void);
+
 void ui_start_main_menu_music(
 	void);
 void ui_stop_main_menu_music(

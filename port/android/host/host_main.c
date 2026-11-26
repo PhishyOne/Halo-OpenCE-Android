@@ -310,6 +310,9 @@ static uint32_t make_boot(const struct environment *environment)
 
 /* ---------- main */
 
+/* Set once before game_main starts; only this dedicated launch can capture title assets. */
+int host_title_capture_mode;
+
 #define MAIN_STACK_SIZE (16 * 1024 * 1024)
 
 /* the thread that runs the game: passes the display and its density, the
@@ -350,6 +353,16 @@ static void *game_main(void *launch_options)
             environment_set(&environment, "HALO_RATING_PRIVATE_ROOT", private_files);
     }
 	environment_set(&environment, "HALO_SAVE_ROOT", save_root);
+	if (host_title_capture_mode)
+	{
+		environment_set(&environment, "HALO_LAUNCHER_TITLE_CAPTURE", "1");
+		environment_set(&environment, "HALO_MENUS", "pc");
+		environment_set(&environment, "HALO_NET_ONLINE", "false");
+		environment_set(&environment, "HALO_NET_JOIN_FROM_CLIPBOARD", "false");
+		environment_set(&environment, "HALO_NETWORK_TEST", "");
+		environment_set(&environment, "HALO_BOTS", "0");
+	}
+
 	/* These overrides apply only to the launcher-selected offline session. */
 	if (offline_bots)
 	{
@@ -481,6 +494,7 @@ int main(int argc, char *argv[])
 	char **offline_bots = (argc == 5 || argc == 6) && !strcmp(argv[1], "--offline-bots")
         ? argv + 2 : NULL;
 
+	host_title_capture_mode = argc == 2 && !strcmp(argv[1], "--launcher-title-capture");
 	host_logf(HOST_LOG_INFO, "Halo for Android starting");
 	host_install_signal_handlers();
 	if (host_native_thread_create(game_main, offline_bots, MAIN_STACK_SIZE) != 0)

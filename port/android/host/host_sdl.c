@@ -17,6 +17,12 @@ so the audio callback is handed to a thread that has one.
 #include <jni.h>
 #include <pthread.h>
 #include <string.h>
+#include <stdio.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdatomic.h>
+#include <stdint.h>
+
 
 #define HANDLE_COUNT 256
 
@@ -313,6 +319,152 @@ int host_sdl_rumble_gamepad(uint32_t gamepad, uint32_t low, uint32_t high, uint3
 	return object ? SDL_RumbleGamepad(object, (Uint16)low, (Uint16)high, milliseconds) : 0;
 }
 
+/* Capture only the original local game mixer during a dedicated title
+ * launch. No microphone, screen recorder or normal gameplay recording. */
+extern int host_title_capture_mode;
+#define TITLE_RATE 48000
+#define TITLE_SECONDS 60
+#define TITLE_MAX_SAMPLES (TITLE_RATE * 2 * TITLE_SECONDS)
+static pthread_mutex_t title_audio_lock = PTHREAD_MUTEX_INITIALIZER;
+static FILE *title_audio_file;
+static _Atomic int title_audio_recording;
+static int title_audio_started, title_audio_error, title_audio_samples, title_audio_audible;
+
+static void title_wave_u16(unsigned char *header, int at, uint16_t n)
+{
+	header[at] = (unsigned char)n;
+	header[at + 1] = (unsigned char)(n >> 8);
+}
+
+static void title_wave_u32(unsigned char *header, int at, uint32_t n)
+{
+	int i;
+	for (i = 0; i < 4; i++) header[at + i] = (unsigned char)(n >> (8 * i));
+}
+
+/* The guest reaches this only when the real title looping-sound tag exists. */
+void host_android_title_ready(void)
+{
+	JNIEnv *env;
+	jobject activity;
+	jclass type;
+	jmethodID method;
+	int ready = 0, fd;
+	char path[768];
+	const char *root;
+	unsigned char header[44] = {0};
+	if (!host_title_capture_mode) return;
+	pthread_mutex_lock(&title_audio_lock);
+	if (title_audio_started) { pthread_mutex_unlock(&title_audio_lock); return; }
+	title_audio_started = 1;
+	root = SDL_GetAndroidInternalStoragePath();
+	if (root && snprintf(path, sizeof(path), "%s/title-backdrop-v1.pending/audio.wav", root) < (int)sizeof(path))
+	{
+		fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600);
+		if (fd >= 0)
+		{
+			title_audio_file = fdopen(fd, "wb");
+			if (!title_audio_file) close(fd);
+		}
+		if (title_audio_file && fwrite(header, 1, sizeof(header), title_audio_file) == sizeof(header))
+		{
+			atomic_store(&title_audio_recording, 1);
+			ready = 1;
+		}
+	}
+	pthread_mutex_unlock(&title_audio_lock);
+	env = (JNIEnv *)SDL_GetAndroidJNIEnv();
+	if (!env) return;
+	activity = (jobject)SDL_GetAndroidActivity();
+	if (!activity) return;
+	type = (*env)->GetObjectClass(env, activity);
+	if (type)
+	{
+		method = (*env)->GetMethodID(env, type, "onNativeTitleReady", "(Z)V");
+		if (method) (*env)->CallVoidMethod(env, activity, method, (jboolean)ready);
+		(*env)->DeleteLocalRef(env, type);
+	}
+	if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+	(*env)->DeleteLocalRef(env, activity);
+}
+
+static void title_record_mix(const SDL_AudioSpec *spec, const void *bytes, int length)
+{
+	int count, i;
+	const float *samples = bytes;
+	int16_t converted[1024];
+	if (!atomic_load(&title_audio_recording)) return;
+	if (spec->format != SDL_AUDIO_F32 || spec->channels != 2 || spec->freq != TITLE_RATE ||
+		length <= 0 || length % (int)(sizeof(float) * 2)) return;
+	pthread_mutex_lock(&title_audio_lock);
+	if (!title_audio_file || title_audio_error || !atomic_load(&title_audio_recording))
+	{
+		pthread_mutex_unlock(&title_audio_lock); return;
+	}
+	count = length / (int)sizeof(float);
+	if (count > TITLE_MAX_SAMPLES - title_audio_samples)
+		count = TITLE_MAX_SAMPLES - title_audio_samples;
+	while (count > 0)
+	{
+		int n = count > (int)(sizeof(converted) / sizeof(converted[0])) ?
+			(int)(sizeof(converted) / sizeof(converted[0])) : count;
+		for (i = 0; i < n; i++)
+		{
+			float x = samples[i];
+			if (!(x >= -1.0f && x <= 1.0f))
+				x = x > 1.0f ? 1.0f : x < -1.0f ? -1.0f : 0.0f;
+			converted[i] = (int16_t)(x * 32767.0f);
+			if (converted[i] > 32 || converted[i] < -32) title_audio_audible++;
+		}
+		if (fwrite(converted, sizeof(converted[0]), (size_t)n, title_audio_file) != (size_t)n)
+		{
+			title_audio_error = 1; break;
+		}
+		title_audio_samples += n;
+		samples += n;
+		count -= n;
+	}
+	if (title_audio_error || title_audio_samples >= TITLE_MAX_SAMPLES)
+		atomic_store(&title_audio_recording, 0);
+	pthread_mutex_unlock(&title_audio_lock);
+}
+
+/* Return the verified duration in milliseconds, or zero for a failed,
+ * incomplete or silent title clip. Java atomically commits the full cache. */
+JNIEXPORT jint JNICALL Java_com_halo_decomp_HaloActivity_finishTitleAudio(
+	JNIEnv *env, jobject activity, jboolean keep)
+{
+	int result = 0;
+	unsigned char header[44] = {0};
+	uint32_t bytes;
+	(void)env; (void)activity;
+	if (!host_title_capture_mode) return 0;
+	pthread_mutex_lock(&title_audio_lock);
+	atomic_store(&title_audio_recording, 0);
+	if (title_audio_file)
+	{
+		if (keep && !title_audio_error && title_audio_samples >= TITLE_RATE * 2 * 55 &&
+			title_audio_audible >= TITLE_RATE * 2)
+		{
+			bytes = (uint32_t)title_audio_samples * 2;
+			memcpy(header, "RIFF", 4); title_wave_u32(header, 4, 36 + bytes);
+			memcpy(header + 8, "WAVEfmt ", 8); title_wave_u32(header, 16, 16);
+			title_wave_u16(header, 20, 1); title_wave_u16(header, 22, 2);
+			title_wave_u32(header, 24, TITLE_RATE); title_wave_u32(header, 28, TITLE_RATE * 4);
+			title_wave_u16(header, 32, 4); title_wave_u16(header, 34, 16);
+			memcpy(header + 36, "data", 4); title_wave_u32(header, 40, bytes);
+			if (!fseek(title_audio_file, 0, SEEK_SET) &&
+				fwrite(header, 1, sizeof(header), title_audio_file) == sizeof(header) &&
+				!fflush(title_audio_file) && !fsync(fileno(title_audio_file)))
+				result = title_audio_samples / (TITLE_RATE * 2 / 1000);
+		}
+		if (fclose(title_audio_file)) result = 0;
+		title_audio_file = NULL;
+	}
+	pthread_mutex_unlock(&title_audio_lock);
+	return (jint)result;
+}
+
 /* ---------- audio */
 
 /* SDL calls audio_callback on its own audio thread, which cannot run guest
@@ -338,6 +490,7 @@ struct audio_binding
 	unsigned char *buffer;
 	int buffer_length;
 	int buffer_size;
+	SDL_AudioSpec spec;
 };
 
 /* the binding whose callback this thread is running, if any */
@@ -389,6 +542,7 @@ static void SDLCALL audio_callback(void *userdata, SDL_AudioStream *stream, int 
 	pthread_mutex_unlock(&binding->lock);
 	if (binding->buffer_length)
 	{
+		title_record_mix(&binding->spec, binding->buffer, binding->buffer_length);
 		SDL_PutAudioStreamData(stream, binding->buffer, binding->buffer_length);
 		binding->buffer_length = 0;
 	}
@@ -432,6 +586,7 @@ uint32_t host_sdl_open_audio_stream(uint32_t device, const void *spec, uint32_t 
 		return 0;
 	binding->callback = callback;
 	binding->userdata = userdata;
+	if (spec) binding->spec = *(const SDL_AudioSpec *)spec;
 	pthread_mutex_init(&binding->lock, NULL);
 	pthread_cond_init(&binding->requested, NULL);
 	pthread_cond_init(&binding->done, NULL);

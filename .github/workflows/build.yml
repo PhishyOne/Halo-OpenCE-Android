@@ -254,6 +254,7 @@ jobs:
           python3 -m unittest tools.test_v65_compact_launcher -v
           python3 -m unittest tools.test_v66_play_dock -v
           python3 -m unittest tools.test_v67_simple_tools -v
+          python3 -m unittest tools.test_v68_original_title -v
           python3 tools/test_highlight_moments.py -v
           python3 tools/test_v42_highlights_integration.py -v
           python3 tools/test_android_experiment_package.py -v
@@ -261,6 +262,10 @@ jobs:
           python3 tools/test_campaign_save_backup.py -v
           python3 tools/test_campaign_map_transfer.py -v
           mkdir -p "$RUNNER_TEMP/halo-test-classes"
+          javac -d "$RUNNER_TEMP/halo-test-classes" \
+            port/android/app/src/main/java/com/halo/decomp/TitleBackdropFiles.java \
+            tools/lan/TitleBackdropFilesTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.TitleBackdropFilesTest
           javac -d "$RUNNER_TEMP/halo-test-classes" \
             port/android/app/src/main/java/com/halo/decomp/PlayDockPolicy.java \
             tools/lan/PlayDockPolicyTest.java
