@@ -758,7 +758,8 @@ public class LauncherActivity extends Activity {
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(7), dp(3), dp(7), dp(3));
         scroll.addView(content);
-        root.addView(scroll, new LinearLayout.LayoutParams(
+        LauncherActionDock actionDock = new LauncherActionDock(this, scroll, content);
+        root.addView(actionDock, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.0f));
 
         LinearLayout toolsPage = new LinearLayout(this);
@@ -1392,12 +1393,13 @@ public class LauncherActivity extends Activity {
             + "map names, not credentials. Review the report before sharing.", 12);
         diagnosticsPanel.addView(diagnosticStatus);
 
-        // Fixed footer stays on screen even when the host options are long.
-        LinearLayout footer = new LinearLayout(this);
-        footer.setOrientation(LinearLayout.VERTICAL);
-        footer.setPadding(dp(7), dp(2), dp(7), dp(3));
-        footer.setBackground(hudSurface(HaloTheme.PANEL_TOP,
-            HaloTheme.PANEL_BOTTOM, HUD_BORDER));
+        // Compact action over the empty lower-right part of the active page.
+        // Status/error text occupies a separate scrollable region if needed.
+        LinearLayout footer = setupColumn();
+        LinearLayout statusColumn = setupColumn();
+        ScrollView statusScroll = new ScrollView(this);
+        statusScroll.setFillViewport(false);
+        statusScroll.addView(statusColumn);
 
         // Internal mode flags preserve the existing native launch branches.
         // The five tabs and offline radio group are the visible controls.
@@ -1436,7 +1438,11 @@ public class LauncherActivity extends Activity {
                 View.VISIBLE : View.GONE);
             if (socialUi != null) socialUi.setVisible(homeVisible[0]);
             footer.setVisibility(playing ? View.VISIBLE : View.GONE);
+            statusScroll.setVisibility(playing ? View.VISIBLE : View.GONE);
             updateRewardVisibility.run();
+            actionDock.setSetupPage(playing ?
+                (lanMode.isChecked() ? lanPanel : offlinePanel) : null,
+                playing ? (lanMode.isChecked() ? networkColumn : offlineRight) : null);
             if (playButton != null)
                 playButton.setVisibility(playing ? View.VISIBLE : View.GONE);
             int chosen = homeVisible[0] ? 0 : toolsVisible[0] ? 4 :
@@ -1499,7 +1505,7 @@ public class LauncherActivity extends Activity {
             updateMode.run();
         });
 
-        footer.addView(feedback);
+        statusColumn.addView(feedback);
         feedback.setVisibility(feedback.length() == 0 ? View.GONE : View.VISIBLE);
         feedback.addTextChangedListener(new android.text.TextWatcher() {
             @Override public void beforeTextChanged(CharSequence text, int start, int count, int after) { }
@@ -1515,7 +1521,7 @@ public class LauncherActivity extends Activity {
         appSettings.setOnClickListener(next -> startActivity(
             new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                 Uri.parse("package:" + getPackageName()))));
-        footer.addView(appSettings);
+        statusColumn.addView(appSettings);
 
         Button play = new Button(this);
         playButton = play;
@@ -1650,10 +1656,9 @@ public class LauncherActivity extends Activity {
             startGame();
         });
         LinearLayout.LayoutParams playParams = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, dp(setupRowHeight() + 4));
-        playParams.topMargin = dp(1);
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(Math.max(44, setupRowHeight() + 4)));
         footer.addView(play, playParams);
-        root.addView(footer);
+        actionDock.setActions(footer, statusScroll, statusColumn);
         setContentView(root);
         updateMode.run(); // hide PLAY on the default leaderboard screen
         // Reentering Join after an in-place APK update should find a host
