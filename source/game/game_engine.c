@@ -538,6 +538,7 @@ symbols in this file:
 
 #include "cseries.h"
 #include "game_modes.h" /* port: port/linux/game/game_modes.c */
+#include "vip.h"
 #include "career_results.h" /* port: immutable host results */
 #ifdef HALO_ANDROID
 #include "career_record.h"
@@ -1107,6 +1108,11 @@ static void game_engine_generate_title_string(
 	long string_list_index;
 	wchar_t *format_string;
 
+	if (vip_enabled())
+	{
+		vip_format_title(player_index, title_string);
+		return;
+	}
 	player_get(player_index);
 	secondary_string = L"";
 	match_assert(
@@ -5444,7 +5450,7 @@ boolean game_engine_infinite_grenades(
 {
 	boolean infinite_grenades = FALSE;
 
-	if (game_engine_running() && player_index!=NONE)
+	if (game_engine_running() && player_index!=NONE && !vip_player_is_vip(player_index))
 		infinite_grenades = game_engine_infinite_grenades_internal();
 
 	return infinite_grenades;
@@ -5758,7 +5764,7 @@ boolean game_engine_should_end_game(
 	boolean should_end_game = FALSE;
 
 	/* port: Infection's round ends by its own rules (infection.c) */
-	if (infection_enabled())
+	if (infection_enabled() || vip_enabled())
 		return FALSE;
 	if (game_engine && !multiple_teams_alive())
 		should_end_game = TRUE;
@@ -9826,7 +9832,8 @@ long game_engine_write_network_state(
 	{
 	case game_engine_ctf: written = game_engine_ctf_write_network_state(buffer, size); break;
 	/* port: (Infection's own state: infection.c) */
-	case game_engine_slayer: written = infection_enabled() ? infection_write_network_state(buffer, size) :
+	case game_engine_slayer: written = vip_enabled() ? vip_write_network_state(buffer, size) :
+		infection_enabled() ? infection_write_network_state(buffer, size) :
 		game_engine_slayer_write_network_state(buffer, size); break;
 	case game_engine_oddball: written = game_engine_oddball_write_network_state(buffer, size); break;
 	case game_engine_king: written = game_engine_king_write_network_state(buffer, size); break;
@@ -9854,7 +9861,8 @@ void game_engine_read_network_state(
 	switch (game_engine_get_type())
 	{
 	case game_engine_ctf: read = game_engine_ctf_read_network_state(buffer, size, first); break;
-	case game_engine_slayer: read = infection_enabled() ? infection_read_network_state(buffer, size, first) :
+	case game_engine_slayer: read = vip_enabled() ? vip_read_network_state(buffer, size, first) :
+		infection_enabled() ? infection_read_network_state(buffer, size, first) :
 		game_engine_slayer_read_network_state(buffer, size, first); break;
 	case game_engine_oddball: read = game_engine_oddball_read_network_state(buffer, size, first); break;
 	case game_engine_king: read = game_engine_king_read_network_state(buffer, size, first); break;

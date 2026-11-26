@@ -1,4 +1,4 @@
-version 56
+version 57
 bound CHAT_TEXT_SIZE 64
 bound DISCORD_ID_SIZE 24
 bound DISCORD_NAME_SIZE 40
@@ -322,6 +322,7 @@ struct distributed_statistics_message 79134e6e9811
 struct distributed_structure_bsp 53f7d5067cc9
 struct distributed_structure_bsp_message 096278a05681
 struct distributed_vector e80d7f9fc970
+struct distributed_vip_state ffebc4cec54e
 struct distributed_voice_config 665bdc14478b
 struct distributed_voice_down e3751d692f16
 struct distributed_voice_up 3d74ee44e4cb

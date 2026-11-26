@@ -43,6 +43,7 @@ static const char *GUEST="22222222222222222222222222222222";
 static const char *THIRD="33333333333333333333333333333333";
 static int game_in_progress(void) { return 1; }
 static int network_coop_active(void) { return coop; }
+static int vip_enabled(void) { return 0; }
 static int network_game_is_splitscreen_local(void) { return split; }
 static int game_connection(void) { return conn; }
 static int network_game_distributed_client(void) { return conn==1; }

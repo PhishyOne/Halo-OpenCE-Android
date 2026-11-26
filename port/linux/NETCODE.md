@@ -1277,3 +1277,17 @@ a host-forfeit recovery record before locking. Confirmed departures stay
 forfeits even if a seat is later occupied again. No existing gameplay
 payload changes. Shared receipts are trusted-friends results, not a
 cryptographically authenticated public ladder.
+
+
+## VIP escort rounds (version 57)
+
+Version 57 adds VIP mode on team Slayer. The existing option byte
+selects the mode, but VIP replaces Slayer's game-state payload with
+a fixed 44-byte host-owned round state. It carries the game number,
+revision, round, escort team, VIP absolute seat and identity, timer,
+score and outcome. New clients validate game number, bounds, phase,
+scores and monotonic revision before applying a snapshot. Older clients
+must update, including for other modes; they cannot safely interpret VIP
+and are not allowed into v57 advertised games. The v56 group rating
+receipt layout and other gameplay payloads are unchanged. VIP matches
+are not eligible for Group SR in this first release.

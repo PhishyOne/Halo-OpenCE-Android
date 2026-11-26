@@ -79,6 +79,7 @@ and each bot's kills and deaths; debug.bot_trace logs each bot's state.
 #include "game/game.h"
 #include "game/game_engine.h"
 #include "game_modes.h"
+#include "vip.h"
 #include "game/game_engine_race.h"
 #include "game/players.h"
 #include "objects/objects.h"
@@ -1981,6 +1982,8 @@ static boolean bots_objectives_active(void)
 {
 	struct game_variant *variant = game_engine_get_variant();
 
+	if (vip_enabled())
+		return TRUE;
 	return config_boolean("bots.objective_modes") && variant &&
 		(variant->game_engine_index == game_engine_ctf ||
 		 variant->game_engine_index == game_engine_king ||
@@ -1994,6 +1997,7 @@ static boolean bots_objectives_active(void)
 static boolean bots_carries_objective(struct player_datum *player, long index)
 {
 	struct game_variant *variant = game_engine_get_variant();
+	if (vip_enabled()) return vip_player_is_vip(index);
 	return variant && variant->game_engine_index == game_engine_oddball ?
 		player_has_ball(index) : bots_carries_flag(player);
 }
@@ -2044,6 +2048,23 @@ static boolean bots_choose_objective_goal(struct bots_bot *bot, long player_inde
 	bot_index = (int)(player->network_player_data.machine_index - bots_first_machine());
 	if (bot_index < 0 || bot_index >= BOTS_MAXIMUM)
 		return FALSE;
+
+	if (vip_enabled())
+    {
+		if (!vip_bot_goal(player_index, &point)) return FALSE;
+		if (!vip_player_is_vip(player_index))
+        {
+			/* Small deterministic spread around the target, not a single
+             * pile of escort bots at exactly the VIP's feet. */
+			real angle = (real)(bot_index % 8) * BOTS_PI / 4.0f;
+			point.x += (real)cos(angle) * 2.0f;
+			point.y += (real)sin(angle) * 2.0f;
+        }
+		surface = bots_surface_below(&point, &ground);
+		if (surface == NONE) return FALSE;
+		bots_set_goal(bot, _bots_goal_objective, &ground, surface);
+        return TRUE;
+    }
 
 	switch (variant->game_engine_index)
 	{
@@ -2540,6 +2561,12 @@ static void bots_choose_goal(struct bots_bot *bot, long player_index, real_point
 	boolean crew_candidate = bot_crew_objective_candidate(
 		virtual_slot, driver_candidate);
 	boolean objective;
+
+	if (vip_player_is_vip(player_index))
+    {
+		bots_choose_objective_goal(bot, player_index);
+        return;
+    }
 
 	/* One in five eligible bots may seek a driver seat before proceeding
 	   with the normal objective. Other bots retain ordinary CTF, King,

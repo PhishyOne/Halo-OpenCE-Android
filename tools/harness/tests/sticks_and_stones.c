@@ -49,10 +49,11 @@ static boolean ordinary_pickup(long u,long w) {return u==1&&w==2;}
 #include "rules.inc"
 int main(void) {
     short i;
-    CHECK(game_modes_gametype_count()==8);
+    CHECK(game_modes_gametype_count()==9);
     CHECK(!wcscmp(game_modes_gametype_name(0),L"SWAT"));
     CHECK(!wcscmp(game_modes_gametype_name(6),L"Hardcore King"));
     CHECK(!wcscmp(game_modes_gametype_name(7),L"Sticks & Stones"));
+    CHECK(!wcscmp(game_modes_gametype_name(8),L"VIP Escort"));
     CHECK(game_modes_gametype_by_name("sticks_and_stones",&variant,&options));
     CHECK(variant.game_engine_index==game_engine_slayer&&!variant.universal_variant.teams);
     CHECK(variant.universal_variant.score_to_win==25);
@@ -78,10 +79,17 @@ int main(void) {
     options.vehicle_set[1]=1;
     SET_FLAG(variant.universal_variant.flags,_game_variant_infinite_grenades_bit,FALSE);
     CHECK(!game_modes_sticks_and_stones_active());
-    for(i=0;i<7;i++) {
+    for(i=0;i<9;i++) {
+        if(i==7) continue;
         game_modes_gametype(i,&variant,&options);
         CHECK(!game_modes_sticks_and_stones(&variant,&options));
     }
-    printf("PASS Sticks & Stones: %d native checks\n",checks);
+    CHECK(game_modes_gametype_by_name("vip",&variant,&options));
+    CHECK(variant.game_engine_index==game_engine_slayer&&variant.universal_variant.teams);
+    CHECK(options.mode==_game_mode_vip&&options.force_team_spawns&&!options.auto_team_balance);
+    CHECK(options.friendly_fire==_friendly_fire_off&&options.time_limit==0);
+    CHECK(!TEST_FLAG(variant.universal_variant.flags,_game_variant_no_shields_bit));
+    CHECK(options.vehicle_set[0]==1&&options.vehicle_set[1]==1);
+    printf("PASS Sticks & Stones and VIP presets: %d native checks\n",checks);
     return 0;
 }

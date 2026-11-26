@@ -48,6 +48,7 @@
 		<string text="SWAT"/>
 		<string text="INFECTION"/>
 		<string text="GUN GAME"/>
+		<string text="VIP ESCORT"/>
 	</strings>
 	<widget name="main_menu/settings_select/multiplayer_setup/opence_options_edit/op_oce_hardcore" width="512" height="28" flags="pass_unhandled_to_focused_child" bitmap="bitmaps/option_bkds" color="#FF2896FF">
 		<child widget="main_menu/settings_select/multiplayer_setup/opence_options_edit/oce_hardcore_label"/>

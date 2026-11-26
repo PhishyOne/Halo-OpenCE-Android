@@ -645,6 +645,7 @@ symbols in this file:
 
 #include "cseries.h"
 #include "infection.h" /* port: port/linux/game/infection.c */
+#include "vip.h"
 #include "units.h"
 
 #include "bipeds.h"
@@ -2159,7 +2160,7 @@ boolean unit_add_grenade_to_inventory(
 	static boolean grenade_type_reported = FALSE;
 
 	/* port: an Infection zombie takes no grenades */
-	if (infection_unit_is_zombie(unit_index))
+	if (infection_unit_is_zombie(unit_index) || vip_unit_is_vip(unit_index))
 		return FALSE;
 
 	match_assert(
@@ -2226,7 +2227,7 @@ boolean unit_add_equipment_to_inventory(
 		equipment_definition->equipment.powerup_type!=_equipment_powerup_grenade);
 
 	/* port: nor powerups */
-	if (infection_unit_is_zombie(unit_index))
+	if (infection_unit_is_zombie(unit_index) || vip_unit_is_vip(unit_index))
 		return FALSE;
 	if (unit->unit.equipment_object_index!=NONE && replace==TRUE)
 	{
@@ -3001,6 +3002,12 @@ boolean unit_can_enter_seat(
 	long occupant_index = NONE;
 	boolean result = TRUE;
 	long child_object_index;
+
+	if (!vip_allow_passenger(unit_index, target_unit_index, seat_index))
+    {
+		if (occupant_unit_index) *occupant_unit_index = NONE;
+		return FALSE;
+    }
 
 	if (unit_index==target_unit_index)
 	{
@@ -11856,6 +11863,20 @@ void unit_control(
 	}
 	unit->unit.desired_zoom_level = (char)control_data->zoom_level;
 	unit->unit.control_flags = control_data->control_flags;
+	if (unit->unit.player_index != NONE && vip_enabled())
+    {
+		if (vip_staging())
+        {
+			unit->unit.control_flags = 0;
+			unit->unit.throttle.i = unit->unit.throttle.j = unit->unit.throttle.k = 0.0f;
+            unit->unit.primary_trigger = 0.0f;
+        }
+		else if (vip_unit_is_vip(unit_index))
+        {
+			unit->unit.control_flags &= ~(UNIT_CONTROL_GUNNER_MASK | FLAG(_unit_control_use_equipment_bit));
+            unit->unit.primary_trigger = 0.0f;
+        }
+    }
 	unit->unit.desired_looking_vector = control_data->looking_vector;
 	unit->unit.desired_aiming_vector = control_data->aiming_vector;
 	unit->unit.desired_facing_vector = control_data->facing_vector;

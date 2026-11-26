@@ -65,7 +65,7 @@ class CampaignMapTransferIntegration(unittest.TestCase):
         self.assertIn('custom_maps',NET)
         self.assertIn('network.map_download',NET)
         self.assertIn('The separate\n * Custom Edition map-sharing protocol',TRANSFER)
-        self.assertIn('HALO_PORT_NETWORK_VERSION 56',VERSION)
+        self.assertIn('HALO_PORT_NETWORK_VERSION 57',VERSION)
         self.assertIn('starting precaching of map',DIAG)
         self.assertIn('no cache file can hold map',DIAG)
         self.assertIn('couldn.t find map',DIAG)

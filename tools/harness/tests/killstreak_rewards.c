@@ -16,6 +16,7 @@
 #define MAXIMUM_ATTACKERS_PER_UNIT 4
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"line %d: %s\n",__LINE__,#x); return 1; } } while (0)
 typedef int boolean;
+static int vip_enabled(void) { return 0; }
 typedef float real;
 static int recon_awards, recon_last_award, recon_revokes, orbital_awards;
 static int public_warnings, local_warnings;

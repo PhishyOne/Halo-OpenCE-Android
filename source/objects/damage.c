@@ -112,6 +112,7 @@ symbols in this file:
 #include "game/game.h"
 #include "game/game_allegiance.h"
 #include "game/game_engine.h"
+#include "vip.h"
 #include "game/game_globals.h"
 #include "game/game_statistics_internal.h"
 #include "game/players.h"
@@ -1456,6 +1457,18 @@ void object_cause_damage(
 	long damaged_object_indices[16];
 	/* port: the gametype's friendly fire (game_engine_friendly_damage) */
 	short friendly_damage;
+
+	/* Suppress offensive damage from the unarmed VIP, including delayed
+     * client reports. During round reset only no-statistics scripted
+     * deaths may affect players. Clients still take host replication. */
+	if (vip_enabled() && !network_game_distributed_client() &&
+		!TEST_FLAG(damage->flags, _damage_no_statistics_bit))
+	{
+		struct unit_datum *victim = unit_try_and_get(object_index);
+		if (vip_player_is_vip(damage->owner_player_index) ||
+			(vip_staging() && victim && victim->unit.player_index != NONE))
+			return;
+	}
 
 	/* the distributed netcode (port/linux/NETCODE.md): the host deals
 	damage; a client reports its own players' hits instead, and the host

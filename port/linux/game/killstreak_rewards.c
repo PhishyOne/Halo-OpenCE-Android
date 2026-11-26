@@ -3,6 +3,7 @@
 #include "cseries.h"
 #include "game/game.h"
 #include "game/game_engine.h"
+#include "vip.h"
 #include "game/game_allegiance.h"
 #include "game/players.h"
 #include "memory/data.h"
@@ -169,6 +170,8 @@ void killstreak_rewards_record_kill(long credited_player_index, long dead_player
     boolean owns_camouflage;
 
     /* A replicated permission bit is not authority to grant an effect. */
+    if (vip_enabled())
+        return;
     if (!killstreak_authority() || !killstreak_match_active ||
         !game_engine_in_play() ||
         !killstreak_feature_allowed(KILLSTREAK_ENABLED))

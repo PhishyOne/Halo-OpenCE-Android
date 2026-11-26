@@ -3550,6 +3550,9 @@ static void gametype_rules_text(long profile_index, wchar_t *text, short size)
 	case _game_mode_gun_game:
 		usnprintf(text, size - 1, L"%s\r\nFree for all\r\nA kill with each weapon", kind);
 		break;
+	case _game_mode_vip:
+		usnprintf(text, size - 1, L"VIP ESCORT\r\nUnarmed VIP / overshield\r\nTwo alternating rounds");
+		break;
 	default:
 		usnprintf(text, size - 1, L"%s\r\n%s\r\nScore to win: %ld", kind ? kind : engine_names[engine],
 			variant.universal_variant.teams ? L"Teams" : L"Free for all", variant.universal_variant.score_to_win);
@@ -6927,8 +6930,8 @@ struct gametype_option
 static struct gametype_option const gametype_options[] =
 {
 	/* OPENCE OPTIONS (OpenCE's gametypes: game_modes.c) */
-	{ "oce_mode_spinner", _option_option_byte, OPTIONS_FIELD(mode), 0, 4,
-		{ _game_mode_none, _game_mode_swat, _game_mode_infection, _game_mode_gun_game } },
+	{ "oce_mode_spinner", _option_option_byte, OPTIONS_FIELD(mode), 0, 5,
+		{ _game_mode_none, _game_mode_swat, _game_mode_infection, _game_mode_gun_game, _game_mode_vip } },
 	{ "oce_hardcore_spinner", _option_option_byte, OPTIONS_FIELD(hardcore), 0, 2, { FALSE, TRUE } },
 	{ "inf_zombies_spinner", _option_option_byte, OPTIONS_FIELD(infection_initial_zombies), 0, 6, { 1, 2, 3, 4, 8, 16 } },
 	{ "inf_speed_spinner", _option_option_byte, OPTIONS_FIELD(infection_zombie_speed), 0, 6,
@@ -7431,7 +7434,7 @@ static boolean gametype_options_save(struct widget_instance *widget)
 	game_modes_variant_mode) */
 	if (named(list, "oce_mode_spinner", 0) && edit_variant()->game_engine_index == game_engine_slayer)
 	{
-		if (edit_options()->mode == _game_mode_infection)
+		if (edit_options()->mode == _game_mode_infection || edit_options()->mode == _game_mode_vip)
 			edit_variant()->universal_variant.teams = TRUE;
 		else if (edit_options()->mode == _game_mode_gun_game)
 			edit_variant()->universal_variant.teams = FALSE;

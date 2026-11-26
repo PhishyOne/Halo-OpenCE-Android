@@ -15,6 +15,7 @@ def generated(fault=None):
     network = read('port/linux/game/network_infection.h')
     enums = '\n'.join([
         enum_with(engine, 'game_engine_none = 0'), enum_with(engine, '_loadout_weapon_none = 0'),
+        enum_with(engine, '_friendly_fire_on = 0'),
         enum_with(engine, '_variant_vehicle_warthog = 0'), enum_with(engine, '_game_mode_none = 0'),
         enum_with(engine, '_gun_game_order_strongest_first = 0'),
         enum_with(network, '_distributed_infection_waiting = 0'),

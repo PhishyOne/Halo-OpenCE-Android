@@ -196,6 +196,7 @@ BUILTINS = {
     "hardcore": ("slayer", True, "Hardcore"), "hardcore_ctf": ("ctf", True, "HC CTF"),
     "hardcore_oddball": ("oddball", True, "HC Oddball"), "hardcore_king": ("king", True, "HC King"),
     "sticks_and_stones": ("slayer", False, "Sticks&Ston"),
+    "vip": ("slayer", True, "VIP Escort"),
 }
 GAMETYPE_ALIASES = {"ffa": "slayer", "ffa_slayer": "slayer", "teamslayer": "team_slayer", "tslayer": "team_slayer",
                     "koth": "king", "team_koth": "team_king", "iron_ctf": "ironctf", "teamrace": "team_race",

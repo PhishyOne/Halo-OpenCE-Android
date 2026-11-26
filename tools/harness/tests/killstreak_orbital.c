@@ -15,6 +15,7 @@
 #define DATUM_INDEX_TO_ABSOLUTE_INDEX(id) ((id)&0xffff)
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"line %d: %s\n",__LINE__,#x); return 1; } } while (0)
 typedef int boolean;
+static int vip_enabled(void) { return 0; }
 typedef float real;
 typedef unsigned short word;
 typedef unsigned char byte;

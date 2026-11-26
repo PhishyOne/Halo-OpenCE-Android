@@ -11,6 +11,7 @@
 #include "network_coop.h"
 #include "network_group_rating.h"
 #include "bots.h"
+#include "vip.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -324,7 +325,7 @@ static int sole_remaining_side(void) {
 void group_rating_update(long mode) {
     long tick;
     int i, roster;
-    if(finalized||rejected||!lan_match()||mode<1||mode>5) return;
+    if(finalized||rejected||!lan_match()||vip_enabled()||mode<1||mode>5) return;
     if(network_game_distributed_client()) return; /* reliable challenge drives clients */
     is_host=1;
     tick=game_time_get();

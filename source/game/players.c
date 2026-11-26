@@ -247,6 +247,7 @@ symbols in this file:
 #include "game.h"
 #include "game/game_globals.h"
 #include "game_engine.h"
+#include "vip.h"
 #include "input.h"
 #include "interface/hud.h"
 #include "interface/hud_messaging.h"
@@ -4300,6 +4301,7 @@ static void player_examine_nearby_item(
 	struct equipment_definition *current_equipment_definition;
 	long current_equipment_index;
 
+	if (vip_staging() || vip_player_is_vip(player_index)) return;
 	player = player_get(player_index);
 	unit = unit_get(player->unit_index);
 	item = item_get(item_index);
@@ -4522,6 +4524,8 @@ static void player_handle_powerup_equipment(
 	short duration;
 	long powerup_index;
 
+	if (vip_staging() || vip_player_is_vip(player_index))
+		return;
 	player = player_get(player_index);
 	equipment = equipment_get(equipment_index);
 	equipment_definition = equipment_definition_get(equipment->definition_index);
@@ -4996,6 +5000,16 @@ void players_update_before_game(
 				unit = unit_get(player->unit_index);
 				if (!players_globals->input_disabled)
 				{
+					if (vip_staging())
+                    {
+						action->control_flags = 0;
+                        action->primary_trigger = 0.0f;
+                    }
+					else if (vip_player_is_vip(iterator.datum_index))
+                    {
+						action->control_flags &= ~(UNIT_CONTROL_GUNNER_MASK | FLAG(_unit_control_use_equipment_bit));
+                        action->primary_trigger = 0.0f;
+                    }
 					network_player_log_idle_action(iterator.datum_index, action->control_flags);
 					/* port: not for the keyboard's action key, which only acts
 					(units.h, UNIT_CONTROL_PORT_ACTION_ONLY_BIT) */

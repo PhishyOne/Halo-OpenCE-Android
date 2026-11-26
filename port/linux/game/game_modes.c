@@ -35,6 +35,7 @@ of their own (menu_functions.c's OPENCE).
 #include "game_modes.h"
 #include "gun_game.h"
 #include "infection.h"
+#include "vip.h"
 
 #include <string.h>
 
@@ -67,6 +68,7 @@ enum
 	_gametype_hardcore_oddball,
 	_gametype_hardcore_king,
 	_gametype_sticks_and_stones,
+	_gametype_vip,
 	NUMBER_OF_GAMETYPES
 };
 
@@ -89,6 +91,7 @@ static struct
 	{ "hardcore_oddball", L"Hardcore Oddball", L"HC Oddball" },
 	{ "hardcore_king", L"Hardcore King", L"HC King" },
 	{ "sticks_and_stones", L"Sticks & Stones", L"Sticks&Ston" },
+	{ "vip", L"VIP Escort", L"VIP Escort" },
 };
 
 /* the kill being recorded is a melee's (game_modes_kill_by_melee) */
@@ -221,6 +224,17 @@ void game_modes_gametype(
     case _gametype_sticks_and_stones:
         game_modes_sticks_and_stones_rules(variant, options);
         break;
+	case _gametype_vip:
+		options->mode = _game_mode_vip;
+		variant->universal_variant.vehicle_set = VEHICLE_SET_NONE;
+		variant->universal_variant.lives = 0;
+		variant->universal_variant.respawn_time = 90;
+		variant->universal_variant.respawn_time_growth = 0;
+		variant->universal_variant.suicide_penalty = 0;
+		variant->universal_variant.goal_radar = GOAL_RADAR_NAV_POINT;
+		variant->universal_variant.score_to_win = 2;
+		SET_FLAG(variant->universal_variant.flags, _game_variant_no_shields_bit, FALSE);
+        break;
 	default:
 		options->hardcore = TRUE;
 		options->friendly_fire = _friendly_fire_on;
@@ -306,6 +320,15 @@ void game_modes_options_sanitize(
 		options->gun_game_order = _gun_game_order_strongest_first;
 	options->gun_game_melee_demotes = options->gun_game_melee_demotes != FALSE;
 	options->force_team_spawns = options->force_team_spawns != FALSE;
+	if (options->mode == _game_mode_vip)
+	{
+		options->force_team_spawns = TRUE;
+		options->auto_team_balance = FALSE;
+		options->friendly_fire = _friendly_fire_off;
+		options->friendly_fire_penalty = 0;
+		options->hardcore = FALSE;
+		options->time_limit = 0; /* VIP owns its per-round timer */
+	}
 	csmemset(options->reserved, 0, sizeof(options->reserved));
 }
 
@@ -323,6 +346,8 @@ short game_modes_variant_mode(
 		return variant->universal_variant.teams ? _game_mode_infection : _game_mode_none;
 	case _game_mode_gun_game:
 		return !variant->universal_variant.teams ? _game_mode_gun_game : _game_mode_none;
+	case _game_mode_vip:
+		return variant->universal_variant.teams ? _game_mode_vip : _game_mode_none;
 	}
 	return _game_mode_none;
 }
@@ -347,6 +372,7 @@ wchar_t const *game_modes_kind_name(
 		{ { L"SWAT", L"SWAT" }, { L"HARDCORE SWAT", L"HC SWAT" } },
 		{ { L"INFECTION", L"INFECTION" }, { L"HARDCORE INFECTION", L"HC INFECTION" } },
 		{ { L"GUN GAME", L"GUN GAME" }, { L"HARDCORE GUN GAME", L"HC GUN GAME" } },
+		{ { L"VIP ESCORT", L"VIP" }, { L"VIP ESCORT", L"VIP" } },
 	};
 	static wchar_t const *const hardcore_names[][2] =
 	{
@@ -415,6 +441,8 @@ struct game_engine *game_modes_engine(
 		return infection_engine_get(engine);
 	case _game_mode_gun_game:
 		return gun_game_engine_get(engine);
+	case _game_mode_vip:
+		return vip_engine_get(engine);
 	}
 	return engine;
 }
