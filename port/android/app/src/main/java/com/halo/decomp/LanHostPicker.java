@@ -1,7 +1,6 @@
 package com.halo.decomp;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -60,7 +59,7 @@ final class LanHostPicker {
             } else {
                 String[] labels = found.toArray(new String[0]);
                 status.setText(found.size() + " Halo hosts found. Choose one.");
-                new AlertDialog.Builder(activity)
+                new HaloDialog.Builder(activity)
                     .setTitle("Choose a Halo LAN host")
                     .setItems(labels, (dialog, choice) -> {
                         address.setText(labels[choice]);

@@ -246,6 +246,7 @@ jobs:
           python3 tools/test_v57_match_video.py -v
           python3 tools/test_v58_live_peers.py -v
           python3 tools/test_v59_social_hub.py -v
+          python3 tools/test_v60_theme_privacy.py -v
           python3 tools/test_highlight_moments.py -v
           python3 tools/test_v42_highlights_integration.py -v
           python3 tools/test_android_experiment_package.py -v
@@ -289,6 +290,7 @@ jobs:
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LanBoardPresenceTest
           javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" \
             port/android/app/src/main/java/com/halo/decomp/LanBoardAutoSync.java \
+            port/android/app/src/main/java/com/halo/decomp/LanShareState.java \
             port/android/app/src/main/java/com/halo/decomp/LanReelProtocol.java \
             port/android/app/src/main/java/com/halo/decomp/LanReelBuffer.java \
             tools/lan/LanSocialHubTest.java

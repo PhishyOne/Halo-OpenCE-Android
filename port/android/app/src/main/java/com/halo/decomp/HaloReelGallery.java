@@ -1,7 +1,6 @@
 package com.halo.decomp;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.app.Dialog;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -43,7 +42,7 @@ final class HaloReelGallery {
         // black or mistimed. Never hide it behind Android/data permissions.
         File[] originals = HaloVideoFiles.rawRecordings(appRoot);
         if (reels.length == 0 && originals.length == 0) {
-            new AlertDialog.Builder(activity)
+            new HaloDialog.Builder(activity)
                 .setTitle("HALO VIDEO HIGHLIGHTS")
                 .setMessage("No playable MP4 reel has been saved yet.\n\n"
                     + "In game setup, enable RECORD MATCH VIDEO before Play "
@@ -70,10 +69,10 @@ final class HaloReelGallery {
                 i + 1, originals[i].length() / 1048576.0);
             shown[index] = originals[i];
         }
-        // AlertDialog message and items are mutually exclusive on
+        // HaloDialog message and items are mutually exclusive on
         // Android's default layout. Use only the list so selections
         // stay reachable on short landscape screens.
-        new AlertDialog.Builder(activity)
+        new HaloDialog.Builder(activity)
             .setTitle("REELS + ORIGINAL RECORDINGS")
             .setItems(titles, (dialog, which) ->
                 play(activity, shown[which]))
@@ -93,7 +92,7 @@ final class HaloReelGallery {
     static void manage(LauncherActivity activity, File appRoot, Runnable onDone) {
         HaloVideoFiles.Entry[] entries = HaloVideoFiles.deletable(appRoot);
         if (entries.length == 0) {
-            new AlertDialog.Builder(activity)
+            new HaloDialog.Builder(activity)
                 .setTitle("MANAGE VIDEOS")
                 .setMessage("No completed local recordings to delete.")
                 .setPositiveButton("CLOSE", null).show();
@@ -111,7 +110,7 @@ final class HaloReelGallery {
                     java.text.DateFormat.SHORT, java.text.DateFormat.SHORT)
                     .format(new java.util.Date(entry.modified));
         }
-        AlertDialog manager = new AlertDialog.Builder(activity)
+        HaloDialog manager = new HaloDialog.Builder(activity)
             .setTitle("MANAGE VIDEOS  •  " + size(total))
             .setMultiChoiceItems(labels, checked, (d, which, selected) ->
                 checked[which] = selected)
@@ -120,32 +119,32 @@ final class HaloReelGallery {
             .setNegativeButton("CANCEL", null)
             .create();
         manager.show();
-        Button selectedButton = manager.getButton(AlertDialog.BUTTON_POSITIVE);
+        Button selectedButton = manager.getButton(HaloDialog.BUTTON_POSITIVE);
         selectedButton.setOnClickListener(view -> {
             List<HaloVideoFiles.Entry> selected = new ArrayList<>();
             for (int i = 0; i < entries.length; i++)
                 if (checked[i]) selected.add(entries[i]);
             if (selected.isEmpty()) {
-                android.widget.Toast.makeText(activity, "Select at least one video.",
-                    android.widget.Toast.LENGTH_SHORT).show();
+                HaloNotice.makeText(activity, "Select at least one video.",
+                    HaloNotice.LENGTH_SHORT).show();
                 return;
             }
             confirmDelete(activity, appRoot, manager,
                 selected.toArray(new HaloVideoFiles.Entry[0]), onDone);
         });
-        manager.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(view ->
+        manager.getButton(HaloDialog.BUTTON_NEUTRAL).setOnClickListener(view ->
             confirmDelete(activity, appRoot, manager, entries, onDone));
     }
 
     private static void confirmDelete(LauncherActivity activity, File appRoot,
-            AlertDialog manager, HaloVideoFiles.Entry[] confirmed, Runnable onDone) {
+            HaloDialog manager, HaloVideoFiles.Entry[] confirmed, Runnable onDone) {
         long bytes = 0;
         boolean originals = false;
         for (HaloVideoFiles.Entry entry : confirmed) {
             bytes += entry.bytes;
             originals |= entry.original();
         }
-        new AlertDialog.Builder(activity)
+        new HaloDialog.Builder(activity)
             .setTitle("PERMANENTLY DELETE " + confirmed.length + " VIDEO(S)?")
             .setMessage("Recover up to " + size(bytes) + ".\n\n"
                 + (originals ? "Deleted full recordings cannot be used to create more reels.\n" : "")
@@ -154,7 +153,7 @@ final class HaloReelGallery {
             .setNegativeButton("CANCEL", null)
             .setPositiveButton("DELETE", (d, which) -> {
                 manager.dismiss();
-                AlertDialog working = new AlertDialog.Builder(activity)
+                HaloDialog working = new HaloDialog.Builder(activity)
                     .setMessage("Removing selected local videos...")
                     .setCancelable(false).create();
                 working.show();
@@ -163,7 +162,7 @@ final class HaloReelGallery {
                     activity.runOnUiThread(() -> {
                         if (activity.isFinishing() || activity.isDestroyed()) return;
                         working.dismiss();
-                        new AlertDialog.Builder(activity)
+                        new HaloDialog.Builder(activity)
                             .setTitle("VIDEO STORAGE")
                             .setMessage("Deleted " + result.removed + " video(s). Freed "
                                 + size(result.bytes) + "."
@@ -181,7 +180,7 @@ final class HaloReelGallery {
             clip.length() < 2048 ||
             clip.length() > ReelSessionIndex.SOURCE_LIMIT)
             return;
-        Dialog dialog = new Dialog(activity);
+        Dialog dialog = new HaloWindow(activity);
         LinearLayout body = new LinearLayout(activity);
         body.setOrientation(LinearLayout.VERTICAL);
         body.setPadding(dp(activity, 12), dp(activity, 8),

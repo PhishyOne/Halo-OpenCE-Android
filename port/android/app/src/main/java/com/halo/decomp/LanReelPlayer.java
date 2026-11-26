@@ -54,7 +54,7 @@ final class LanReelPlayer {
         this.source = new LanReelClient.Source(peer, reel);
         decoder.start();
         worker = new Handler(decoder.getLooper());
-        dialog = new Dialog(activity);
+        dialog = new HaloWindow(activity);
         LinearLayout body = new LinearLayout(activity);
         body.setOrientation(LinearLayout.VERTICAL);
         body.setPadding(dp(10), dp(6), dp(10), dp(6));

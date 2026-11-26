@@ -47,6 +47,28 @@ public final class LanSocialHubTest {
     }
 
     public static void main(String[] args) throws Exception {
+        LanShareState defaults = LanShareState.defaults(true);
+        check(defaults.career && defaults.reels, "stats and videos default on");
+        LanShareState legacyOff = LanShareState.defaults(false);
+        check(!legacyOff.career && !legacyOff.reels && legacyOff.videoAllowed,
+            "preserve earlier career opt-out");
+        LanShareState videosOff = defaults.withVideos(false);
+        check(videosOff.career && !videosOff.reels, "video opt-out preserves stats");
+        check(!LanShareState.decode(videosOff.encode()).reels &&
+            LanShareState.decode(videosOff.encode()).career, "opt-out survives persistence");
+        check(!videosOff.withCareer(false).withCareer(true).reels,
+            "career toggle cannot re-enable opted-out video");
+        check(videosOff.withVideos(true).reels, "explicitly re-enable video");
+        check(legacyOff.withCareer(true).reels, "default video resumes with career");
+        check(!LanShareState.decode("LS1|1|2\n").career &&
+            !LanShareState.decode("LS1|1|").reels, "malformed setting fails closed");
+        for (boolean career : new boolean[]{false, true}) {
+            for (boolean video : new boolean[]{false, true}) {
+                LanShareState state = LanShareState.decode(new LanShareState(career, video).encode());
+                check(state.career == career && state.videoAllowed == video &&
+                    state.reels == (career && video), "round trip both independent preferences");
+            }
+        }
         check(LanBoardPresence.readQuery(LanBoardPresence.queryModern(TOKEN).trim()).equals(TOKEN),
             "versioned discovery query");
         LanBoardPresence.Peer a = peer(OWNER, "192.168.43.2", true);

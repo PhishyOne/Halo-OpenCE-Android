@@ -48,7 +48,7 @@ class DiscoveryAndLauncherTests(unittest.TestCase):
         self.assertNotIn('manualHostToggle', self.launcher)
         self.assertIn('manualHostPanel.addView(hostIp);', self.launcher)
         self.assertIn('manual.setVisibility(View.VISIBLE);', self.picker)
-        self.assertIn('new AlertDialog.Builder(activity)', self.picker)
+        self.assertIn('new HaloDialog.Builder(activity)', self.picker)
         self.assertIn('address.setText(current);', self.picker)
         self.assertIn('LanUpdateProtocol.privateAddress(\n', self.launcher)
 

@@ -1,7 +1,6 @@
 package com.halo.decomp;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.Signature;
@@ -38,7 +37,7 @@ final class LanUpdateClient {
         if (LanUpdateProtocol.privateAddress(host) == null) {
             if (reenablePlay != null)
                 reenablePlay.run();
-            new AlertDialog.Builder(activity)
+            new HaloDialog.Builder(activity)
                 .setTitle("Halo LAN updates")
                 .setMessage("Enter your host's private IPv4 address first.")
                 .setPositiveButton("OK", null).show();
@@ -126,7 +125,7 @@ final class LanUpdateClient {
                         continuePlay.run();
                     return;
                 }
-                new AlertDialog.Builder(activity)
+                new HaloDialog.Builder(activity)
                     .setTitle("Halo LAN update available")
                     .setMessage("Your Halo is v" + installed + ". The host has v" +
                         found.version + " (" + (found.size + 1048575) / 1048576 +
@@ -151,7 +150,7 @@ final class LanUpdateClient {
 
     private static void message(Activity activity, String title, String body) {
         if (activity.isFinishing()) return;
-        new AlertDialog.Builder(activity).setTitle(title).setMessage(body)
+        new HaloDialog.Builder(activity).setTitle(title).setMessage(body)
             .setPositiveButton("OK", null).show();
     }
 
@@ -196,7 +195,7 @@ final class LanUpdateClient {
         label.setText("Downloading from Halo host...");
         container.addView(label);
         container.addView(progress);
-        AlertDialog dialog = new AlertDialog.Builder(activity)
+        HaloDialog dialog = new HaloDialog.Builder(activity)
             .setTitle("Halo LAN update")
             .setView(container)
             .setCancelable(false).show();

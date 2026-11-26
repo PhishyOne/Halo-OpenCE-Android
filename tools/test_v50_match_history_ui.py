@@ -29,7 +29,7 @@ class MatchHistoryUiTest(unittest.TestCase):
         self.assertIn("HaloTheme.surface(", self.view)
         self.assertIn("HaloTheme.menuButtonColors(", self.view)
         self.assertIn("HaloTheme.font(", self.view)
-        self.assertIn("new Dialog(activity)", self.view)
+        self.assertIn("new HaloWindow(activity)", self.view)
         self.assertIn("new ListView(activity)", self.view)
         self.assertIn("setOnItemClickListener(", self.view)
         self.assertIn("MatchHistoryModel.select(career, filter)", self.view)

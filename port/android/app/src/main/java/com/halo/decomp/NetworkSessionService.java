@@ -54,7 +54,23 @@ public final class NetworkSessionService extends Service {
             }
         } catch (RuntimeException failure) {
             Log.e("Halo", "Background session protection failed", failure);
-            android.widget.Toast.makeText(this, "Background protection failed. Keep the screen on during multiplayer.", android.widget.Toast.LENGTH_LONG).show();
+            String warning = "Background protection failed. Keep the screen on during multiplayer.";
+            if (!HaloNotice.showFromService(warning)) {
+                // No visible game window: use the OS notification surface,
+                // rather than attempting a background Activity or toast.
+                try {
+                    NotificationManager manager = getSystemService(NotificationManager.class);
+                    manager.createNotificationChannel(new NotificationChannel("halo-session-warning",
+                        "Multiplayer warnings", NotificationManager.IMPORTANCE_DEFAULT));
+                    manager.notify(45, new Notification.Builder(this, "halo-session-warning")
+                        .setSmallIcon(android.R.drawable.stat_notify_error)
+                        .setContentTitle("Halo multiplayer")
+                        .setContentText(warning).setStyle(new Notification.BigTextStyle().bigText(warning))
+                        .setAutoCancel(true).build());
+                } catch (RuntimeException unavailable) {
+                    Log.w("Halo", "Could not display multiplayer warning", unavailable);
+                }
+            }
             stopSelf();
         }
         return START_NOT_STICKY;

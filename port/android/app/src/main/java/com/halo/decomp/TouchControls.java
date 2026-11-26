@@ -1,6 +1,5 @@
 package com.halo.decomp;
 
-import android.app.AlertDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -30,7 +29,6 @@ import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import java.util.Arrays;
 import java.util.Locale;
@@ -292,8 +290,8 @@ public final class TouchControls extends View implements SensorEventListener, In
             layout = saved.layout;
             sensitivity = saved.sensitivity;
         } catch (IllegalArgumentException e) {
-            Toast.makeText(context, "The saved touch layout could not be read. Using the default one.",
-                Toast.LENGTH_LONG).show();
+            HaloNotice.makeText(context, "The saved touch layout could not be read. Using the default one.",
+                HaloNotice.LENGTH_LONG).show();
         }
     }
 
@@ -841,7 +839,7 @@ public final class TouchControls extends View implements SensorEventListener, In
     private boolean saveLayout() {
         boolean saved = preferences.edit().putString(KEY_CONFIGURATION, exportLayout()).commit();
         if (!saved)
-            Toast.makeText(getContext(), "The touch layout could not be saved. Try again.", Toast.LENGTH_LONG).show();
+            HaloNotice.makeText(getContext(), "The touch layout could not be saved. Try again.", HaloNotice.LENGTH_LONG).show();
         return saved;
     }
 
@@ -868,7 +866,7 @@ public final class TouchControls extends View implements SensorEventListener, In
     // ---------- the options
 
     /** opens an option dialog; the controls are released while any is open, and saved when the last closes */
-    private void openDialog(AlertDialog dialog) {
+    private void openDialog(HaloDialog dialog) {
         dialog.setOnDismissListener(d -> {
             openDialogs--;
             if (openDialogs > 0)
@@ -885,7 +883,7 @@ public final class TouchControls extends View implements SensorEventListener, In
 
     private void showOptions() {
         String[] items = {"General", "Edit buttons layout", "Look sensitivity"};
-        AlertDialog dialog = new AlertDialog.Builder(getContext())
+        HaloDialog dialog = new HaloDialog.Builder(getContext())
             .setTitle("Options")
             .setItems(items, (d, which) -> {
                 if (which == 0) {
@@ -913,8 +911,8 @@ public final class TouchControls extends View implements SensorEventListener, In
     private Button button(String label, View.OnClickListener listener) {
         Button button = new Button(getContext());
         button.setText(label);
-        button.setTextColor(HaloTheme.TEXT);
-        HaloTheme.font(button, false);
+        HaloTheme.menuButtonColors(button);
+        HaloTheme.font(button, true);
         button.setOnClickListener(listener);
         return button;
     }
@@ -997,7 +995,7 @@ public final class TouchControls extends View implements SensorEventListener, In
         // (scrolled: in portrait, or on a short display, the rows do not all fit)
         ScrollView scroll = new ScrollView(getContext());
         scroll.addView(panel);
-        AlertDialog dialog = new AlertDialog.Builder(getContext())
+        HaloDialog dialog = new HaloDialog.Builder(getContext())
             .setTitle("General")
             .setView(scroll)
             .setPositiveButton("Done", null)
@@ -1059,7 +1057,7 @@ public final class TouchControls extends View implements SensorEventListener, In
         }
         ScrollView scroll = new ScrollView(getContext());
         scroll.addView(list);
-        openDialog(new AlertDialog.Builder(getContext())
+        openDialog(new HaloDialog.Builder(getContext())
             .setTitle("Edit buttons size")
             .setView(scroll)
             .setPositiveButton("Done", null)
@@ -1108,7 +1106,7 @@ public final class TouchControls extends View implements SensorEventListener, In
         refresh[0].run();
         ScrollView scroll = new ScrollView(getContext());
         scroll.addView(list);
-        AlertDialog dialog = new AlertDialog.Builder(getContext())
+        HaloDialog dialog = new HaloDialog.Builder(getContext())
             .setTitle("Hide or add buttons")
             .setView(scroll)
             .setPositiveButton("Done", null)
@@ -1116,12 +1114,12 @@ public final class TouchControls extends View implements SensorEventListener, In
             .setNeutralButton("Add button", null)
             .create();
         openDialog(dialog);
-        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(view -> confirmReset(refresh[0]));
-        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(view -> chooseButtonToAdd(refresh[0]));
+        dialog.getButton(HaloDialog.BUTTON_NEGATIVE).setOnClickListener(view -> confirmReset(refresh[0]));
+        dialog.getButton(HaloDialog.BUTTON_NEUTRAL).setOnClickListener(view -> chooseButtonToAdd(refresh[0]));
     }
 
     private void confirmReset(Runnable refresh) {
-        new AlertDialog.Builder(getContext())
+        new HaloDialog.Builder(getContext())
             .setTitle("Reset the buttons?")
             .setMessage("This puts every button, Options too, back in its place and size, shows them all and removes the copies.")
             .setNegativeButton("Cancel", null)
@@ -1140,7 +1138,7 @@ public final class TouchControls extends View implements SensorEventListener, In
         String[] names = new String[TouchLayout.BASE_COUNT];
         for (int i = 0; i < names.length; i++)
             names[i] = controlName(i);
-        new AlertDialog.Builder(getContext())
+        new HaloDialog.Builder(getContext())
             .setTitle("Add button")
             .setItems(names, (d, type) -> {
                 reset();
@@ -1184,7 +1182,7 @@ public final class TouchControls extends View implements SensorEventListener, In
         });
         panel.addView(value);
         panel.addView(slider);
-        openDialog(new AlertDialog.Builder(getContext())
+        openDialog(new HaloDialog.Builder(getContext())
             .setTitle("Look sensitivity")
             .setView(panel)
             .setPositiveButton("Done", null)
@@ -1192,7 +1190,7 @@ public final class TouchControls extends View implements SensorEventListener, In
     }
 
     private void toast(String message) {
-        Toast.makeText(getContext(), message, Toast.LENGTH_LONG).show();
+        HaloNotice.makeText(getContext(), message, HaloNotice.LENGTH_LONG).show();
     }
 
     // ---------- the gyroscope and the vibration

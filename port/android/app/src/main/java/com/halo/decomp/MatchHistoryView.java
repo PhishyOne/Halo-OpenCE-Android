@@ -75,7 +75,7 @@ final class MatchHistoryView {
     }
 
     private void open() {
-        dialog = new Dialog(activity);
+        dialog = new HaloWindow(activity);
         LinearLayout surface = new LinearLayout(activity);
         surface.setOrientation(LinearLayout.VERTICAL);
         surface.setPadding(dp(13), dp(9), dp(13), dp(10));

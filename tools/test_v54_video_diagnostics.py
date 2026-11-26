@@ -23,7 +23,7 @@ class VideoDiagnosticsTest(unittest.TestCase):
         self.assertIn("REELS + ORIGINAL RECORDINGS", self.gallery)
         self.assertIn(".setItems(titles", self.gallery)
         self.assertNotIn("setMessage(", self.gallery.split(
-            'new AlertDialog.Builder(activity)\n            .setTitle("REELS + ORIGINAL RECORDINGS")', 1)[1].split(".show();", 1)[0])
+            'new HaloDialog.Builder(activity)\n            .setTitle("REELS + ORIGINAL RECORDINGS")', 1)[1].split(".show();", 1)[0])
         self.assertIn('ReelSessionIndex.safeFileName(file.getName())', self.files)
         self.assertIn("HaloVideoFiles.validName(clip.getName())", self.gallery)
 

@@ -1,7 +1,6 @@
 package com.halo.decomp;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
@@ -245,7 +244,7 @@ final class CareerProfile {
             CareerRecords.Achievement medal, int slot) {
         if (activity.isFinishing() || activity.isDestroyed()) return;
         if (medal == null || !medal.earned) {
-            new AlertDialog.Builder(activity)
+            new HaloDialog.Builder(activity)
                 .setTitle("ACHIEVEMENT SLOT " + slot)
                 .setMessage("Not earned yet. Complete more matches and "
                     + "objectives to unlock an achievement for this slot.")
@@ -288,7 +287,7 @@ final class CareerProfile {
         ScrollView scroll = new ScrollView(activity);
         scroll.setFillViewport(true);
         scroll.addView(details);
-        new AlertDialog.Builder(activity)
+        new HaloDialog.Builder(activity)
             .setTitle("SPARTAN ACHIEVEMENT")
             .setView(scroll)
             .setPositiveButton("CLOSE", null)
@@ -482,7 +481,7 @@ final class CareerProfile {
                 "    " + selected.size() + " moments");
         }
         if (available.isEmpty()) {
-            new AlertDialog.Builder(activity)
+            new HaloDialog.Builder(activity)
                 .setTitle("MATCH HIGHLIGHT MOMENTS")
                 .setMessage("No recorded moments yet. Complete a multiplayer "
                     + "match in this version to capture event timestamps.")
@@ -490,7 +489,7 @@ final class CareerProfile {
                 .show();
             return;
         }
-        new AlertDialog.Builder(activity)
+        new HaloDialog.Builder(activity)
             .setTitle("MATCH HIGHLIGHT MOMENTS")
             .setItems(labels.toArray(new String[0]), (dialog, which) -> {
                 CareerRecords.Match match = available.get(which);
@@ -503,7 +502,7 @@ final class CareerProfile {
                 }
                 summary.append("\nEvent bookmarks only; no video or "
                     + "3D replay was recorded in this version.");
-                new AlertDialog.Builder(activity)
+                new HaloDialog.Builder(activity)
                     .setTitle(match.map + "  •  " + match.gameType())
                     .setMessage(summary.toString())
                     .setPositiveButton("CLOSE", null)
@@ -649,19 +648,19 @@ final class CareerProfile {
         ScrollView scroll = new ScrollView(activity);
         scroll.setFillViewport(true);
         scroll.addView(panel);
-        AlertDialog dialog = new AlertDialog.Builder(activity)
+        HaloDialog dialog = new HaloDialog.Builder(activity)
             .setTitle("SPARTAN SERVICE RECORD")
             .setView(scroll)
             .setNegativeButton("CLOSE", null)
             .setPositiveButton("RENAME", null)
             .create();
         dialog.setOnShowListener(unused -> dialog.getButton(
-            AlertDialog.BUTTON_POSITIVE).setOnClickListener(v ->
+            HaloDialog.BUTTON_POSITIVE).setOnClickListener(v ->
                 rename(activity, dialog, onProfileChanged)));
         dialog.show();
     }
 
-    private static void rename(Activity activity, AlertDialog parent,
+    private static void rename(Activity activity, HaloDialog parent,
                                Runnable onProfileChanged) {
         SharedPreferences pref = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         EditText input = new EditText(activity);
@@ -671,7 +670,7 @@ final class CareerProfile {
         input.setFilters(new InputFilter[] { new InputFilter.LengthFilter(16) });
         input.setText(pref.getString("name", "Spartan"));
         input.setSelectAllOnFocus(true);
-        AlertDialog rename = new AlertDialog.Builder(activity)
+        HaloDialog rename = new HaloDialog.Builder(activity)
             .setTitle("Choose your Spartan name")
             .setMessage("2–16 characters: letters, digits, spaces, hyphens or underscores.")
             .setView(input)
@@ -679,10 +678,11 @@ final class CareerProfile {
             .setPositiveButton("SAVE", null)
             .create();
         rename.setOnShowListener(unused -> rename.getButton(
-            AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            HaloDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             String name = input.getText().toString().trim();
             if (!name.matches("[A-Za-z0-9 _-]{2,16}")) {
-                input.setError("Use 2–16 safe characters.");
+                HaloNotice.makeText(activity, "Use 2–16 safe characters.",
+                    HaloNotice.LENGTH_LONG).show();
                 return;
             }
             pref.edit().putString("name", name).apply();

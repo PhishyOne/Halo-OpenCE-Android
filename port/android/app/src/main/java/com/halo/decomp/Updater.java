@@ -1,7 +1,6 @@
 package com.halo.decomp;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Intent;
 import android.net.Uri;
 import android.util.TypedValue;
@@ -201,7 +200,7 @@ final class Updater {
     private static void ask(Activity activity, int latest) {
         if (activity.isFinishing())
             return;
-        new AlertDialog.Builder(activity)
+        new HaloDialog.Builder(activity)
             .setTitle("Halo: new version")
             .setMessage("A new version of Halo was detected (build " + latest + "; this is build "
                 + BuildConfig.HALO_BUILD_NUMBER + ").\n\nDo you want to update? The game will close and start "
@@ -214,7 +213,7 @@ final class Updater {
     }
 
     private static void confirmNever(Activity activity) {
-        new AlertDialog.Builder(activity)
+        new HaloDialog.Builder(activity)
             .setTitle("Halo: new version")
             .setMessage("Stop asking about new versions?\n\nTo ask again, set auto = true in the [update] section "
                 + "of config.toml.")
@@ -246,7 +245,7 @@ final class Updater {
         bar.setMax(1000);
         layout.addView(status);
         layout.addView(bar);
-        AlertDialog progress = new AlertDialog.Builder(activity)
+        HaloDialog progress = new HaloDialog.Builder(activity)
             .setTitle("Halo: new version")
             .setView(layout)
             .setCancelable(false)
@@ -274,7 +273,7 @@ final class Updater {
                 android.util.Log.i("halo", "update: failed: " + e);
                 activity.runOnUiThread(() -> {
                     progress.dismiss();
-                    new AlertDialog.Builder(activity)
+                    new HaloDialog.Builder(activity)
                         .setTitle("Halo: new version")
                         .setMessage("The update failed:\n\n" + e.getMessage())
                         .setPositiveButton("OK", null)

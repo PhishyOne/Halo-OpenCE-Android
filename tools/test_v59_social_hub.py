@@ -9,14 +9,17 @@ class SocialHubTest(unittest.TestCase):
     def read(self, name):
         return (J / (name + ".java")).read_text()
 
-    def test_one_default_on_switch_preserves_old_explicit_off(self):
+    def test_default_on_with_independent_video_opt_out(self):
         settings = self.read("LanShareSettings")
         ui = self.read("LanBoardUi")
-        self.assertIn('getBoolean("lan_board_share", true), true)', settings)
-        self.assertIn("this.reels = career && reels", settings)
-        self.assertIn("new State(enabled, enabled)", settings)
-        self.assertIn("new State(false, false)", settings)
-        self.assertIn("LAN SHARING • STATS + HIGHLIGHTS", ui)
+        policy = self.read("LanShareState")
+        self.assertIn('getBoolean("lan_board_share", true)', settings)
+        self.assertIn("this.reels = career && videoAllowed", policy)
+        self.assertIn("read(context).withCareer(enabled)", settings)
+        self.assertIn("read(context).withVideos(enabled)", settings)
+        self.assertIn("new LanShareState(false, false)", settings)
+        self.assertIn("LAN CAREER SHARING", ui)
+        self.assertIn("VIDEO SHARING: ON  •  OPT OUT", ui)
         self.assertEqual(ui.count("sharing = new CheckBox(activity)"), 1)
         self.assertNotIn("Share saved highlights?", ui)
         self.assertIn("Not encrypted.", ui)

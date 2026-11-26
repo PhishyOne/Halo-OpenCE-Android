@@ -2,7 +2,6 @@ package com.halo.decomp;
 
 import android.app.Activity;
 import android.app.ActivityManager;
-import android.app.AlertDialog;
 import android.content.ClipData;
 import android.database.Cursor;
 import android.content.Context;
@@ -261,7 +260,7 @@ public class LauncherActivity extends Activity {
 
     private void startGame(Intent intent) {
         if (repairBusy) {
-            android.widget.Toast.makeText(this, "Stop map sharing or finish the repair before playing.", android.widget.Toast.LENGTH_LONG).show();
+            HaloNotice.makeText(this, "Stop map sharing or finish the repair before playing.", HaloNotice.LENGTH_LONG).show();
             return;
         }
         boolean lanSession = "lan".equals(getSharedPreferences("launcher_ui",
@@ -291,9 +290,9 @@ public class LauncherActivity extends Activity {
                     return;
                 } catch (RuntimeException refused) {
                     pendingVideoLaunch = null;
-                    android.widget.Toast.makeText(this,
+                    HaloNotice.makeText(this,
                         "Screen recording unavailable. Starting Halo normally.",
-                        android.widget.Toast.LENGTH_LONG).show();
+                        HaloNotice.LENGTH_LONG).show();
                 }
             }
         }
@@ -362,10 +361,10 @@ public class LauncherActivity extends Activity {
                 }
             }
             boolean done = saved;
-            runOnUiThread(() -> android.widget.Toast.makeText(this,
+            runOnUiThread(() -> HaloNotice.makeText(this,
                 done ? "Halo reel saved to your chosen folder." :
                     "Could not copy reel. Private original kept.",
-                android.widget.Toast.LENGTH_LONG).show());
+                HaloNotice.LENGTH_LONG).show());
         }, "Halo-reel-export").start();
     }
 
@@ -545,7 +544,7 @@ public class LauncherActivity extends Activity {
             setEllipsize(android.text.TextUtils.TruncateAt.END);
             setPadding(dp(9), dp(4), dp(9), dp(4));
             refresh();
-            setOnClickListener(view -> new AlertDialog.Builder(
+            setOnClickListener(view -> new HaloDialog.Builder(
                     LauncherActivity.this)
                 .setTitle(prompt)
                 .setSingleChoiceItems(this.choices, selection,
@@ -1049,7 +1048,7 @@ public class LauncherActivity extends Activity {
                 repairStatus.setText("Close Halo before exporting campaign maps.");
                 return;
             }
-            new AlertDialog.Builder(this)
+            new HaloDialog.Builder(this)
                 .setTitle("Create your campaign repair library?")
                 .setMessage("Only your validated original Xbox campaign maps "
                     + "will be included. Missing or invalid maps are listed "
@@ -1106,7 +1105,7 @@ public class LauncherActivity extends Activity {
                 repairStatus.setText("No earlier backup of " + selected + " exists.");
                 return;
             }
-            new AlertDialog.Builder(this)
+            new HaloDialog.Builder(this)
                 .setTitle("Restore the previous " + selected + "?")
                 .setMessage("This swaps the selected map with its preserved "
                     + "backup. The backup may also be invalid. Existing saves "
@@ -2288,14 +2287,14 @@ public class LauncherActivity extends Activity {
                     startForegroundService(recording);
                 } catch (RuntimeException unavailable) {
                     game.removeExtra(MatchVideoState.TOKEN);
-                    android.widget.Toast.makeText(this,
+                    HaloNotice.makeText(this,
                         "Recording unavailable. Halo will still launch.",
-                        android.widget.Toast.LENGTH_LONG).show();
+                        HaloNotice.LENGTH_LONG).show();
                 }
             } else {
-                android.widget.Toast.makeText(this,
+                HaloNotice.makeText(this,
                     "Recording skipped; Halo starts normally.",
-                    android.widget.Toast.LENGTH_SHORT).show();
+                    HaloNotice.LENGTH_SHORT).show();
             }
             launchWithoutConsent(game);
             return;
@@ -2353,7 +2352,7 @@ public class LauncherActivity extends Activity {
         if (requestCode == PICK_CAMPAIGN_RESTORE) {
             if (resultCode == RESULT_OK && data != null && data.getData() != null) {
                 final Uri document = data.getData();
-                new AlertDialog.Builder(this)
+                new HaloDialog.Builder(this)
                     .setTitle("Restore campaign progress?")
                     .setMessage("This backup will replace the current Halo "
                         + "campaign profiles and checkpoints. The existing "

@@ -124,7 +124,7 @@ final class LanMapRepair {
                 worker = null;
                 if (stopped || activity.isDestroyed()) { finish("Repair paused.", false); return; }
                 if (found.size() == 1) receive(found.get(0));
-                else if (!found.isEmpty()) new AlertDialog.Builder(activity).setTitle("Choose map host")
+                else if (!found.isEmpty()) new HaloDialog.Builder(activity).setTitle("Choose map host")
                     .setItems(found.toArray(new String[0]), (d, which) -> receive(found.get(which)))
                     .setNegativeButton("CANCEL", (d, which) -> finish("Repair canceled.", false))
                     .setOnCancelListener(d -> finish("Repair canceled.", false)).show();
@@ -136,7 +136,7 @@ final class LanMapRepair {
     private void manual() {
         EditText address = new EditText(activity);
         address.setSingleLine(true); address.setHint("Host IP shown beside Share my maps");
-        new AlertDialog.Builder(activity).setTitle("No map host found")
+        new HaloDialog.Builder(activity).setTitle("No map host found")
             .setMessage("Have the host tap SHARE MY MAPS and wait for verification. Connect to their hotspot. You can enter the IP shown on their phone here.")
             .setView(address).setPositiveButton("CONNECT", (d, which) -> receive(address.getText().toString().trim()))
             .setNegativeButton("CANCEL", (d, which) -> finish("Repair canceled.", false))

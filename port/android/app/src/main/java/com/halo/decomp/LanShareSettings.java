@@ -10,42 +10,41 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.StandardCopyOption;
 
-/** One local-only sharing switch, on by default. Preserve an explicitly
- * disabled legacy preference; otherwise enable stats and finished reels.
- * The private atomic file is read by both launcher and game processes. */
+/** Local sharing is default-on, with independent video opt-out.
+ * Preserve explicit legacy career opt-out. Both processes read the
+ * same atomic file; the video preference survives career toggling. */
 final class LanShareSettings {
     private static final String FILE = "halo-lan-sharing-v1.txt";
-    static final class State {
-        final boolean career, reels;
-        State(boolean career, boolean reels) {
-            this.career = career; this.reels = career && reels;
-        }
-    }
     private LanShareSettings() { }
-    static State read(Context context) {
+    static LanShareState read(Context context) {
         File file = new File(context.getFilesDir(), FILE);
         try {
             if (!Files.exists(file.toPath(), LinkOption.NOFOLLOW_LINKS))
-                return new State(context.getSharedPreferences("launcher_ui", Context.MODE_PRIVATE)
-                    .getBoolean("lan_board_share", true), true);
+                return LanShareState.defaults(context.getSharedPreferences("launcher_ui", Context.MODE_PRIVATE)
+                    .getBoolean("lan_board_share", true));
             if (!Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS) ||
-                file.length() != 8) return new State(false, false);
+                file.length() != 8) return new LanShareState(false, false);
             String value = new String(Files.readAllBytes(file.toPath()), StandardCharsets.US_ASCII);
-            if ("LS1|1|1\n".equals(value)) return new State(true, true);
-            return new State(false, false);
+            return LanShareState.decode(value);
         } catch (IOException | RuntimeException invalid) {
-            return new State(false, false);
+            return new LanShareState(false, false);
         }
     }
-    static synchronized boolean set(Context context, boolean enabled) {
+    static synchronized boolean setCareer(Context context, boolean enabled) {
+        return set(context, read(context).withCareer(enabled));
+    }
+
+    static synchronized boolean setVideos(Context context, boolean enabled) {
+        return set(context, read(context).withVideos(enabled));
+    }
+
+    private static boolean set(Context context, LanShareState state) {
         File root = context.getFilesDir();
         File temp = null;
-        State state = new State(enabled, enabled);
         try {
             temp = File.createTempFile("halo-sharing-", ".tmp", root);
             try (FileOutputStream out = new FileOutputStream(temp)) {
-                out.write(("LS1|" + (state.career ? "1" : "0") + "|" +
-                    (state.reels ? "1" : "0") + "\n").getBytes(StandardCharsets.US_ASCII));
+                out.write(state.encode().getBytes(StandardCharsets.US_ASCII));
                 out.getFD().sync();
             }
             File target = new File(root, FILE);

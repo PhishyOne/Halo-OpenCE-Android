@@ -1,6 +1,5 @@
 package com.halo.decomp;
 
-import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Insets;
@@ -16,7 +15,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowManager;
-import android.widget.Toast;
 import android.widget.FrameLayout;
 import android.view.Gravity;
 
@@ -244,7 +242,7 @@ public class HaloActivity extends SDLActivity {
         String message = export
             ? "Choose the folder and the name of the touch layout file."
             : "Choose a touch layout file. It replaces your buttons, the look sensitivity and the General settings.";
-        new AlertDialog.Builder(this)
+        new HaloDialog.Builder(this)
             .setTitle(export ? "Export the layout" : "Import a layout")
             .setMessage(message)
             .setNegativeButton("Cancel", null)
@@ -260,7 +258,7 @@ public class HaloActivity extends SDLActivity {
                     startActivityForResult(intent, export ? EXPORT_LAYOUT : IMPORT_LAYOUT);
                 } catch (android.content.ActivityNotFoundException e) {
                     pendingLayoutExport = null;
-                    Toast.makeText(this, "This device has no file picker.", Toast.LENGTH_LONG).show();
+                    HaloNotice.makeText(this, "This device has no file picker.", HaloNotice.LENGTH_LONG).show();
                 }
             })
             .show();
@@ -304,7 +302,7 @@ public class HaloActivity extends SDLActivity {
                 throw new IOException("the file cannot be opened");
             output.write(configuration.getBytes(StandardCharsets.UTF_8));
         }
-        runOnUiThread(() -> Toast.makeText(this, "The layout is exported.", Toast.LENGTH_SHORT).show());
+        runOnUiThread(() -> HaloNotice.makeText(this, "The layout is exported.", HaloNotice.LENGTH_SHORT).show());
     }
 
     private void readLayoutFile(Uri document) throws IOException {
@@ -328,7 +326,7 @@ public class HaloActivity extends SDLActivity {
                 return;
             try {
                 touchControls.importLayout(configuration);
-                Toast.makeText(this, "The layout is imported and saved.", Toast.LENGTH_SHORT).show();
+                HaloNotice.makeText(this, "The layout is imported and saved.", HaloNotice.LENGTH_SHORT).show();
             } catch (IllegalArgumentException e) {
                 layoutFileError(e);
             }
@@ -338,7 +336,7 @@ public class HaloActivity extends SDLActivity {
     private void layoutFileError(Exception error) {
         if (isFinishing() || isDestroyed())
             return;
-        new AlertDialog.Builder(this)
+        new HaloDialog.Builder(this)
             .setTitle("Touch layout file")
             .setMessage("The operation did not complete: " + error.getMessage())
             .setPositiveButton("OK", null)
@@ -365,13 +363,14 @@ public class HaloActivity extends SDLActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        HaloNotice.foreground(this);
         refreshSocialSharing();
         publishVideoVisibility(getWindow().getDecorView().hasWindowFocus());
         if (getIntent().getBooleanExtra(NETWORK_SESSION, false)) {
             try { startForegroundService(new Intent(this, NetworkSessionService.class)); }
             catch (RuntimeException failure) {
                 Log.w("Halo", "Could not protect background multiplayer", failure);
-                Toast.makeText(this, "Background protection unavailable. Keep the screen on during LAN play.", Toast.LENGTH_LONG).show();
+                HaloNotice.makeText(this, "Background protection unavailable. Keep the screen on during LAN play.", HaloNotice.LENGTH_LONG).show();
             }
         }
         else stopService(new Intent(this, NetworkSessionService.class));
@@ -382,6 +381,7 @@ public class HaloActivity extends SDLActivity {
 
     @Override
     protected void onPause() {
+        HaloNotice.background(this);
         publishVideoVisibility(false);
         rewardActivityResumed = false;
         if (touchControls != null)

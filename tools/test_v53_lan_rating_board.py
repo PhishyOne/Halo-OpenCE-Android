@@ -86,7 +86,7 @@ class LanPeerRatingUiTest(unittest.TestCase):
         self.assertIn("SAVE",self.ui.upper())  # UI describes saved local summaries
 
     def test_user_controls_sharing_and_can_refresh_without_host_server(self):
-        self.assertIn("LAN SHARING",self.ui)
+        self.assertIn("LAN CAREER SHARING",self.ui)
         self.assertIn("REFRESH LAN",self.ui)
         self.assertIn("LanBoardNearby.refresh(",self.ui)
         self.assertNotIn("if (sharing.isChecked()) synchronize();",self.ui)
