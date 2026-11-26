@@ -12,6 +12,128 @@ already have host types by then. Only strings need copying back.
 #include <GLES3/gl32.h>
 #include <dlfcn.h>
 #include <string.h>
+#include <jni.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#include <stdlib.h>
+#include "title_frame_pixels.h"
+
+
+/* A single bounded, demand-driven title frame exchange. Java asks on its
+ * capture worker; only the GL thread reads a framebuffer. No GL calls from
+ * the Java thread, no per-frame JNI callbacks, no queue of GPU readbacks.
+ * Each request yields one fresh frame or a specific readback failure. */
+extern int host_title_capture_mode;
+static pthread_mutex_t title_frame_lock = PTHREAD_MUTEX_INITIALIZER;
+static _Atomic int title_frame_requested;
+static int title_frame_inflight, title_frame_result;
+static int title_frame_width, title_frame_height;
+static uint32_t title_frame_argb[TITLE_FRAME_MAX_WIDTH * TITLE_FRAME_MAX_HEIGHT];
+/* Owned solely by the GL thread and released with the title process. */
+static unsigned char *title_frame_rgba;
+static size_t title_frame_rgba_capacity;
+
+int host_title_capture_requested(void)
+{
+    return atomic_load(&title_frame_requested);
+}
+
+void host_title_capture_present(int width, int height)
+{
+    int out_width, out_height, result = -1;
+    GLint old_read, old_pack, alignment, row_length, skip_rows, skip_pixels;
+    GLint read_buffer;
+    size_t bytes;
+    unsigned int i;
+
+    if (!host_title_capture_mode || !atomic_exchange(&title_frame_requested, 0))
+        return;
+    pthread_mutex_lock(&title_frame_lock);
+    out_width = title_frame_width;
+    out_height = title_frame_height;
+    pthread_mutex_unlock(&title_frame_lock);
+
+    if (!title_frame_source_valid(width, height) ||
+        !title_frame_output_valid(out_width, out_height))
+        goto complete;
+    bytes = (size_t)width * height * 4;
+    if (bytes > title_frame_rgba_capacity)
+    {
+        unsigned char *next = realloc(title_frame_rgba, bytes);
+        if (!next) goto complete;
+        title_frame_rgba = next;
+        title_frame_rgba_capacity = bytes;
+    }
+    /* The game has just blitted its scene to the default framebuffer.
+     * Preserve readback state: a bound pixel pack buffer would make the
+     * pointer below a buffer offset, and a stale row stride would overflow. */
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &old_read);
+    glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING, &old_pack);
+    glGetIntegerv(GL_PACK_ALIGNMENT, &alignment);
+    glGetIntegerv(GL_PACK_ROW_LENGTH, &row_length);
+    glGetIntegerv(GL_PACK_SKIP_ROWS, &skip_rows);
+    glGetIntegerv(GL_PACK_SKIP_PIXELS, &skip_pixels);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glGetIntegerv(GL_READ_BUFFER, &read_buffer);
+    if (read_buffer != GL_BACK) glReadBuffer(GL_BACK);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_PACK_SKIP_ROWS, 0);
+    glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
+    /* Ignore errors left over from the preceding scene only in this
+     * dedicated title process; report actual readback errors separately. */
+    for (i = 0; i < 8 && glGetError() != GL_NO_ERROR; ++i) {}
+    glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, title_frame_rgba);
+    result = glGetError() == GL_NO_ERROR ? 1 : -2;
+    if (read_buffer != GL_BACK) glReadBuffer((GLenum)read_buffer);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, (GLuint)old_read);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, (GLuint)old_pack);
+    glPixelStorei(GL_PACK_ALIGNMENT, alignment);
+    glPixelStorei(GL_PACK_ROW_LENGTH, row_length);
+    glPixelStorei(GL_PACK_SKIP_ROWS, skip_rows);
+    glPixelStorei(GL_PACK_SKIP_PIXELS, skip_pixels);
+
+complete:
+    pthread_mutex_lock(&title_frame_lock);
+    if (result == 1)
+        title_frame_convert(title_frame_rgba, width, height,
+            title_frame_argb, out_width, out_height);
+    title_frame_result = result;
+    title_frame_inflight = 0;
+    pthread_mutex_unlock(&title_frame_lock);
+}
+
+JNIEXPORT jint JNICALL Java_com_halo_decomp_HaloActivity_copyTitleFrame(
+    JNIEnv *env, jobject activity, jintArray pixels, jint width, jint height)
+{
+    int result;
+    (void)activity;
+    if (!host_title_capture_mode || !pixels ||
+        !title_frame_output_valid(width, height) ||
+        (*env)->GetArrayLength(env, pixels) != width * height)
+        return -1;
+    pthread_mutex_lock(&title_frame_lock);
+    result = title_frame_result;
+    if (result == 1)
+    {
+        if (title_frame_width == width && title_frame_height == height)
+            (*env)->SetIntArrayRegion(env, pixels, 0, width * height,
+                (const jint *)title_frame_argb);
+        else
+            result = -1;
+    }
+    title_frame_result = 0;
+    if (!title_frame_inflight)
+    {
+        title_frame_width = width;
+        title_frame_height = height;
+        title_frame_inflight = 1;
+        atomic_store(&title_frame_requested, 1);
+    }
+    pthread_mutex_unlock(&title_frame_lock);
+    return (jint)result;
+}
 
 void *host_gl_resolve(const char *name)
 {

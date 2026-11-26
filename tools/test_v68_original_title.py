@@ -61,7 +61,7 @@ class OriginalTitleTest(unittest.TestCase):
         self.assertIn('if (titleCaptureMode) {\n            showTitlePreparation();\n            return;',activity)
         self.assertIn('if (!titleCaptureMode || titleReturning) return;',activity)
         self.assertIn('if (titleForeground)',activity)
-        self.assertIn('PixelCopy.request(source, bitmap',capture)
+        self.assertIn('activity.copyTitleFrame(pixels, width, height)',capture)
         self.assertIn('copied < TitleBackdropFiles.FRAMES / 6 || changes < 12',capture)
         self.assertIn('activity.finishTitleAudio(true)',capture)
         self.assertIn('TitleBackdropFiles.commit(root)',capture)

@@ -2,17 +2,13 @@ package com.halo.decomp;
 
 import android.graphics.Bitmap;
 import android.os.Handler;
-import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.view.PixelCopy;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 import java.io.*;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** One-time local generation from the native SDL game surface and the
@@ -27,6 +23,7 @@ final class TitleBackdropCapture {
     private Thread worker;
     private long surfaceDeadline;
     private int copyFailures, copiedFrames, changedFrames, writtenFrames;
+    private int blankFrames, waitingFrames, lastReadError;
     private int capturedAudioMs;
     private String phase = "Waiting for native title";
     private final Runnable timeout = () -> {
@@ -71,7 +68,8 @@ final class TitleBackdropCapture {
                 source.getHolder().getSurface().isValid()) {
             phase = "Capturing native title";
             TitleBackdropFiles.writeStatus(activity.getFilesDir(), "Preparing: " + phase);
-            worker = new Thread(() -> capture(source), "Halo-title-capture");
+            final int sourceWidth = source.getWidth(), sourceHeight = source.getHeight();
+            worker = new Thread(() -> capture(sourceWidth, sourceHeight), "Halo-title-capture");
             worker.start();
         } else if (SystemClock.elapsedRealtime() < surfaceDeadline) {
             ui.postDelayed(this::awaitSurface, 150);
@@ -85,7 +83,10 @@ final class TitleBackdropCapture {
     }
 
     private void fail(String message) {
-        try { activity.finishTitleAudio(false); } catch (RuntimeException | LinkageError ignored) { }
+        try {
+            capturedAudioMs = Math.max(capturedAudioMs, activity.titleAudioDuration());
+            activity.finishTitleAudio(false);
+        } catch (RuntimeException | LinkageError ignored) { }
         try { TitleBackdropFiles.clearPending(activity.getFilesDir()); } catch (IOException ignored) { }
         finish(false, message);
     }
@@ -95,15 +96,16 @@ final class TitleBackdropCapture {
         ui.removeCallbacks(timeout);
         String detail = success ? "Ready" : "Title failed: " + message +
             " (frames " + copiedFrames + "/" + writtenFrames + ", changes " +
-            changedFrames + ", copy errors " + copyFailures + ", audio " +
+            changedFrames + ", blank " + blankFrames + ", waiting " + waitingFrames +
+            ", GL errors " + copyFailures + "/" + lastReadError + ", audio " +
             capturedAudioMs + "ms)";
         TitleBackdropFiles.writeStatus(activity.getFilesDir(), detail);
         android.util.Log.i("HaloTitle", detail);
         ui.post(() -> activity.returnFromTitleCapture(success, success ? message : detail));
     }
 
-    /** A successful PixelCopy alone can still be black. Require visible,
-     * changing original frames before committing a cache. */
+    /** Even a successful native readback can contain a genuinely black
+     * loading frame. Require visible, changing original frames. */
     private static long signature(Bitmap image) {
         long hash = 1469598103934665603L;
         int bright = 0;
@@ -118,20 +120,19 @@ final class TitleBackdropCapture {
         return bright < 3 ? 0 : hash;
     }
 
-    private void capture(SurfaceView source) {
-        HandlerThread callbacks = new HandlerThread("Halo-title-pixelcopy");
-        callbacks.start();
-        Handler callback = new Handler(callbacks.getLooper());
+    private void capture(int sourceWidth, int sourceHeight) {
         Bitmap bitmap = null;
         boolean committed = false;
         String result = "Title setup failed.";
         try {
-            if (source.getWidth() <= 0 || source.getHeight() <= 0)
+            if (sourceWidth <= 0 || sourceHeight <= 0)
                 throw new IOException("Title surface has no dimensions.");
             int width = 480;
             int height = Math.max(90, Math.min(480,
-                Math.round(width * source.getHeight() / (float)source.getWidth()))) & ~1;
+                Math.round(width * sourceHeight / (float)sourceWidth))) & ~1;
             bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+            bitmap.setHasAlpha(false);
+            int[] pixels = new int[width * height];
             File root = activity.getFilesDir();
             long start = SystemClock.elapsedRealtime();
             long lastSignature = 0;
@@ -146,38 +147,33 @@ final class TitleBackdropCapture {
                     if (wait > 0) Thread.sleep(wait);
                     if (SystemClock.elapsedRealtime() - start > 75000)
                         throw new IOException("The phone could not capture the title at a usable rate.");
-                    // If encoding is behind the capture clock, repeat the
-                    // last frame rather than queueing unbounded PixelCopies.
-                    boolean behind = last != null && SystemClock.elapsedRealtime() - due > 120;
-                    if (!behind) {
-                        CountDownLatch done = new CountDownLatch(1);
-                        int[] code = {PixelCopy.ERROR_UNKNOWN};
-                        PixelCopy.request(source, bitmap, value -> { code[0] = value; done.countDown(); }, callback);
-                        if (!done.await(1200, TimeUnit.MILLISECONDS))
-                            throw new IOException("Title frame capture timed out.");
-                        if (code[0] == PixelCopy.SUCCESS) {
-                            long sample = signature(bitmap);
-                            if (sample != 0) {
-                                if (lastSignature != 0 && sample != lastSignature) changes++;
-                                lastSignature = sample;
-                                jpeg.reset();
-                                // Keep the private cache within its fixed budget even for
-                                // detailed frames. Preserve the real scene, not a synthetic image.
-                                if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 65, jpeg))
-                                    throw new IOException("Cannot encode title frame.");
-                                last = jpeg.toByteArray();
-                                copied++;
-                                copiedFrames = copied;
-                                changedFrames = changes;
-                            }
-                        } else copyFailures++;
-                    }
+                    // The GL thread services at most one demand-driven request
+                    // per tick. Never capture a compositor surface or queue.
+                    int code = activity.copyTitleFrame(pixels, width, height);
+                    if (code == 1) {
+                        bitmap.setPixels(pixels, 0, width, 0, 0, width, height);
+                        long sample = signature(bitmap);
+                        if (sample != 0) {
+                            if (lastSignature != 0 && sample != lastSignature) changes++;
+                            lastSignature = sample;
+                            jpeg.reset();
+                            // Keep the private cache within its fixed budget even for
+                            // detailed frames. Preserve the real scene, not a synthetic image.
+                            if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 65, jpeg))
+                                throw new IOException("Cannot encode title frame.");
+                            last = jpeg.toByteArray();
+                            copied++;
+                            copiedFrames = copied;
+                            changedFrames = changes;
+                        } else blankFrames++;
+                    } else if (code == 0) waitingFrames++;
+                    else { copyFailures++; lastReadError = code; }
                     if (last != null) {
                         writer.frame(last);
                         writtenFrames = writer.count();
                     }
                     else if (tick > 10 * TitleBackdropFiles.FPS)
-                        throw new IOException("No visible original title frame received.");
+                        throw new IOException("No visible native GL title frame received.");
                     int seconds = tick / TitleBackdropFiles.FPS;
                     if (seconds != lastProgress) {
                         lastProgress = seconds;
@@ -200,10 +196,12 @@ final class TitleBackdropCapture {
         } catch (Exception | LinkageError failure) {
             result = failure.getMessage() == null ? "Original title capture failed." : failure.getMessage();
         } finally {
-            callbacks.quitSafely();
-            // A timed-out PixelCopy may still own the bitmap. Do not recycle it.
+            if (bitmap != null) bitmap.recycle();
             if (!committed) {
-                try { activity.finishTitleAudio(false); } catch (RuntimeException | LinkageError ignored) { }
+                try {
+                    capturedAudioMs = Math.max(capturedAudioMs, activity.titleAudioDuration());
+                    activity.finishTitleAudio(false);
+                } catch (RuntimeException | LinkageError ignored) { }
                 try { TitleBackdropFiles.clearPending(activity.getFilesDir()); } catch (IOException ignored) { }
             }
             finish(committed, result);

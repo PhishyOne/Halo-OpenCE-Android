@@ -36,6 +36,9 @@ public class HaloActivity extends SDLActivity {
     private boolean titleCaptureMode, titleReturning, titleForeground;
     private TitleBackdropCapture titleCapture;
     native int finishTitleAudio(boolean keep);
+    native int copyTitleFrame(int[] pixels, int width, int height);
+    native int titleAudioDuration();
+
 
     static final String NETWORK_SESSION = "com.halo.decomp.NETWORK_SESSION";
     static final String OFFLINE_BOT_ARGUMENTS = "com.halo.decomp.OFFLINE_BOT_ARGUMENTS";

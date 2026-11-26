@@ -43,6 +43,11 @@ struct handle
 	void *binding;
 };
 
+/* Only used during the dedicated local title preparation. */
+extern int host_title_capture_mode;
+extern int host_title_capture_requested(void);
+extern void host_title_capture_present(int width, int height);
+
 static struct handle handles[HANDLE_COUNT];
 static pthread_mutex_t handle_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -208,6 +213,14 @@ int host_sdl_gl_swap_window(uint32_t window)
      * wait for the Activity to resume. SDL restores the context on resume. */
     SDL_PumpEvents();
     if (!SDL_GL_GetCurrentContext()) return 1;
+    /* Read the completed window framebuffer before EGL swaps/discards it.
+     * Do not involve Android's compositor or its premultiplied alpha. */
+    if (object && host_title_capture_mode && host_title_capture_requested())
+    {
+        int width = 0, height = 0;
+        SDL_GetWindowSizeInPixels(object, &width, &height);
+        host_title_capture_present(width, height);
+    }
     return object ? SDL_GL_SwapWindow(object) : 0;
 }
 
@@ -321,7 +334,6 @@ int host_sdl_rumble_gamepad(uint32_t gamepad, uint32_t low, uint32_t high, uint3
 
 /* Capture only the original local game mixer during a dedicated title
  * launch. No microphone, screen recorder or normal gameplay recording. */
-extern int host_title_capture_mode;
 #define TITLE_RATE 48000
 #define TITLE_SECONDS 60
 #define TITLE_MAX_SAMPLES (TITLE_RATE * 2 * TITLE_SECONDS)
@@ -427,6 +439,20 @@ static void title_record_mix(const SDL_AudioSpec *spec, const void *bytes, int l
 	if (title_audio_error || title_audio_samples >= TITLE_MAX_SAMPLES)
 		atomic_store(&title_audio_recording, 0);
 	pthread_mutex_unlock(&title_audio_lock);
+}
+
+/* Diagnostic duration even if the visual capture fails. Not evidence
+ * that the recorded samples are audible. */
+JNIEXPORT jint JNICALL Java_com_halo_decomp_HaloActivity_titleAudioDuration(
+    JNIEnv *env, jobject activity)
+{
+    int duration;
+    (void)env; (void)activity;
+    if (!host_title_capture_mode) return 0;
+    pthread_mutex_lock(&title_audio_lock);
+    duration = title_audio_samples / (TITLE_RATE * 2 / 1000);
+    pthread_mutex_unlock(&title_audio_lock);
+    return (jint)duration;
 }
 
 /* Return the verified duration in milliseconds, or zero for a failed,
