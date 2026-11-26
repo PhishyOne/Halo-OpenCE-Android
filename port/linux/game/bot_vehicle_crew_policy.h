@@ -5,6 +5,7 @@
 #ifndef HALO_BOT_VEHICLE_CREW_POLICY_H
 #define HALO_BOT_VEHICLE_CREW_POLICY_H
 
+#include <float.h>
 #include <math.h>
 
 /* Only a subset can leave objective duties to crew vehicles. Driver
@@ -35,7 +36,7 @@ static int bot_crew_speed_safe(float speed_squared, int gunner,
     int human_driver)
 {
     const float safe = gunner && human_driver ? 0.12f : 0.02f;
-    return speed_squared >= 0.0f && isfinite(speed_squared) &&
+    return speed_squared >= 0.0f &&
         speed_squared <= safe * safe;
 }
 
@@ -45,7 +46,7 @@ static int bot_crew_speed_safe(float speed_squared, int gunner,
 static float bot_crew_seat_score(float distance, int driver,
     int gunner, int friendly_human_driver)
 {
-    if (!isfinite(distance) || distance < 0.0f)
+    if (!(distance >= 0.0f && distance <= FLT_MAX))
         return 1e30f;
     if (gunner && friendly_human_driver)
         return distance - 8.0f;
@@ -62,9 +63,9 @@ static int bot_crew_tank_fire_allowed(int is_driver_gunner, int armed,
     float distance, float yaw_error, float pitch_error, int age_ticks)
 {
     return is_driver_gunner && armed && age_ticks >= 0 && age_ticks <= 4 &&
-        isfinite(distance) && distance >= 10.0f && distance <= 75.0f &&
-        isfinite(yaw_error) && fabsf(yaw_error) <= 0.32f &&
-        isfinite(pitch_error) && fabsf(pitch_error) <= 0.35f;
+        distance >= 10.0f && distance <= 75.0f &&
+        fabsf(yaw_error) <= 0.32f &&
+        fabsf(pitch_error) <= 0.35f;
 }
 
 #endif
