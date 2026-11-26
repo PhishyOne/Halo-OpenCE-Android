@@ -391,6 +391,7 @@ symbols in this file:
 #include <stdio.h>
 #include "launcher_match_presets.h"
 #include "launcher_match_rules.h"
+#include "launcher_lan.h" /* port: Android launcher System Link handoff */
 #endif
 #include "network_coop.h"
 #include "coop_scripts.h" /* port: port/linux/game/coop_scripts.c */
@@ -3458,6 +3459,8 @@ static void main_loop_web_frame(
 #endif
 
 #ifdef HALO_ANDROID
+#include "launcher_lan_match.h" /* port: one reviewed match from the Android LAN lobby */
+
 /* A production one-shot offline launch. Use the same local server/client
  * initialization as split screen, not debug.network_test or menu key events.
  * The engine's actual pregame roster and countdown are the authority. */
@@ -3817,6 +3820,7 @@ static boolean main_loop_iteration(
 			network_test_update(main_globals.main_menu_scenario_loaded, main_globals.seconds_elapsed);
 #ifdef HALO_ANDROID
             launcher_match_update(main_globals.main_menu_scenario_loaded);
+            launcher_lan_update(main_globals.main_menu_scenario_loaded);
 #endif
 			/* port: a dedicated server's hosting, rotation and commands
 			(port/linux/game/server_director.c) */

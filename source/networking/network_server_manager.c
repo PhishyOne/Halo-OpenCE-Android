@@ -1571,6 +1571,9 @@ teams in the lobby, and the bots follow. They leave when the setting asks
 for fewer, or the game is another gametype. Not once the game has been
 started, nor in a game other machines may join (system link and internet
 games: no bots there, which would need the clients told) */
+#ifdef HALO_ANDROID
+#include "launcher_lan.h" /* port: the reviewed seats and team counts for a launcher match */
+#endif
 static void network_game_server_port_bots(
 	struct network_game_server *server)
 {
@@ -1656,6 +1659,12 @@ static void network_game_server_port_bots(
 	{
 		long team_index;
 
+#ifdef HALO_ANDROID
+		/* port: honor the resolved per-team counts, including a manual handicap. */
+		team_index = launcher_lan_bot_team(bot_index);
+		if (team_index != NONE) { /* chosen by the host's launcher */ }
+		else
+#endif
 		if (bots_teams() == _bots_teams_against)
 			team_index = human_team == 0 ? 1 : 0;
 		else
@@ -2732,6 +2741,10 @@ boolean network_game_server_add_player_to_game(
 
 		/* (the host chooses the player's slot, which is its datum on every
 		machine: network_game_add_player) */
+#ifdef HALO_ANDROID
+		/* port: a launcher match admits the reviewed seat exactly once and applies its profile. */
+		if (!launcher_lan_admit(&server->game, player)) return FALSE;
+#endif
 		player->player_list_index = NONE;
 		success = network_game_add_player(&server->game, player);
 		if (success == TRUE)
@@ -3616,6 +3629,10 @@ can join the game in progress. */
 boolean server_ok_to_countdown(
 	struct network_game_server *server)
 {
+#ifdef HALO_ANDROID
+	/* port: enforce actual membership even if a native menu requests an early start. */
+	if (!launcher_lan_countdown_allowed(&server->game)) return FALSE;
+#endif
 	/* port: a dedicated server's lobby, whose own machine has no player:
 	its director's rules, server.min_players and server.team_start
 	(port/linux/game/server_director.c) */

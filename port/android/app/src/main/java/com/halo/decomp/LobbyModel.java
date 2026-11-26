@@ -55,7 +55,19 @@ final class LobbyModel {
     }
     static final class Snapshot {
         final String session,self;final long revision;final Plan plan;final List<Member> members;
+        final String round, startMessage;
+        final int startIndex;
+        final boolean released;
         Snapshot(String session,String self,long revision,Plan plan,List<Member> members){
+            this(session,self,revision,plan,members,"",-1,false,"");
+        }
+        Snapshot(String session,String self,long revision,Plan plan,List<Member> members,
+                String round,int startIndex,boolean released,String message){
+            if(round.isEmpty() ? (startIndex!=-1||released) : (startIndex<0||startIndex>=plan.entries.size()))
+                throw new IllegalArgumentException("Invalid launch phase");
+            if(message.length()>180)throw new IllegalArgumentException("Invalid launch status");
+            this.round=round.isEmpty()?"":validId(round);
+            this.startIndex=startIndex;this.released=released;startMessage=message;
             this.session=validId(session);this.self=validId(self);
             if(revision<0||members.isEmpty()||members.size()>MAX_HUMANS)throw new IllegalArgumentException("Invalid roster");
             this.revision=revision;this.plan=Objects.requireNonNull(plan);
@@ -122,6 +134,10 @@ final class LobbyModel {
                 blocker="Both teams need at least one participant.";
             else blocker="";
         }
+        static StartReview selected(Snapshot snapshot){
+            if(snapshot.round.isEmpty())throw new IllegalStateException("No match is starting");
+            return new StartReview(null,snapshot,snapshot.startIndex);
+        }
         boolean needsOverride(){return !notReady.isEmpty();}
     }
 
@@ -177,7 +193,7 @@ final class LobbyModel {
     }
 
     private static final class Guest {
-        final String secret;Member row;long seen;
+        final String secret;Member row;long seen;String localAddress="",peerAddress="";
         Guest(String secret,Member row,long now){this.secret=secret;this.row=row;seen=now;}
     }
     static final class Joined {
@@ -191,12 +207,44 @@ final class LobbyModel {
         this.plan=Objects.requireNonNull(plan);
         host=new Member(token(),name,color,plan.teams()?RED:NO_TEAM,NO_TEAM,true,false);
     }
+    private StartTicket launch;
+    private final Set<String> prepared=new HashSet<>();
+    private boolean released;
+    private long prepareBegan;
+    private String startMessage="";
+    synchronized Snapshot beginStart(StartReview review,boolean override,long now){
+        if(launch!=null)throw new IllegalStateException("A match is already starting.");
+        launch=authorizeStart(review,override,now);
+        prepareBegan=now;prepared.clear();released=guests.isEmpty();startMessage="";
+        changed();
+        return snapshot(host.id);
+    }
+    synchronized Snapshot acknowledge(String secret,String round,boolean accepted,long now){
+        Guest guest=require(secret,now);
+        if(launch==null||!launch.id.equals(round)||released)return snapshot(guest.row.id);
+        if(!accepted)resetStart(guest.row.name+" could not open the selected match. Check the map on that phone.",now);
+        else if(prepared.add(guest.row.id)){
+            released=prepared.size()==guests.size();changed();
+        }
+        return snapshot(guest.row.id);
+    }
+    synchronized void resetStart(String message,long now){
+        launch=null;released=false;prepared.clear();startMessage=message;
+        for(Guest g:guests.values())g.seen=now;
+        clearReady();changed();
+    }
     private void changed(){if(revision<Long.MAX_VALUE)revision++;}
     private void clearReady(){
         host=host.unready();for(Guest g:guests.values())g.row=g.row.unready();
     }
     synchronized void expire(long now){
-        if(guests.values().removeIf(g->now-g.seen>GUEST_EXPIRY_MS)){clearReady();changed();}
+        if(released)return; // Native gameplay owns the phones until the host returns.
+        if(guests.values().removeIf(g->now-g.seen>GUEST_EXPIRY_MS)){
+            if(launch!=null)resetStart("A player disconnected before launch.",now);
+            else {clearReady();changed();}
+        }else if(launch!=null&&now-prepareBegan>45000){
+            resetStart("Timed out checking the match on all phones.",now);
+        }
     }
     private int nextTeam(){
         if(!plan.teams())return NO_TEAM;
@@ -207,11 +255,33 @@ final class LobbyModel {
     }
     synchronized Joined join(String name,int color,long now){
         expire(now);
+        if(launch!=null)throw new IllegalArgumentException("A match is already starting or in play");
         if(guests.size()>=MAX_HUMANS-1)throw new IllegalArgumentException("Lobby is full");
         String secret=token();
         Guest g=new Guest(secret,new Member(token(),name,color,nextTeam(),NO_TEAM,false,false),now);
         guests.put(secret,g);clearReady();changed();
         return new Joined(secret,snapshot(g.row.id));
+    }
+    synchronized Joined join(String name,int color,long now,String localAddress,String peerAddress){
+        Joined joined=join(name,color,now);
+        guests.get(joined.secret).localAddress=localAddress;
+        guests.get(joined.secret).peerAddress=peerAddress;
+        return joined;
+    }
+    synchronized String nativeInterface(String fallback){
+        String chosen="";
+        for(Guest g:guests.values()){
+            if(g.localAddress.isEmpty())continue;
+            if(!chosen.isEmpty()&&!chosen.equals(g.localAddress))
+                throw new IllegalStateException("All players must use the same host Wi-Fi or hotspot interface.");
+            chosen=g.localAddress;
+        }
+        return chosen.isEmpty()?fallback:chosen;
+    }
+    synchronized List<String> nativePeers(){
+        List<String> peers=new ArrayList<>();
+        for(Guest g:guests.values())peers.add(g.peerAddress);
+        return peers;
     }
     private Guest require(String secret,long now){
         expire(now);Guest g=guests.get(secret);
@@ -221,7 +291,7 @@ final class LobbyModel {
     synchronized Snapshot poll(String secret,long now){return snapshot(require(secret,now).row.id);}
     synchronized Snapshot guestUpdate(String secret,String name,int color,boolean ready,int request,long knownRevision,long now){
         Guest g=require(secret,now);
-        if(knownRevision!=revision)return snapshot(g.row.id);
+        if(launch!=null||knownRevision!=revision)return snapshot(g.row.id);
         if(!plan.teams()&&request!=NO_TEAM)throw new IllegalArgumentException("Free-for-all has no teams");
         Member old=g.row;
         if(request==old.team)request=NO_TEAM;
@@ -230,13 +300,19 @@ final class LobbyModel {
         g.row=old.appearance(name,color,ready,request);changed();return snapshot(g.row.id);
     }
     synchronized void leave(String secret,long now){
-        require(secret,now);guests.remove(secret);clearReady();changed();
+        Guest g=require(secret,now);
+        if(launch!=null&&released)return; // The frozen roster also serves retried release responses.
+        guests.remove(secret);
+        if(launch!=null)resetStart(g.row.name+" left before launch.",now);
+        else {clearReady();changed();}
     }
     synchronized Snapshot hostSnapshot(long now){expire(now);return snapshot(host.id);}
     synchronized void hostAppearance(String name,int color,boolean ready){
+        if(launch!=null)return;
         host=host.appearance(name,color,ready,NO_TEAM);changed();
     }
     synchronized void setTeam(String id,int requested){
+        if(launch!=null)return;
         if(!plan.teams()||requested==NO_TEAM)throw new IllegalArgumentException("No such team");
         team(requested);
         if(host.id.equals(id)){host=host.assigned(requested);clearReady();changed();return;}
@@ -244,6 +320,7 @@ final class LobbyModel {
         throw new IllegalArgumentException("Player left");
     }
     synchronized void setPlan(Plan p){
+        if(launch!=null)return;
         boolean was=plan.teams();plan=Objects.requireNonNull(p);
         if(!p.teams()){
             host=host.assigned(NO_TEAM);
@@ -257,6 +334,13 @@ final class LobbyModel {
     }
     private Snapshot snapshot(String self){
         List<Member> rows=new ArrayList<>();rows.add(host);for(Guest g:guests.values())rows.add(g.row);
-        return new Snapshot(session,self,revision,plan,rows);
+        String message=startMessage;
+        if(launch!=null&&!released){
+            ArrayList<String> waiting=new ArrayList<>();
+            for(Guest g:guests.values())if(!prepared.contains(g.row.id))waiting.add(g.row.name);
+            message="Checking match on "+(waiting.size()>3?waiting.size()+" phones":String.join(", ",waiting));
+        }
+        return new Snapshot(session,self,revision,plan,rows,launch==null?"":launch.id,
+            launch==null?-1:launch.entryIndex,released,message);
     }
 }

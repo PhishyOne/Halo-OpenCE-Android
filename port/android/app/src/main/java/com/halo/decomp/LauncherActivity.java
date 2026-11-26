@@ -97,6 +97,7 @@ public class LauncherActivity extends Activity {
     private LinearLayout dashboardPanel;
     private LanBoardUi socialUi;
     private LauncherLobbyUi lobbyUi;
+    private boolean lobbyGameStarted;
     private Runnable openSocial;
     private LanMapRepair lanMapRepair;
     private LanBoardServer lanBoardServer;
@@ -266,7 +267,7 @@ public class LauncherActivity extends Activity {
     }
 
     private void startGame(Intent intent) {
-        if (lobbyUi != null && lobbyUi.hasSession()) {
+        if (lobbyUi != null && lobbyUi.hasSession() && !intent.getBooleanExtra(HaloActivity.LOBBY_MATCH, false)) {
             HaloNotice.makeText(this, "Leave the launcher lobby before starting Classic Halo or Offline Match.", HaloNotice.LENGTH_LONG).show();
             return;
         }
@@ -274,7 +275,7 @@ public class LauncherActivity extends Activity {
             HaloNotice.makeText(this, "Stop map sharing or finish the repair before playing.", HaloNotice.LENGTH_LONG).show();
             return;
         }
-        boolean lanSession = "lan".equals(getSharedPreferences("launcher_ui",
+        boolean lanSession = intent.getBooleanExtra(HaloActivity.LOBBY_MATCH, false) || "lan".equals(getSharedPreferences("launcher_ui",
             MODE_PRIVATE).getString("play_mode", "standard"));
         intent.putExtra(HaloActivity.NETWORK_SESSION, lanSession);
         // Any opted-in phone may answer local leaderboard presence while
@@ -324,7 +325,10 @@ public class LauncherActivity extends Activity {
         // open on one device or rely on a cloud service.
         stopBoardSharing();
         startActivity(intent);
-        finish();
+        if (intent.getBooleanExtra(HaloActivity.LOBBY_MATCH, false))
+            lobbyGameStarted = true;
+        else
+            finish();
     }
 
     /** Explicit SAF export works for both the finished reel and full
@@ -1491,7 +1495,14 @@ public class LauncherActivity extends Activity {
             updateMode.run();
             if (joinRole.isChecked() && lanOnly.isChecked() && !invitePending)
                 hostPicker.search(false, null);
-        }, () -> !repairBusy && gameProcessStatus() == 0 && !hasInternetInvite());
+        }, () -> !repairBusy && gameProcessStatus() == 0 && !hasInternetInvite(), (arguments, hosting) -> {
+            Intent game = new Intent(this, HaloActivity.class);
+            game.putExtra(HaloActivity.LOBBY_MATCH, true);
+            game.putExtra(HaloActivity.OFFLINE_BOT_ARGUMENTS, arguments);
+            game.putExtra(HaloActivity.LAN_DISCOVERY_HOST, hosting);
+            game.putExtra(HaloActivity.LAN_UPDATE_HOST, hosting && shareUpdates.isChecked());
+            startGame(game);
+        });
         backToLobby.setOnClickListener(view -> {
             classicLan[0] = false;
             updateMode.run();
@@ -2300,10 +2311,25 @@ public class LauncherActivity extends Activity {
         super.onDestroy();
     }
 
+    private void resumeLobbyAfterGame() {
+        if (!launcherResumed || !lobbyGameStarted || lobbyUi == null) return;
+        if (gameProcessStatus() == 0) {
+            lobbyGameStarted = false;
+            lobbyUi.returned();
+        } else {
+            getWindow().getDecorView().postDelayed(this::resumeLobbyAfterGame, 750);
+        }
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
         launcherResumed = true;
+        if (lobbyGameStarted && lobbyUi != null) {
+            // Recording consent may briefly resume this Activity before :game has focus.
+            // A game that is still running keeps ownership until it exits.
+            resumeLobbyAfterGame();
+        }
         // A stopped host's durable pending record becomes a forfeit,
         // not a vanished match. Never recover while the game is running.
         try {

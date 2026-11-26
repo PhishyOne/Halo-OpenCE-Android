@@ -251,12 +251,19 @@ void xbox_set_machine_name(
 	return;
 }
 
+#ifdef HALO_ANDROID
+#include "launcher_lan.h" /* port: ephemeral seat identifier during a launcher match */
+#endif
+
 void network_game_generate_local_machine_name(
 	wchar_t *machine_name)
 {
 	char ascii_machine_name[32];
 	HANDLE find_handle;
 
+#ifdef HALO_ANDROID
+	if (launcher_lan_machine_name(machine_name)) return;
+#endif
 	/* port: a machine that brings one player to the game (the one who
 	joined multiplayer on it) is named after that player's profile, not the
 	system's random nickname: the system link list shows a host's game by it */

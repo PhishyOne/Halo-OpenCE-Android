@@ -14,14 +14,18 @@ import java.util.concurrent.*;
 import java.util.function.BooleanSupplier;
 
 /** One Lobby tab, with real host/join acknowledgement and a shared roster.
- * This is the launcher pregame layer. Native match launch remains gated
- * until the engine accepts a complete session plan and player mapping. */
+ * Start distributes a frozen match to the joined phones before handing off to Halo. */
 final class LauncherLobbyUi implements AutoCloseable {
     private final Activity activity;
     private final File dataRoot;
     private final LinearLayout body;
     private final Runnable classic;
+    interface MatchLauncher { void start(String[] args,boolean host); }
+    private final MatchLauncher launcher;
     private final BooleanSupplier canOpen;
+    private String preparedRound="", launchedRound="", localFailure="";
+    private String[] launchArgs;
+    private boolean inGame;
     private final SharedPreferences prefs;
     private final Handler ui=new Handler(Looper.getMainLooper());
     private final ExecutorService work=Executors.newSingleThreadExecutor(r->{
@@ -41,8 +45,8 @@ final class LauncherLobbyUi implements AutoCloseable {
     private String notice="";
     private final Runnable tick=this::tick;
 
-    LauncherLobbyUi(Activity a,File root,LinearLayout parent,Runnable classic,BooleanSupplier canOpen){
-        activity=a;dataRoot=root;body=parent;this.classic=classic;this.canOpen=canOpen;
+    LauncherLobbyUi(Activity a,File root,LinearLayout parent,Runnable classic,BooleanSupplier canOpen,MatchLauncher launcher){
+        activity=a;dataRoot=root;body=parent;this.classic=classic;this.launcher=launcher;this.canOpen=canOpen;
         prefs=a.getSharedPreferences("lobby_profile_v1",Activity.MODE_PRIVATE);
         showSelection();
     }
@@ -159,6 +163,18 @@ final class LauncherLobbyUi implements AutoCloseable {
         body.addView(text("LOBBY  /  "+(hosting?"HOST":"PLAYER"),14,HaloTheme.FOCUS_TEXT,true));
         status=text("",11,HaloTheme.MUTED,false);body.addView(status);
         summary=panel();roster=panel();
+        if(!snapshot.round.isEmpty()){
+            LobbyModel.StartReview selected=LobbyModel.StartReview.selected(snapshot);
+            body.addView(text(WorkshopMapCatalog.label(sessionMaps,selected.entry.map)+" · "+selected.entry.preset.name,14,HaloTheme.TEXT,true));
+            label(body,selected.members.size()+" players · "+selected.allocation.bots()+" bots");
+            if(hosting&&!snapshot.released)body.addView(button("CANCEL START",()->{
+                host.model.resetStart("Start canceled.",LanLobbyTransport.now());
+                applySnapshot(host.model.hostSnapshot(LanLobbyTransport.now()));
+            }));
+            if(!hosting&&!inGame)body.addView(button("LEAVE LOBBY",()->leave(true,"Left lobby.")));
+            refreshStatus();
+            return;
+        }
         if(hosting){
             try{
                 hostEditor=MatchWorkshopUi.attach(activity,dataRoot,lib->{
@@ -171,25 +187,27 @@ final class LauncherLobbyUi implements AutoCloseable {
         pair(body,summary,roster);
         if(hosting){
             Button start=button("START",this::reviewStart);
-            // Native handoff is not available yet. Keep disabled rather
-            // than falsely advertise the draft pregame as a playable match.
-            start.setEnabled(false);
             pair(body,button("CANCEL LOBBY",()->leave(true,"Lobby closed.")),start);
-            label(body,"Pregame membership is live. Start is gated until native match handoff is implemented.");
         }else body.addView(button("LEAVE LOBBY",()->leave(true,"Left lobby.")));
         refreshShared();
     }
     private void refreshStatus(){
         if(status==null||snapshot==null)return;
         if(connectionLost){status.setText("Connection interrupted · waiting for host");return;}
+        if(!snapshot.round.isEmpty()){
+            status.setText(snapshot.released?(inGame?"Match in progress":"Starting Halo…"):snapshot.startMessage);
+            return;
+        }
         int guests=snapshot.members.size()-1;
         int ready=guests-snapshot.notReady().size();
         status.setText((host!=null?"Your IP: "+host.address():"Host: "+guest.address)+" · "+
-            snapshot.members.size()+" connected · "+ready+"/"+guests+" guests ready · "+snapshot.plan.title);
+            snapshot.members.size()+" connected · "+ready+"/"+guests+" guests ready · "+snapshot.plan.title+
+            (snapshot.startMessage.isEmpty()?"":" · "+snapshot.startMessage));
     }
     private void refreshShared(){
         if(snapshot==null)return;
         refreshStatus();
+        if(!snapshot.round.isEmpty())return;
         if(guest!=null){
             summary.removeAllViews();
             LobbyModel.Plan p=snapshot.plan;
@@ -250,7 +268,7 @@ final class LauncherLobbyUi implements AutoCloseable {
         parent.addView(group);
     }
     private void reviewStart(){
-        if(host==null||snapshot==null||closed)return;
+        if(host==null||snapshot==null||closed||!snapshot.round.isEmpty())return;
         LobbyModel.StartReview review=host.model.reviewStart(LanLobbyTransport.now(),new java.security.SecureRandom());
         if(!review.blocker.isEmpty()){msg(review.blocker);return;}
         if(!review.needsOverride()){confirmStart(review,false);return;}
@@ -267,10 +285,12 @@ final class LauncherLobbyUi implements AutoCloseable {
     private void confirmStart(LobbyModel.StartReview review,boolean override){
         if(host==null||closed)return;
         try{
-            LobbyModel.StartTicket ticket=host.model.authorizeStart(review,override,LanLobbyTransport.now());
-            // This immutable ticket is the input to the forthcoming
-            // native host/guest handoff. Do not send or act on it yet.
-            msg("Match checked: "+ticket.entry.preset.name+". Native start not connected yet.");
+            if(!canOpen.getAsBoolean()){msg("Finish the current game or file operation first.");return;}
+            host.nativeInterface();
+            NativeLobbyMatch.checkMap(dataRoot,review.entry.map);
+            NativeMatchRules.encode(review.entry.preset);
+            applySnapshot(host.model.beginStart(review,override,LanLobbyTransport.now()));
+        }catch(IOException|IllegalArgumentException invalid){msg(invalid.getMessage());
         }catch(LobbyModel.StartNotReady warning){showStartWarning(warning.review);}
         catch(IllegalStateException changed){msg(changed.getMessage());}
     }
@@ -291,7 +311,7 @@ final class LauncherLobbyUi implements AutoCloseable {
     private void appearance(){
         if(snapshot!=null&&connectionLost)return;
         LobbyModel.Member m=snapshot==null?null:snapshot.me();
-        LinearLayout form=col();label(form,"Lobby appearance. Native profile synchronization is pending.");
+        LinearLayout form=col();label(form,"Halo displays up to 11 characters in a match.");
         EditText name=new EditText(activity);name.setSingleLine(true);name.setText(m==null?profileName():m.name);form.addView(name);
         Spinner color=new Spinner(activity);ArrayAdapter<String> a=new ArrayAdapter<>(activity,android.R.layout.simple_spinner_item,LobbyModel.COLORS);
         a.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);color.setAdapter(a);color.setSelection(m==null?profileColor():m.color);form.addView(color);
@@ -316,7 +336,7 @@ final class LauncherLobbyUi implements AutoCloseable {
             .setNegativeButton("CANCEL",null).setPositiveButton("SAVE",(d,w)->recording.edit().putBoolean("record_opt_in",record.isChecked()).putBoolean("keep_full_match",keep.isChecked()).apply()).show();
     }
     private void changeSelf(String name,int color,boolean ready,int request){
-        if(snapshot==null||closed||connectionLost)return;
+        if(snapshot==null||closed||connectionLost||!snapshot.round.isEmpty())return;
         if(host!=null){
             try{host.model.hostAppearance(name,color,ready);snapshot=host.model.hostSnapshot(LanLobbyTransport.now());persistAppearance(snapshot.me());refreshShared();}
             catch(IllegalArgumentException invalid){msg(invalid.getMessage());}
@@ -327,27 +347,70 @@ final class LauncherLobbyUi implements AutoCloseable {
         work.execute(()->{
             try{LobbyModel.Snapshot result=client.update(name,color,ready,request,revision);
                 ui.post(()->{if(closed||g!=generation)return;busy=false;lastContact=LanLobbyTransport.now();connectionLost=false;
-                    snapshot=result;persistAppearance(result.me());refreshShared();
+                    applySnapshot(result);persistAppearance(result.me());
                     if(!result.me().name.equals(name)||result.me().color!=color||result.me().ready!=ready||result.me().requestedTeam!=request)
                         msg("Lobby changed while editing. Review the updated roster.");
                 });
             }catch(IOException|RuntimeException error){ui.post(()->{if(closed||g!=generation)return;busy=false;connectionLost=true;refreshShared();});}
         });
     }
-    private void schedule(){ui.removeCallbacks(tick);if(!closed&&snapshot!=null)ui.postDelayed(tick,1500);}
+    /** A committed snapshot can arrive again after a dropped response. Launch once per ticket. */
+    private void applySnapshot(LobbyModel.Snapshot next){
+        boolean phase=snapshot==null||!snapshot.round.equals(next.round)||snapshot.released!=next.released;
+        snapshot=next;
+        if(phase)showSession();else refreshShared();
+        if(next.round.isEmpty()){
+            preparedRound="";launchArgs=null;
+            if(!localFailure.isEmpty()){msg(localFailure);localFailure="";}
+            return;
+        }
+        if(inGame||next.round.equals(launchedRound))return;
+        if(!next.round.equals(preparedRound)){
+            preparedRound=next.round;launchArgs=null;localFailure="";
+            try{
+                if(!canOpen.getAsBoolean())throw new IOException("Finish the current game or file operation first.");
+                if(host==null)NativeLobbyMatch.checkMap(dataRoot,next.plan.entries.get(next.startIndex).map);
+                launchArgs=NativeLobbyMatch.arguments(next,guest==null?host.nativeInterface():guest.localAddress,guest==null?"":guest.address,
+                    host==null?Collections.emptyList():host.model.nativePeers());
+            }catch(IOException|IllegalArgumentException|IllegalStateException failure){localFailure=failure.getMessage();}
+        }
+        if(next.released&&launchArgs!=null){
+            launchedRound=next.round;inGame=true;ui.removeCallbacks(tick);
+            try{launcher.start(launchArgs,host!=null);}
+            catch(RuntimeException failure){
+                returned();msg("Could not open Halo: "+failure.getMessage());
+            }
+        }else if(host!=null&&launchArgs==null){
+            host.model.resetStart(localFailure,LanLobbyTransport.now());
+            applySnapshot(host.model.hostSnapshot(LanLobbyTransport.now()));
+        }
+    }
+    void returned(){
+        if(!inGame||snapshot==null)return;
+        inGame=false;busy=false;lastContact=LanLobbyTransport.now();
+        String result=NativeLobbyMatch.returnMessage(activity.getFilesDir(),launchedRound);
+        if(host!=null){
+            host.model.resetStart(result,lastContact);
+            applySnapshot(host.model.hostSnapshot(lastContact));
+        }else {refreshStatus();msg(result);}
+        schedule();
+    }
+    private void schedule(){ui.removeCallbacks(tick);if(!closed&&!inGame&&snapshot!=null)ui.postDelayed(tick,snapshot.round.isEmpty()?1500:600);}
     private void tick(){
-        if(closed||snapshot==null)return;
+        if(closed||snapshot==null||inGame)return;
         if(host!=null){
             LobbyModel.Snapshot next=host.model.hostSnapshot(LanLobbyTransport.now());
-            if(next.revision!=snapshot.revision){snapshot=next;refreshShared();}
+            if(next.revision!=snapshot.revision)applySnapshot(next);
         }else if(guest!=null&&!busy){
             busy=true;int g=generation;LanLobbyTransport.Client client=guest;long rev=snapshot.revision;
+            String ack=(!snapshot.released&&snapshot.round.equals(preparedRound))?preparedRound:"";
+            boolean accepted=launchArgs!=null;
             work.execute(()->{
-                try{LobbyModel.Snapshot next=client.poll(rev);
+                try{LobbyModel.Snapshot next=ack.isEmpty()?client.poll(rev):client.acknowledge(ack,accepted);
                     ui.post(()->{
                         if(closed||g!=generation)return;
                         boolean recovered=connectionLost;busy=false;connectionLost=false;lastContact=LanLobbyTransport.now();
-                        if(next!=null){snapshot=next;refreshShared();}else if(recovered)refreshShared();
+                        if(next!=null)applySnapshot(next);else if(recovered)refreshShared();
                     });
                 }catch(IOException|RuntimeException error){
                     ui.post(()->{
@@ -362,9 +425,9 @@ final class LauncherLobbyUi implements AutoCloseable {
     }
     /** Selection and current session share a tab; moving to another tab
      * doesn't leave. Leaving foreground closes this first-phase lobby. */
-    void suspend(){if(snapshot!=null||busy)leave(false,"Lobby closed when launcher left foreground.");}
+    void suspend(){if(!inGame&&(snapshot!=null||busy))leave(false,"Lobby closed when launcher left foreground.");}
     private void leave(boolean notify,String message){
-        generation++;ui.removeCallbacks(tick);busy=false;connectionLost=false;
+        generation++;ui.removeCallbacks(tick);busy=false;connectionLost=false;inGame=false;launchArgs=null;preparedRound=launchedRound=localFailure="";
         if(host!=null){host.close();host=null;}
         LanLobbyTransport.Client old=guest;guest=null;
         if(old!=null){

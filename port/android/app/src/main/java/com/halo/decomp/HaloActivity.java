@@ -40,6 +40,7 @@ public class HaloActivity extends SDLActivity {
     native int titleAudioDuration();
 
 
+    static final String LOBBY_MATCH = "com.halo.decomp.LOBBY_MATCH";
     static final String NETWORK_SESSION = "com.halo.decomp.NETWORK_SESSION";
     static final String OFFLINE_BOT_ARGUMENTS = "com.halo.decomp.OFFLINE_BOT_ARGUMENTS";
     static final String LAN_UPDATE_HOST = "com.halo.decomp.LAN_UPDATE_HOST";

@@ -62,6 +62,7 @@ final class LanLobbyTransport {
             return address;
         }
         String address(){return address;}
+        String nativeInterface(){return model.nativeInterface(address.split(" / ",2)[0]);}
         private void accept(ServerSocket listener,Link link){
             while(!closed){
                 Socket socket=null;
@@ -73,7 +74,7 @@ final class LanLobbyTransport {
                     ScheduledFuture<?> expiry=deadlines.schedule(()->shut(accepted),5,TimeUnit.SECONDS);
                     try{
                         workers.execute(()->{
-                            try(Socket s=accepted){LobbyWire.serve(model,s.getInputStream(),s.getOutputStream(),now());}
+                            try(Socket s=accepted){LobbyWire.serve(model,s.getInputStream(),s.getOutputStream(),now(),s.getLocalAddress().getHostAddress(),s.getInetAddress().getHostAddress());}
                             catch(IOException|RuntimeException ignored){}
                             finally{expiry.cancel(false);sockets.remove(accepted);}
                         });
@@ -94,7 +95,8 @@ final class LanLobbyTransport {
     }
     static final class Client implements Closeable {
         final String address;
-        private String secret="",session="";
+        private String secret="",session="",self="";
+        volatile String localAddress="";
         private volatile boolean closed;
         private volatile Socket pending;
         private final ScheduledThreadPoolExecutor deadline=new ScheduledThreadPoolExecutor(1,r->{
@@ -116,13 +118,14 @@ final class LanLobbyTransport {
                 ScheduledFuture<?> expiry=deadline.schedule(()->shut(socket),6,TimeUnit.SECONDS);
                 try {
                 socket.bind(new InetSocketAddress(chosen.ip,0));
+                localAddress=chosen.ip.getHostAddress();
                 socket.connect(new InetSocketAddress(InetAddress.getByAddress(peer),PORT),2000);
                 socket.setSoTimeout(3000);
                 LobbyWire.writeRequest(socket.getOutputStream(),request);
                 LobbyWire.Response response=LobbyWire.readResponse(socket.getInputStream());
                 if(!response.error.isEmpty())throw new IOException("Host declined: "+response.error);
-                if(response.snapshot!=null&&!session.isEmpty()&&!session.equals(response.snapshot.session))
-                    throw new IOException("Host created another lobby");
+                if(response.snapshot!=null&&!session.isEmpty()&&(!session.equals(response.snapshot.session)||!self.equals(response.snapshot.self)))
+                    throw new IOException("Lobby or player identity changed");
                 return response;
                 }finally{expiry.cancel(false);}
             }finally{pending=null;}
@@ -130,12 +133,17 @@ final class LanLobbyTransport {
         LobbyModel.Snapshot join(String name,int color)throws IOException{
             LobbyWire.Response r=request(LobbyWire.Request.join(name,color));
             if(r.snapshot==null||r.secret.isEmpty()||r.snapshot.me().host)throw new IOException("Invalid join acknowledgement");
-            secret=r.secret;session=r.snapshot.session;return r.snapshot;
+            secret=r.secret;session=r.snapshot.session;self=r.snapshot.self;return r.snapshot;
         }
         LobbyModel.Snapshot poll(long known)throws IOException{return request(LobbyWire.Request.poll(secret,known)).snapshot;}
         LobbyModel.Snapshot update(String name,int color,boolean ready,int team,long known)throws IOException{
             LobbyModel.Snapshot s=request(LobbyWire.Request.update(secret,name,color,ready,team,known)).snapshot;
             if(s==null)throw new IOException("Missing profile acknowledgement");
+            return s;
+        }
+        LobbyModel.Snapshot acknowledge(String round,boolean accepted)throws IOException{
+            LobbyModel.Snapshot s=request(LobbyWire.Request.acknowledge(secret,round,accepted)).snapshot;
+            if(s==null)throw new IOException("Missing match acknowledgement");
             return s;
         }
         void leave()throws IOException{if(!secret.isEmpty())request(LobbyWire.Request.leave(secret));}

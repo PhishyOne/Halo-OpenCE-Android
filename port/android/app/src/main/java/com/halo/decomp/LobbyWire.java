@@ -6,21 +6,24 @@ import java.util.*;
 /** Bounded versioned LAN lobby frames. No host-only commands on the wire,
  * no file operations, and never send another member's secret token. */
 final class LobbyWire {
-    static final int MAGIC=0x484c5031, MAX_FRAME=1024*1024;
-    static final int JOIN=1,POLL=2,UPDATE=3,LEAVE=4;
+    static final int MAGIC=0x484c5032, MAX_FRAME=1024*1024;
+    static final int JOIN=1,POLL=2,UPDATE=3,LEAVE=4,ACK=5;
     static final class Request {
         final int op;final long knownRevision;final String secret,name;final int color,requestTeam;final boolean ready;
         Request(int op,String secret,String name,int color,boolean ready,int team,long knownRevision){
             if(knownRevision < -1) throw new IllegalArgumentException("Invalid revision");
             this.knownRevision=knownRevision;
-            if(op<JOIN||op>LEAVE)throw new IllegalArgumentException("Invalid lobby action");
+            if(op<JOIN||op>ACK)throw new IllegalArgumentException("Invalid lobby action");
             this.op=op;this.secret=op==JOIN?"":LobbyModel.validId(secret);
-            this.name=(op==JOIN||op==UPDATE)?LobbyModel.name(name):"";
+            this.name=(op==JOIN||op==UPDATE)?LobbyModel.name(name):op==ACK?LobbyModel.validId(name):"";
             this.color=LobbyModel.color(color);this.ready=ready;requestTeam=LobbyModel.team(team);
         }
         static Request join(String name,int color){return new Request(JOIN,"",name,color,false,LobbyModel.NO_TEAM,-1);}
         static Request poll(String secret,long known){return new Request(POLL,secret,"",0,false,LobbyModel.NO_TEAM,known);}
         static Request update(String secret,String name,int color,boolean ready,int team,long known){return new Request(UPDATE,secret,name,color,ready,team,known);}
+        static Request acknowledge(String secret,String round,boolean accepted){
+            return new Request(ACK,secret,round,0,accepted,LobbyModel.NO_TEAM,-1);
+        }
         static Request leave(String secret){return new Request(LEAVE,secret,"",0,false,LobbyModel.NO_TEAM,-1);}
     }
     static final class Response {
@@ -39,7 +42,7 @@ final class LobbyWire {
         if(n<5||n>max)throw new IOException("Invalid lobby frame size");
         byte[] b=new byte[n];input.readFully(b);
         DataInputStream in=new DataInputStream(new ByteArrayInputStream(b));
-        if(in.readInt()!=MAGIC)throw new IOException("Incompatible lobby version");
+        if(in.readInt()!=MAGIC)throw new IOException("Incompatible lobby version. Update all phones to the same Halo build.");
         return in;
     }
     private static void end(DataInputStream in)throws IOException{if(in.read()!=-1)throw new IOException("Unexpected lobby payload");}
@@ -53,11 +56,15 @@ final class LobbyWire {
         }catch(IllegalArgumentException invalid){throw new IOException("Invalid lobby request",invalid);}
     }
     static Response execute(LobbyModel model,Request r,long now){
+        return execute(model,r,now,"","");
+    }
+    private static Response execute(LobbyModel model,Request r,long now,String localAddress,String peerAddress){
         try{
             switch(r.op){
-                case JOIN: LobbyModel.Joined j=model.join(r.name,r.color,now);return new Response(j.secret,j.snapshot,"");
+                case JOIN: LobbyModel.Joined j=model.join(r.name,r.color,now,localAddress,peerAddress);return new Response(j.secret,j.snapshot,"");
                 case POLL: LobbyModel.Snapshot current=model.poll(r.secret,now);return new Response("",current.revision==r.knownRevision?null:current,"");
                 case UPDATE:return new Response("",model.guestUpdate(r.secret,r.name,r.color,r.ready,r.requestTeam,r.knownRevision,now),"");
+                case ACK:return new Response("",model.acknowledge(r.secret,r.name,r.ready,now),"");
                 case LEAVE:model.leave(r.secret,now);return new Response("",null,"");
                 default:throw new IllegalArgumentException("Unknown lobby action");
             }
@@ -69,6 +76,7 @@ final class LobbyWire {
             if(r.snapshot==null)return;
             LobbyModel.Snapshot s=r.snapshot;
             d.writeUTF(s.session);d.writeUTF(s.self);d.writeLong(s.revision);
+            d.writeUTF(s.round);d.writeInt(s.startIndex);d.writeBoolean(s.released);d.writeUTF(s.startMessage);
             d.writeUTF(s.plan.title);d.writeBoolean(s.plan.playlist);d.writeBoolean(s.plan.shuffle);d.writeBoolean(s.plan.loop);
             d.writeInt(s.plan.entries.size());
             for(MatchWorkshop.Entry e:s.plan.entries)MatchWorkshop.writeEntry(d,e);
@@ -87,6 +95,7 @@ final class LobbyWire {
             LobbyModel.Snapshot snapshot=null;
             if(has){
                 String session=in.readUTF(),self=in.readUTF();long revision=in.readLong();
+                String round=in.readUTF();int startIndex=in.readInt();boolean released=in.readBoolean();String message=in.readUTF();
                 String title=in.readUTF();boolean playlist=in.readBoolean(),shuffle=in.readBoolean(),loop=in.readBoolean();
                 int n=in.readInt();if(n<0||n>MatchWorkshop.MAX_ENTRIES)throw new IOException("Invalid lobby playlist");
                 ArrayList<MatchWorkshop.Entry> entries=new ArrayList<>();
@@ -95,12 +104,15 @@ final class LobbyWire {
                 int count=in.readInt();if(count<1||count>LobbyModel.MAX_HUMANS)throw new IOException("Invalid lobby roster");
                 ArrayList<LobbyModel.Member> members=new ArrayList<>();
                 for(int i=0;i<count;i++)members.add(new LobbyModel.Member(in.readUTF(),in.readUTF(),in.readUnsignedByte(),in.readByte(),in.readByte(),in.readBoolean(),in.readBoolean()));
-                snapshot=new LobbyModel.Snapshot(session,self,revision,p,members);
+                snapshot=new LobbyModel.Snapshot(session,self,revision,p,members,round,startIndex,released,message);
             }
             end(in);return new Response(secret,snapshot,error);
         }catch(IllegalArgumentException|NullPointerException invalid){throw new IOException("Invalid lobby response",invalid);}
     }
     static void serve(LobbyModel model,InputStream in,OutputStream out,long now)throws IOException{
-        writeResponse(out,execute(model,readRequest(in),now));
+        serve(model,in,out,now,"","");
+    }
+    static void serve(LobbyModel model,InputStream in,OutputStream out,long now,String localAddress,String peerAddress)throws IOException{
+        writeResponse(out,execute(model,readRequest(in),now,localAddress,peerAddress));
     }
 }

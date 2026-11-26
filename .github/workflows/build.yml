@@ -282,6 +282,12 @@ jobs:
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.MatchWorkshopTest
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LobbyModelTest
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LobbyStartTest
+          javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" \
+            port/android/app/src/main/java/com/halo/decomp/LanUpdateProtocol.java \
+            port/android/app/src/main/java/com/halo/decomp/CustomMapImporter.java \
+            port/android/app/src/main/java/com/halo/decomp/NativeLobbyMatch.java tools/lan/LobbyHandoffTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LobbyHandoffTest
+          python3 -m unittest tools.test_v74_lobby_handoff -v
           javac -d "$RUNNER_TEMP/halo-test-classes" \
             port/android/app/src/main/java/com/halo/decomp/TitleBackdropFiles.java \
             tools/lan/TitleBackdropFilesTest.java

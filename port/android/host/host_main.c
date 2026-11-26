@@ -316,6 +316,7 @@ int host_title_capture_mode;
 static const char *launcher_match_map;
 static const char *launcher_match_mode;
 static const char *launcher_match_rules;
+static char **launcher_lan_args;
 
 #define MAIN_STACK_SIZE (16 * 1024 * 1024)
 
@@ -367,6 +368,37 @@ static void *game_main(void *launch_options)
 		environment_set(&environment, "HALO_BOTS", "0");
 	}
 
+    if (launcher_lan_args)
+    {
+        char **a = launcher_lan_args;
+        environment_set(&environment, "HALO_LOBBY_MAP", a[0]);
+        environment_set(&environment, "HALO_LOBBY_MODE", a[1]);
+        environment_set(&environment, "HALO_LOBBY_RULES", a[2]);
+        environment_set(&environment, "HALO_LOBBY_ROUND", a[3]);
+        environment_set(&environment, "HALO_LOBBY_SEAT", a[4]);
+        environment_set(&environment, "HALO_LOBBY_ROSTER", a[5]);
+        environment_set(&environment, "HALO_LOBBY_BOTS", a[6]);
+        environment_set(&environment, "HALO_LOBBY_RED", a[7]);
+        environment_set(&environment, "HALO_LOBBY_PEER", a[9]);
+        environment_set(&environment, "HALO_LOBBY_BINDINGS", a[13]);
+        environment_set(&environment, "HALO_MENUS", "xbox");
+        environment_set(&environment, "HALO_BOTS", "0");
+        environment_set(&environment, "HALO_BOTS_SYSTEM_LINK", a[9][0] ? "0" : a[6]);
+        environment_set(&environment, "HALO_BOT_SKILL", a[8]);
+        environment_set(&environment, "HALO_BOT_OBJECTIVES", "true");
+        environment_set(&environment, "HALO_BOT_VEHICLE_SEATS", "true");
+        environment_set(&environment, "HALO_BOT_DRIVING", "true");
+        environment_set(&environment, "HALO_KILLSTREAK_ENABLED", a[10]);
+        environment_set(&environment, "HALO_KILLSTREAK_ORBITAL", a[10]);
+        environment_set(&environment, "HALO_KILLSTREAK_ANNOUNCEMENTS", a[11]);
+        environment_set(&environment, "HALO_COMMANDER", "false");
+        environment_set(&environment, "HALO_CUSTOM_EDITION", "true");
+        environment_set(&environment, "HALO_NETWORK_TEST", "");
+        environment_set(&environment, "HALO_NET_ONLINE", "false");
+        environment_set(&environment, "HALO_NET_JOIN_FROM_CLIPBOARD", "false");
+        environment_set(&environment, "HALO_NET_ADDRESS", a[12]);
+        environment_set(&environment, "HALO_NET_BROADCAST", a[9]);
+    }
 	/* These overrides apply only to the launcher-selected offline session. */
 	if (offline_bots)
 	{
@@ -506,6 +538,8 @@ int main(int argc, char *argv[])
 	/* SDLActivity prepends argv[0] to its getArguments() result. */
 	char **offline_bots = (argc == 5 || argc == 6) && !strcmp(argv[1], "--offline-bots")
         ? argv + 2 : NULL;
+    if (argc == 16 && !strcmp(argv[1], "--launcher-lan"))
+        launcher_lan_args = argv + 2;
     if (argc == 8 && !strcmp(argv[1], "--launcher-match"))
     {
         launcher_match_map = argv[2];

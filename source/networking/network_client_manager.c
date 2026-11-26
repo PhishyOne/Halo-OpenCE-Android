@@ -3378,8 +3378,8 @@ byte network_game_client_advertised_game_kind(
 		network_game_client_advertised_versions[game_index].kind : 0;
 }
 
-boolean network_game_client_join_first_available_game(
-	void)
+static boolean network_game_client_join_matching_game(
+	wchar_t const *name, unsigned long expected_address)
 {
 	struct network_game_client *client = global_network_game_client_get();
 	long game_index;
@@ -3394,22 +3394,25 @@ boolean network_game_client_join_first_available_game(
 		struct network_advertised_game *game = &client->available_games[game_index];
 
 		if (network_game_client_advertised_game_is_valid(game) &&
-			game->platform == network_game_get_local_platform() && game->open)
+			game->platform == network_game_get_local_platform() && game->open &&
+			(!name || !ustrncmp(game->game_name, name, NETWORK_GAME_NAME_LENGTH)))
 		{
 			struct transport_address address = { { { 0 } } };
 			struct network_join_parameters join_parameters;
 
 			/* (the automated tests try every frame: told once until the client resets) */
 			if (!network_game_client_advertised_game_compatible(client, game,
-				!network_game_client_incompatibility_told))
+				!name && !network_game_client_incompatibility_told))
 			{
 				network_game_client_incompatibility_told = TRUE;
+				if (name) continue;
 				return FALSE;
 			}
 
 			csmemset(&join_parameters, 0, sizeof(join_parameters));
 			transport_client_start((XNADDR const *)&game->xnaddr, (XNKEY const *)&game->key,
 				(XNKID const *)&game->key_id, NETWORK_GAME_SERVER_PORT, &address);
+			if (name && address.address.long_words[0] != expected_address) continue;
 			if (!address.address.long_words[0] || !address.port)
 				return FALSE;
 			network_game_generate_join_game_token(join_parameters.join_token);
@@ -3418,6 +3421,19 @@ boolean network_game_client_join_first_available_game(
 	}
 	return FALSE;
 }
+
+boolean network_game_client_join_first_available_game(void)
+{
+	return network_game_client_join_matching_game(NULL, 0);
+}
+
+#ifdef HALO_ANDROID
+/* port: a launcher guest must join its chosen host, even with two LAN hosts advertising. */
+boolean network_game_client_join_launcher_game(wchar_t const *name, unsigned long address)
+{
+	return name && address && network_game_client_join_matching_game(name, address);
+}
+#endif
 
 /* ... and puts this machine's players on a team (a team game needs both
 teams), as the pregame screen's team choice does; NONE: the other team from
