@@ -118,8 +118,59 @@ static void sixty_four_entrants(void)
 	printf("64 simulated entrants, 63 eliminated; seat %d won at tick %d.\n", round.winner_seat, round.last_tick);
 }
 
+static void unarmed_loot(void)
+{
+	const struct battle_royale_zone zone = {{0,0,100}, {0,0,10}, 15,90,10};
+	struct battle_royale_round a, b;
+	struct battle_royale_point sites[8], raised;
+	const uint32_t weapons[] = { 0xe1120001, 0xe1120002, 0xe1120003 };
+	uint32_t ids[SEATS] = {11,22,33};
+	struct battle_royale_observation seats[SEATS] = {{0}};
+	unsigned char due[SEATS];
+	uint32_t weapon;
+	int i, j;
+	for (i = 0; i < 8; ++i)
+		sites[i] = (struct battle_royale_point){(float)i*2, 4, 1};
+	assert(battle_royale_begin(&a, &zone, ids));
+	assert(battle_royale_begin(&b, &zone, ids));
+	for (i = 0; i < SEATS; ++i)
+		assert(!a.weapons[i][0] && !a.weapons[i][1]);
+	sites[7] = sites[6];
+	assert(!battle_royale_place_loot(&a, sites, 8, weapons, 3, 5, 77) && !a.loot_count);
+	sites[7].x = 14;
+	assert(battle_royale_place_loot(&a, sites, 8, weapons, 3, 5, 77));
+	assert(battle_royale_place_loot(&b, sites, 8, weapons, 3, 5, 77));
+	assert(!memcmp(a.loot, b.loot, sizeof(a.loot)));
+	for (i = 0; i < a.loot_count; ++i)
+		for (j = 0; j < i; ++j)
+			assert(a.loot[i].position.x != a.loot[j].position.x);
+	assert(!battle_royale_place_loot(&a, sites, 8, weapons, 3, 5, 12));
+	raised = a.loot[0].position;
+	raised.z += 1;
+	assert(!battle_royale_take_loot(&a, 0, 11, raised, 0));
+	assert(battle_royale_nearest_loot(&a, 0, 11, raised, 0.5f) == -1);
+	assert(battle_royale_nearest_loot(&a, 0, 11, raised, 1.0f) == 0);
+	assert(!battle_royale_take_loot(&a, 0, 999, a.loot[0].position, 0));
+	weapon = a.loot[0].weapon;
+	assert(battle_royale_take_loot(&a, 0, 11, a.loot[0].position, 0) == weapon);
+	assert(a.weapons[0][0] == weapon && !a.weapons[0][1]);
+	assert(!battle_royale_take_loot(&a, 1, 22, a.loot[0].position, 0));
+	assert(battle_royale_take_loot(&a, 0, 11, a.loot[1].position, 1));
+	assert(!battle_royale_take_loot(&a, 0, 11, a.loot[2].position, 2));
+	seats[1] = (struct battle_royale_observation){22, BR_OUT, 0, 0};
+	assert(run_tick(&a, 0, seats, due));
+	assert(!battle_royale_take_loot(&a, 1, 22, a.loot[2].position, 2));
+	assert(!battle_royale_take_loot(&a, 1, 222, a.loot[2].position, 2));
+	assert(battle_royale_take_loot(&a, 2, 33, a.loot[2].position, 2));
+	assert(battle_royale_begin(&a, &zone, ids) && !a.weapons[0][0] && !a.loot_count);
+	assert(run_tick(&a, 0, seats, due));
+	assert(!battle_royale_place_loot(&a, sites, 8, weapons, 3, 5, 12));
+	puts("Unarmed starts, seeded loot, 3D reach, contested pickups and eliminated entrants passed.");
+}
+
 int main(void)
 {
+	unarmed_loot();
 	ring_and_lives();
 	simultaneous_outs_and_invalid_setup();
 	sixty_four_entrants();

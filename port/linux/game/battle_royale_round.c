@@ -55,6 +55,108 @@ int battle_royale_alive(const struct battle_royale_round *round, int seat, uint3
 	return seat >= 0 && seat < HALO_PORT_MAXIMUM_NETWORK_PLAYERS && identity && round->surviving[seat] == identity;
 }
 
+static int valid_point(struct battle_royale_point point)
+{
+	return finite_coordinate(point.x) && finite_coordinate(point.y) && finite_coordinate(point.z);
+}
+
+/* Local stream: drawing loot never advances Halo's gameplay RNG. */
+static uint32_t loot_random(uint32_t *seed)
+{
+	*seed ^= *seed << 13;
+	*seed ^= *seed >> 17;
+	*seed ^= *seed << 5;
+	return *seed;
+}
+
+int battle_royale_place_loot(struct battle_royale_round *round,
+	const struct battle_royale_point *sites, int site_count, const uint32_t *weapons,
+	int weapon_count, int count, uint32_t seed)
+{
+	unsigned short order[BR_MAX_LOOT];
+	int i, j;
+	if (round->phase != BR_PLAYING || round->last_tick >= 0 || round->loot_count ||
+		!sites || !weapons || site_count < 1 || site_count > BR_MAX_LOOT ||
+		weapon_count < 1 || weapon_count > BR_MAX_LOOT || count < 1 || count > site_count)
+		return 0;
+	for (i = 0; i < weapon_count; ++i)
+		if (!weapons[i] || weapons[i] == UINT32_MAX)
+			return 0;
+	for (i = 0; i < site_count; ++i)
+	{
+		if (!valid_point(sites[i]))
+			return 0;
+		for (j = 0; j < i; ++j)
+			if (sites[i].x == sites[j].x && sites[i].y == sites[j].y && sites[i].z == sites[j].z)
+				return 0;
+		order[i] = (unsigned short)i;
+	}
+	if (!seed)
+		seed = UINT32_C(0x9e3779b9);
+	for (i = 0; i < count; ++i)
+	{
+		int next = i + (int)(loot_random(&seed) % (uint32_t)(site_count - i));
+		round->loot[i].position = sites[order[next]];
+		order[next] = order[i];
+		round->loot[i].weapon = weapons[loot_random(&seed) % (uint32_t)weapon_count];
+	}
+	round->loot_count = count;
+	return 1;
+}
+
+static int can_take(const struct battle_royale_round *round, int seat, uint32_t identity)
+{
+	return round->phase == BR_PLAYING && battle_royale_alive(round, seat, identity) &&
+		!round->weapons[seat][BR_WEAPON_SLOTS-1];
+}
+
+static double separation_squared(struct battle_royale_point a, struct battle_royale_point b)
+{
+	double x = (double)a.x - b.x, y = (double)a.y - b.y, z = (double)a.z - b.z;
+	return x*x + y*y + z*z;
+}
+
+int battle_royale_nearest_loot(const struct battle_royale_round *round, int seat, uint32_t identity,
+	struct battle_royale_point where, float range)
+{
+	int i, best = -1;
+	double limit = (double)range * range;
+	if (!can_take(round, seat, identity) || !valid_point(where) || !finite_coordinate(range) || range < 0)
+		return -1;
+	for (i = 0; i < round->loot_count; ++i)
+	{
+		double d;
+		if (!round->loot[i].weapon)
+			continue;
+		d = separation_squared(where, round->loot[i].position);
+		if (d <= limit && (best < 0 || d < limit))
+		{
+			best = i;
+			limit = d;
+		}
+	}
+	return best;
+}
+
+uint32_t battle_royale_take_loot(struct battle_royale_round *round, int seat, uint32_t identity,
+	struct battle_royale_point where, int pickup)
+{
+	/* Prototype interaction radius: half a world unit (about 1.52 m). */
+	const double reach_squared = 0.25;
+	uint32_t weapon;
+	int slot;
+	if (!can_take(round, seat, identity) || pickup < 0 || pickup >= round->loot_count ||
+		!valid_point(where) || separation_squared(where, round->loot[pickup].position) > reach_squared)
+		return 0;
+	weapon = round->loot[pickup].weapon;
+	if (!weapon)
+		return 0;
+	slot = round->weapons[seat][0] ? 1 : 0;
+	round->weapons[seat][slot] = weapon;
+	round->loot[pickup].weapon = 0;
+	return weapon;
+}
+
 static struct battle_royale_circle circle_at(const struct battle_royale_zone *zone, int tick)
 {
 	struct battle_royale_circle circle;

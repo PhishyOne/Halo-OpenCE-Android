@@ -27,6 +27,15 @@ struct battle_royale_observation
 	float x, y;
 };
 
+/* Map-authored positions and weapon tag handles. Zero means an empty slot. */
+enum { BR_MAX_LOOT = 256, BR_WEAPON_SLOTS = 2 };
+struct battle_royale_point { float x, y, z; };
+struct battle_royale_pickup
+{
+	struct battle_royale_point position;
+	uint32_t weapon;
+};
+
 struct battle_royale_round
 {
 	struct battle_royale_zone zone;
@@ -34,12 +43,28 @@ struct battle_royale_round
 	enum battle_royale_phase phase;
 	int remaining, winner_seat, last_tick, last_damage_tick, tick_open;
 	uint32_t surviving[HALO_PORT_MAXIMUM_NETWORK_PLAYERS];
+	uint32_t weapons[HALO_PORT_MAXIMUM_NETWORK_PLAYERS][BR_WEAPON_SLOTS];
+	struct battle_royale_pickup loot[BR_MAX_LOOT];
+	int loot_count;
 };
 
 /* Nonzero identities in original engine seats. An invalid setup leaves round intact. */
 int battle_royale_begin(struct battle_royale_round *round, const struct battle_royale_zone *zone,
 	const uint32_t identities[HALO_PORT_MAXIMUM_NETWORK_PLAYERS]);
 int battle_royale_alive(const struct battle_royale_round *round, int seat, uint32_t identity);
+
+/* Before the first tick, seed up to site_count distinct places using the
+   map's weapon table. A round starts each entrant with both weapon slots empty. */
+int battle_royale_place_loot(struct battle_royale_round *round,
+	const struct battle_royale_point *sites, int site_count,
+	const uint32_t *weapons, int weapon_count, int count, uint32_t seed);
+
+/* The caller supplies the host's current unit position in world units.
+   The same nearest-item query can guide a bot. A claim succeeds once. */
+int battle_royale_nearest_loot(const struct battle_royale_round *round, int seat, uint32_t identity,
+	struct battle_royale_point where, float range);
+uint32_t battle_royale_take_loot(struct battle_royale_round *round, int seat, uint32_t identity,
+	struct battle_royale_point where, int pickup);
 
 /* Sample positions before applying damage. Each due flag requests one
    application through Halo's damage path. A stale call clears damage_due. */
