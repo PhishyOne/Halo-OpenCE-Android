@@ -6081,6 +6081,11 @@ boolean game_engine_allow_pick_up(
 {
 	boolean allow_pick_up = TRUE;
 
+	/* Some custom maps have directly placed weapons. No gun pickup in
+	 * this preset, even when a map object escaped the spawn filter. */
+	if (game_modes_sticks_and_stones_active())
+		return FALSE;
+
 	if (game_engine && game_engine->allow_pick_up)
 		allow_pick_up = game_engine->allow_pick_up(unit_index, weapon_index);
 
@@ -6092,6 +6097,11 @@ boolean game_engine_picking_up(
 	long weapon_index)
 {
 	boolean allow_pick_up = TRUE;
+
+	/* Some custom maps have directly placed weapons. No gun pickup in
+	 * this preset, even when a map object escaped the spawn filter. */
+	if (game_modes_sticks_and_stones_active())
+		return FALSE;
 
 	if (game_engine)
 	{

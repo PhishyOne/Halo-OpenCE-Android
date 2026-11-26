@@ -78,6 +78,7 @@ and each bot's kills and deaths; debug.bot_trace logs each bot's state.
 #include "cseries/errors.h"
 #include "game/game.h"
 #include "game/game_engine.h"
+#include "game_modes.h"
 #include "game/game_engine_race.h"
 #include "game/players.h"
 #include "objects/objects.h"
@@ -2599,39 +2600,48 @@ static void bots_choose_goal(struct bots_bot *bot, long player_index, real_point
 	   instead of letting item hunting erase our objective destination. */
 	if (objective)
 		return;
-	/* a better weapon near (looked for once a second; given up after a
-	while) */
-	if (bot->goal_kind == _bots_goal_item)
+	/* In a grenade/melee match, existing weapon goals are no longer useful. */
+	if (game_modes_sticks_and_stones_active())
 	{
-		struct item_datum *item = (struct item_datum *)object_try_and_get_and_verify_type(bot->item_index,
-			_object_mask_weapon);
-
-		if (item && item->object.parent_object_index == NONE && now - bot->goal_tick < TICKS_PER_SECOND * 15 &&
-			(bot->item_first_press_tick < bot->goal_tick || now - bot->item_first_press_tick < TICKS_PER_SECOND * 3))
-		{
-			return;
-		}
-		/* (one it did not get, standing on it or not: left be a while) */
-		if (item && item->object.parent_object_index == NONE)
-			bots_item_set_unreachable(bot, bot->item_index);
-		bot->goal_kind = _bots_goal_none;
-		bot->item_check_tick = now + TICKS_PER_SECOND * 2;
+		if (bot->goal_kind == _bots_goal_item)
+			bot->goal_kind = _bots_goal_none;
 	}
-	if (now >= bot->item_check_tick)
+	else
 	{
-		long item_index = bots_find_item(bot, unit_get(player_get(player_index)->unit_index), position, fighting ? 8.0f : 20.0f);
-
-		bot->item_check_tick = now + TICKS_PER_SECOND;
-		if (item_index != NONE)
+		/* a better weapon near (looked for once a second; given up after a
+		while) */
+		if (bot->goal_kind == _bots_goal_item)
 		{
-			real_point3d ground;
-			long surface_index = bots_surface_below(&object_get(item_index)->object.position, &ground);
+			struct item_datum *item = (struct item_datum *)object_try_and_get_and_verify_type(bot->item_index,
+				_object_mask_weapon);
 
-			if (surface_index != NONE)
+			if (item && item->object.parent_object_index == NONE && now - bot->goal_tick < TICKS_PER_SECOND * 15 &&
+				(bot->item_first_press_tick < bot->goal_tick || now - bot->item_first_press_tick < TICKS_PER_SECOND * 3))
 			{
-				bots_set_goal(bot, _bots_goal_item, &ground, surface_index);
-				bot->item_index = item_index;
 				return;
+			}
+			/* (one it did not get, standing on it or not: left be a while) */
+			if (item && item->object.parent_object_index == NONE)
+				bots_item_set_unreachable(bot, bot->item_index);
+			bot->goal_kind = _bots_goal_none;
+			bot->item_check_tick = now + TICKS_PER_SECOND * 2;
+		}
+		if (now >= bot->item_check_tick)
+		{
+			long item_index = bots_find_item(bot, unit_get(player_get(player_index)->unit_index), position, fighting ? 8.0f : 20.0f);
+
+			bot->item_check_tick = now + TICKS_PER_SECOND;
+			if (item_index != NONE)
+			{
+				real_point3d ground;
+				long surface_index = bots_surface_below(&object_get(item_index)->object.position, &ground);
+
+				if (surface_index != NONE)
+				{
+					bots_set_goal(bot, _bots_goal_item, &ground, surface_index);
+					bot->item_index = item_index;
+					return;
+				}
 			}
 		}
 	}
@@ -3372,7 +3382,8 @@ static void bots_bot_fight(struct bots_bot *bot, struct bots_tick *tick)
 	}
 	{
 		real to_target = (real)atan2(dy, dx);
-		real range = bots_weapon_range(tick->weapon_index);
+		real range = game_modes_sticks_and_stones_active() ? 0.6f :
+			bots_weapon_range(tick->weapon_index);
 		real forward = tick->target_distance > range * 1.3f ? 0.8f : tick->target_distance < range * 0.6f ? -0.5f : 0.0f;
 		real side = bot->strafe_sign * bots_combat_strafe_strength(bots_globals.skill);
 

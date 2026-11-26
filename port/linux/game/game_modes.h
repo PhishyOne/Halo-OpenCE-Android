@@ -58,6 +58,11 @@ wchar_t const *game_modes_kind_name(long game_engine_index, byte kind, boolean a
 /* whether a gametype is one of OpenCE's (a mode, or Hardcore) */
 boolean game_modes_variant_is_opence(struct game_variant const *variant, struct game_variant_options const *options);
 
+/* Stock-rule Sticks & Stones preset; no new gameplay wire fields. */
+void game_modes_sticks_and_stones_rules(struct game_variant *variant, struct game_variant_options *options);
+boolean game_modes_sticks_and_stones(struct game_variant const *variant, struct game_variant_options const *options);
+boolean game_modes_sticks_and_stones_active(void);
+
 /* ---- the game being played */
 
 /* its mode (_game_mode_none with no game engine) */

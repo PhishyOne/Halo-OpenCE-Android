@@ -66,6 +66,7 @@ enum
 	_gametype_hardcore_ctf,
 	_gametype_hardcore_oddball,
 	_gametype_hardcore_king,
+	_gametype_sticks_and_stones,
 	NUMBER_OF_GAMETYPES
 };
 
@@ -87,6 +88,7 @@ static struct
 	{ "hardcore_ctf", L"Hardcore CTF", L"HC CTF" },
 	{ "hardcore_oddball", L"Hardcore Oddball", L"HC Oddball" },
 	{ "hardcore_king", L"Hardcore King", L"HC King" },
+	{ "sticks_and_stones", L"Sticks & Stones", L"Sticks&Ston" },
 };
 
 /* the kill being recorded is a melee's (game_modes_kill_by_melee) */
@@ -117,6 +119,47 @@ static void game_modes_no_motion_sensor(
 	options->radar_players = _radar_players_none;
 }
 
+/* This preset uses only stock Slayer options already serialized to every
+ * peer. Both grenade types are granted at spawn by the infinite-grenade
+ * rule, even with no primary or secondary weapon. */
+void game_modes_sticks_and_stones_rules(
+    struct game_variant *variant, struct game_variant_options *options)
+{
+    SET_FLAG(variant->universal_variant.flags, _game_variant_infinite_grenades_bit, TRUE);
+    variant->universal_variant.weapon_set = 0; /* normal: both grenade types */
+    variant->universal_variant.vehicle_set = VEHICLE_SET_NONE;
+    options->vehicle_set[0] = options->vehicle_set[1] = VEHICLE_SET_NONE;
+    csmemset(options->vehicle_counts, 0, sizeof(options->vehicle_counts));
+    options->loadout = _loadout_custom;
+    options->primary_weapon = _loadout_weapon_none;
+    options->secondary_weapon = _loadout_weapon_none;
+    options->no_map_weapons = TRUE;
+    options->mode = _game_mode_none;
+    options->hardcore = FALSE;
+}
+
+/* Recognize the rules, not a mutable display name. Custom copies with the
+ * same settings work too. No additional mode or network layout required. */
+boolean game_modes_sticks_and_stones(
+    struct game_variant const *variant, struct game_variant_options const *options)
+{
+    return variant && options && variant->game_engine_index == game_engine_slayer &&
+        options->mode == _game_mode_none &&
+        TEST_FLAG(variant->universal_variant.flags, _game_variant_infinite_grenades_bit) &&
+        variant->universal_variant.weapon_set == 0 &&
+        options->loadout == _loadout_custom &&
+        options->primary_weapon == _loadout_weapon_none &&
+        options->secondary_weapon == _loadout_weapon_none && options->no_map_weapons &&
+        options->vehicle_set[0] == VEHICLE_SET_NONE &&
+        options->vehicle_set[1] == VEHICLE_SET_NONE;
+}
+
+boolean game_modes_sticks_and_stones_active(void)
+{
+    return game_engine_running() &&
+        game_modes_sticks_and_stones(game_engine_get_variant(), game_variant_options_get());
+}
+
 void game_modes_gametype(
 	short index,
 	struct game_variant *variant,
@@ -136,6 +179,7 @@ void game_modes_gametype(
 		*variant = *build_game_variant_team_king(&temporary);
 		break;
 	case _gametype_gun_game:
+	case _gametype_sticks_and_stones:
 		*variant = *build_game_variant_slayer(&temporary);
 		break;
 	default:
@@ -174,6 +218,9 @@ void game_modes_gametype(
 		variant->universal_variant.suicide_penalty = 0;
 		options->no_map_weapons = TRUE;
 		break;
+    case _gametype_sticks_and_stones:
+        game_modes_sticks_and_stones_rules(variant, options);
+        break;
 	default:
 		options->hardcore = TRUE;
 		options->friendly_fire = _friendly_fire_on;
@@ -325,6 +372,8 @@ wchar_t const *game_modes_variant_kind_name(
 	struct game_variant const *variant,
 	struct game_variant_options const *options)
 {
+    if (game_modes_sticks_and_stones(variant, options))
+        return L"STICKS & STONES";
 	return variant && options ?
 		game_modes_kind_name(variant->game_engine_index, game_modes_kind(variant, options), FALSE) : NULL;
 }
@@ -333,7 +382,8 @@ boolean game_modes_variant_is_opence(
 	struct game_variant const *variant,
 	struct game_variant_options const *options)
 {
-	return options && (options->hardcore || game_modes_variant_mode(variant, options) != _game_mode_none);
+	return options && (options->hardcore || game_modes_variant_mode(variant, options) != _game_mode_none ||
+        game_modes_sticks_and_stones(variant, options));
 }
 
 /* ---- the game being played */

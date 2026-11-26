@@ -3533,6 +3533,12 @@ static void gametype_rules_text(long profile_index, wchar_t *text, short size)
 		game_variant_options_default(&variant, &options);
 	engine = PIN(variant.game_engine_index, 0, 5);
 	kind = game_modes_variant_kind_name(&variant, &options);
+    if (game_modes_sticks_and_stones(&variant, &options))
+    {
+        usnprintf(text, size - 1, L"STICKS & STONES\r\nInfinite grenades / melee\r\nNo guns or vehicles");
+        text[size - 1] = 0;
+        return;
+    }
 	switch (game_modes_variant_mode(&variant, &options))
 	{
 	case _game_mode_infection:
