@@ -47,6 +47,8 @@ scenarios place (props.c), and a scenario itself (scenarios/).
 /* the chamber: a box from (-CHAMBER_HALF_WIDTH, -CHAMBER_HALF_WIDTH, 0) to
 (CHAMBER_HALF_WIDTH, CHAMBER_HALF_WIDTH, CHAMBER_HEIGHT), in world units */
 #define CHAMBER_HALF_WIDTH 500.f
+/* An 8 km side at 3.048 metres per Halo world unit. */
+#define ROYALE_HALF_WIDTH (4000.f / 3.048f)
 #define CHAMBER_HEIGHT 100.f
 
 #define FOURCC(a, b, c, d) (((unsigned long)(a) << 24) | ((unsigned long)(b) << 16) | ((c) << 8) | (d))
@@ -65,6 +67,7 @@ struct stagekit_scenario
 	char const *description;
 	/* places what the scenario adds to the stage (stage.c) */
 	void (*build)(struct stage *stage);
+	real half_width;
 };
 
 /* ---------- prototypes/CACHE.C */
