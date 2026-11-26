@@ -24,6 +24,12 @@ final class LanBoardClient {
 
     static List<LanBoardProtocol.Entry> sync(
             Context context, File root, String ip) throws IOException {
+        return sync(context, root, ip, null);
+    }
+
+    static List<LanBoardProtocol.Entry> sync(Context context, File root, String ip,
+                                             String expectedId) throws IOException {
+        if (!LanShareSettings.career(context)) throw new IOException("Career sharing is disabled");
         byte[] address = LanUpdateProtocol.privateAddress(ip);
         if (address == null)
             throw new IOException("Enter a private hotspot host IP (10.x, "
@@ -45,15 +51,17 @@ final class LanBoardClient {
             socket.connect(new InetSocketAddress(
                 LanUpdateProtocol.asAddress(address), LanBoardProtocol.PORT), 2800);
             socket.setSoTimeout(3500);
+            if (!LanShareSettings.career(context)) throw new IOException("Career sharing disabled");
             socket.getOutputStream().write(
                 LanBoardProtocol.card(token, self).getBytes(StandardCharsets.US_ASCII));
             socket.getOutputStream().flush();
+            long deadline = System.nanoTime() + 4_000_000_000L;
             int count = LanBoardProtocol.readHeader(
-                LanBoardProtocol.boundedLine(socket.getInputStream()), token);
+                timedLine(socket, deadline), token);
             HashSet<String> ids = new HashSet<>();
             for (int i = 0; i < count; i++) {
                 LanBoardProtocol.Entry e = LanBoardProtocol.readRow(
-                    LanBoardProtocol.boundedLine(socket.getInputStream()));
+                    timedLine(socket, deadline));
                 if (!ids.add(e.id))
                     throw new IOException("Host repeated a leaderboard identity");
                 received.add(e);
@@ -63,9 +71,27 @@ final class LanBoardClient {
                 if (e.id.equals(self.id)) hostRespondedWithSelf = true;
             if (!hostRespondedWithSelf)
                 throw new IOException("Host did not acknowledge this player");
+            if (expectedId != null && !ids.contains(expectedId))
+                throw new IOException("Expected nearby player did not respond");
         }
+        if (!LanShareSettings.career(context)) throw new IOException("Career sharing disabled");
         return LanBoardStore.merge(root, self, received,
             System.currentTimeMillis());
+    }
+
+    private static String timedLine(Socket socket, long deadline) throws IOException {
+        java.io.InputStream stream = socket.getInputStream();
+        // Bound the whole reply, not just an individual read.
+        java.io.InputStream timed = new java.io.InputStream() {
+            @Override public int read() throws IOException {
+                long left = deadline - System.nanoTime();
+                if (left <= 0 || Thread.currentThread().isInterrupted())
+                    throw new IOException("Leaderboard response timed out");
+                socket.setSoTimeout((int)Math.max(1, left / 1_000_000L));
+                return stream.read();
+            }
+        };
+        return LanBoardProtocol.boundedLine(timed);
     }
 
     static Inet4Address localInterface(byte[] target) {

@@ -148,7 +148,7 @@ final class CareerProfile {
                 HaloTheme.menuButtonColors(videoReels);
                 videoReels.setOnClickListener(view -> {
                     if (activity instanceof LauncherActivity)
-                        HaloReelGallery.show((LauncherActivity)activity, appDirectory);
+                        ((LauncherActivity)activity).openMyVideos();
                 });
                 target.addView(videoReels, new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT, dp(activity, 43)));

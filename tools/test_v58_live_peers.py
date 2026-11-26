@@ -38,19 +38,19 @@ class LivePeerTest(unittest.TestCase):
 
     def test_legacy_and_rebinding(self):
         self.assertIn("LanBoardPresence.Peer.legacy", self.nearby)
-        self.assertIn("discovery only", self.monitor)
+        self.assertIn("discovery only", self.ui)
         self.assertIn("!current.containsKey(e.getKey())", self.server)
         self.assertIn("Thread.sleep(3000)", self.server)
         self.assertIn("lock.release()", self.beacon)
         self.assertIn("route.isDefaultRoute()", self.nearby)
         self.assertIn("socket.bind(new InetSocketAddress(local, 0))", self.nearby)
 
-    def test_manual_sync_only(self):
-        self.assertIn("sync.setOnClickListener(view -> synchronize());", self.ui)
+    def test_manual_sync_fallback_and_separate_presence(self):
+        self.assertIn('sync = button("REFRESH LAN", this::synchronize)', self.ui)
         self.assertNotIn("if (sharing.isChecked()) synchronize();", self.ui)
         self.assertNotIn("if (enabled) synchronize();", self.ui)
         self.assertIn("liveBoardTargets()", self.ui)
-        self.assertIn("LanBoardNearby.refresh(activity, root, ip, live)", self.ui)
+        self.assertIn("LanBoardNearby.refresh(activity, root, ip, targets)", self.ui)
         self.assertIn("Last synced: ", self.ui)
 
 if __name__ == "__main__":

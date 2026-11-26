@@ -24,7 +24,8 @@ class VideoStorageTest(unittest.TestCase):
                         self.gallery.index("ReelLibrary.deleteVideos(", start))
         self.assertIn("result.removed", self.gallery)
         self.assertIn("result.skipped", self.gallery)
-        self.assertIn("show(activity, appRoot)", self.gallery[start:])
+        self.assertIn("onDone.run()", self.gallery[start:])
+        self.assertIn("manage(activity, appRoot, () -> show(activity, appRoot))", self.gallery)
 
     def test_completed_only_and_snapshot(self):
         self.assertIn("LinkOption.NOFOLLOW_LINKS", self.files)

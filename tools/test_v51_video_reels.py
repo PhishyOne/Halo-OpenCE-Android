@@ -83,7 +83,9 @@ class V51VideoTests(unittest.TestCase):
         self.assertIn("Intent.ACTION_CREATE_DOCUMENT", self.launcher)
         self.assertIn('save.setType("video/mp4")', self.launcher)
         self.assertIn("FileInputStream(source)", self.launcher)
-        self.assertIn("HaloReelGallery.show(", self.profile)
+        self.assertIn("openMyVideos()", self.profile)
+        ui = (JAVA / "LanBoardUi.java").read_text()
+        self.assertIn("HaloReelGallery.play(activity, file)", ui)
         self.assertIn("Older event bookmarks", self.profile)
 
     def test_existing_career_and_network_untouched(self):

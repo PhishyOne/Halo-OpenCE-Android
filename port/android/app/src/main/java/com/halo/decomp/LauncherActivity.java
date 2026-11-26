@@ -90,10 +90,13 @@ public class LauncherActivity extends Activity {
     private TextView repairStatus;
     private LinearLayout stockMapResults;
     private LinearLayout dashboardPanel;
+    private LanBoardUi socialUi;
+    private Runnable openSocial;
     private LanMapRepair lanMapRepair;
     private LanBoardServer lanBoardServer;
     private LanBoardPresenceMonitor livePeerMonitor;
     private boolean launcherResumed;
+    private LanReelPlayer remoteReelPlayer;
     private ChoiceButton stockCampaignMapChoice;
     private Button stockCampaignAuditButton;
     private Button stockCampaignImportButton;
@@ -268,8 +271,7 @@ public class LauncherActivity extends Activity {
         // its game is open, including campaign and offline bot matches.
         // This does not enable network gameplay or public sharing.
         intent.putExtra(HaloActivity.LAN_BOARD_HOST,
-            getSharedPreferences("launcher_ui",
-                MODE_PRIVATE).getBoolean("lan_board_share", false));
+            LanShareSettings.career(this));
         if (getSharedPreferences("reel_settings", MODE_PRIVATE)
                 .getBoolean("record_opt_in", false)) {
             android.media.projection.MediaProjectionManager projection =
@@ -299,6 +301,14 @@ public class LauncherActivity extends Activity {
     }
 
     private void launchWithoutConsent(Intent intent) {
+        // Persist the one player identity before handing off to :game.
+        // A first launch must not race two random-ID initializations.
+        if (LanShareSettings.career(this)) {
+            try { LanBoardIdentity.id(this); }
+            catch (java.io.IOException unavailable) {
+                android.util.Log.w("HaloLanBoard", "Local player identity unavailable", unavailable);
+            }
+        }
         // Transfer the peer listener to :game; do not hold both copies
         // open on one device or rely on a cloud service.
         stopBoardSharing();
@@ -451,12 +461,16 @@ public class LauncherActivity extends Activity {
     /** This phone serves a tiny leaderboard card while its launcher is
      * open and sharing is enabled. The game process takes over after Play. */
     void refreshBoardSharing() {
-        boolean enabled = getSharedPreferences("launcher_ui", MODE_PRIVATE)
-            .getBoolean("lan_board_share", false);
+        boolean enabled = LanShareSettings.career(this);
         if (enabled && haveData() && lanBoardServer == null)
             lanBoardServer = LanBoardServer.start(this);
         else if (!enabled)
             stopBoardSharing();
+    }
+
+    void boardSharingChanged() {
+        refreshBoardSharing();
+        if (livePeerMonitor != null) livePeerMonitor.sharingChanged();
     }
 
     private void stopBoardSharing() {
@@ -639,6 +653,7 @@ public class LauncherActivity extends Activity {
         LinearLayout.LayoutParams liveParams = new LinearLayout.LayoutParams(0, dp(38), 1f);
         liveParams.leftMargin = dp(8);
         masthead.addView(livePeers, liveParams);
+        if (socialUi != null) socialUi.close();
         if (livePeerMonitor != null) livePeerMonitor.close();
         livePeerMonitor = new LanBoardPresenceMonitor(this, livePeers);
         if (launcherResumed) livePeerMonitor.resume();
@@ -653,7 +668,7 @@ public class LauncherActivity extends Activity {
         modeBar.setOrientation(LinearLayout.HORIZONTAL);
         modeBar.setPadding(dp(8), dp(5), dp(8), dp(5));
         String[] modeNames = {
-            "Profile", "Offline Match", "Campaign", "Host", "Join", "Tools"
+            "Leaderboard", "Offline Match", "Campaign", "Host", "Join", "Tools"
         };
         Button[] modeTabs = new Button[modeNames.length];
         for (int i = 0; i < modeNames.length; i++) {
@@ -685,7 +700,7 @@ public class LauncherActivity extends Activity {
         dashboardPanel = hudPanel();
         dashboardPanel.setVisibility(View.GONE);
         content.addView(dashboardPanel);
-        CareerProfile.dashboard(this, dataRoot, dashboardPanel);
+        socialUi = new LanBoardUi(this, dataRoot, dashboardPanel, scroll);
         // System Link panel. Host, guest and advanced controls are retained.
         LinearLayout lanPanel = hudPanel();
         content.addView(lanPanel);
@@ -737,19 +752,11 @@ public class LauncherActivity extends Activity {
             .getBoolean("lan_update_share", true));
         hudCheck(shareUpdates);
         hostPanel.addView(shareUpdates);
-        // Each phone independently opts in to local career/presence sharing.
-        // This is separate from the game host or APK update service.
-        CheckBox shareStandings = new CheckBox(this);
-        shareStandings.setText("SHARE LAN LEADERBOARD / LIVE NAME (OPT-IN)");
-        shareStandings.setChecked(getSharedPreferences("launcher_ui", MODE_PRIVATE)
-            .getBoolean("lan_board_share", false));
-        hudCheck(shareStandings);
-        shareStandings.setOnCheckedChangeListener((view, checked) -> {
-            getSharedPreferences("launcher_ui", MODE_PRIVATE).edit()
-                .putBoolean("lan_board_share", checked).apply();
-            refreshBoardSharing();
-        });
-        hostPanel.addView(shareStandings);
+        Button social = new Button(this);
+        social.setText("LAN PLAYERS / SHARING");
+        hudButton(social, false);
+        social.setOnClickListener(view -> LanBoardUi.show(this, dataRoot));
+        hostPanel.addView(social);
 
         final int[] lanBotCounts = LanConfig.choicesIncluding(
             settings.systemLinkBotCount);
@@ -1357,6 +1364,8 @@ public class LauncherActivity extends Activity {
             toolsPage.setVisibility(toolsVisible[0] ? View.VISIBLE : View.GONE);
             dashboardPanel.setVisibility(homeVisible[0] ?
                 View.VISIBLE : View.GONE);
+            if (socialUi != null) socialUi.setVisible(homeVisible[0]);
+            footer.setVisibility(homeVisible[0] ? View.GONE : View.VISIBLE);
             updateRewardVisibility.run();
             if (!playing) killstreakToggle.setVisibility(View.GONE);
             killstreakPanel.setVisibility(View.GONE);
@@ -1383,12 +1392,13 @@ public class LauncherActivity extends Activity {
         updateMode.run();
         // Keep the existing mode/configuration machinery, but use one
         // compact navigation row for all normal player decisions.
-        modeTabs[0].setOnClickListener(view -> {
+        openSocial = () -> {
             homeVisible[0] = true;
             toolsVisible[0] = false;
-            CareerProfile.dashboard(this, dataRoot, dashboardPanel);
+            if (socialUi != null) socialUi.home();
             updateMode.run();
-        });
+        };
+        modeTabs[0].setOnClickListener(view -> openLeaderboard());
         modeTabs[1].setOnClickListener(view -> {
             homeVisible[0] = toolsVisible[0] = false;
             offlineMode.setChecked(true);
@@ -1593,7 +1603,7 @@ public class LauncherActivity extends Activity {
         footer.addView(play, playParams);
         root.addView(footer);
         setContentView(root);
-        updateMode.run(); // hide PLAY on the default service-record screen
+        updateMode.run(); // hide PLAY on the default leaderboard screen
         // Reentering Join after an in-place APK update should find a host
         // still playing without asking the host to leave the match.
         if (lanMode.isChecked() && joinRole.isChecked() &&
@@ -2173,14 +2183,51 @@ public class LauncherActivity extends Activity {
         pick.requestFocus();
     }
 
+    void openLeaderboard() {
+        if (openSocial != null) openSocial.run();
+    }
+
+    void openMyVideos() {
+        openLeaderboard();
+        if (socialUi != null) socialUi.myVideos();
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (socialUi != null && socialUi.back()) return;
+        super.onBackPressed();
+    }
+
     java.util.List<String> liveBoardTargets() {
         return livePeerMonitor == null ? java.util.Collections.emptyList() :
             livePeerMonitor.liveTargets();
     }
 
+    LanBoardPresence.Snapshot liveBoardSnapshot() {
+        return livePeerMonitor == null ? LanBoardPresence.Snapshot.empty() : livePeerMonitor.snapshot();
+    }
+
+    void observeLiveBoard(Runnable listener) {
+        if (livePeerMonitor != null) livePeerMonitor.observe(listener);
+    }
+
+    void removeLiveBoardObserver(Runnable listener) {
+        if (livePeerMonitor != null) livePeerMonitor.removeObserver(listener);
+    }
+
+    boolean launcherVisible() { return launcherResumed && !isFinishing() && !isDestroyed(); }
+    void setRemoteReelPlayer(LanReelPlayer player) {
+        if (remoteReelPlayer != null && remoteReelPlayer != player) remoteReelPlayer.close();
+        remoteReelPlayer = player;
+    }
+    void remoteReelClosed(LanReelPlayer player) {
+        if (remoteReelPlayer == player) remoteReelPlayer = null;
+    }
+
     @Override
     protected void onPause() {
         launcherResumed = false;
+        if (remoteReelPlayer != null) remoteReelPlayer.close();
         if (livePeerMonitor != null) livePeerMonitor.pause();
         super.onPause();
     }
@@ -2193,6 +2240,8 @@ public class LauncherActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (remoteReelPlayer != null) remoteReelPlayer.close();
+        if (socialUi != null) socialUi.close();
         if (livePeerMonitor != null) livePeerMonitor.close();
         stopBoardSharing();
         if (lanMapRepair != null) lanMapRepair.destroy();
@@ -2216,7 +2265,7 @@ public class LauncherActivity extends Activity {
             pick = null;
             buildLanInterface();
         } else if (dashboardPanel != null && dashboardPanel.getVisibility() == View.VISIBLE) {
-            CareerProfile.dashboard(this, dataRoot, dashboardPanel);
+            if (socialUi != null) socialUi.reload();
         }
     }
 

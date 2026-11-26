@@ -80,7 +80,7 @@ class VisualDesignV39Test(unittest.TestCase):
     def test_v39_cleanup_without_changing_lan_or_stats_identity(self):
         self.assertNotIn("HOST TIPS", self.launcher)
         self.assertNotIn("toolsServiceRecord", self.launcher)
-        self.assertIn("CareerProfile.dashboard(", self.launcher)
+        self.assertIn("new LanBoardUi(this, dataRoot, dashboardPanel, scroll)", self.launcher)
         self.assertIn("class ChoiceButton extends Button", self.launcher)
         self.assertNotIn("import android.widget.Spinner;", self.launcher)
         self.assertIn("setSingleChoiceItems(this.choices, selection,", self.launcher)

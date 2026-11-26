@@ -210,6 +210,7 @@ public final class LanBoardCoreTest {
         } finally {
             Files.deleteIfExists(root.resolve(CareerRecords.LOG_NAME));
             Files.deleteIfExists(root.resolve(LanBoardProtocol.FILE));
+            Files.deleteIfExists(root.resolve("lan-board-v1.lock"));
             Files.deleteIfExists(root);
         }
         System.out.println("PASS LanBoardCoreTest: " + checks + " checks");

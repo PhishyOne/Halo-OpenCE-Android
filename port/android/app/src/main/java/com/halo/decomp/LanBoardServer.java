@@ -19,6 +19,14 @@ import java.util.Enumeration;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.RejectedExecutionException;
 
 /** Explicitly opted-in peer-phone LAN leaderboard on TCP 5164.
  * Any participating device may serve cards while in launcher or game.
@@ -33,10 +41,27 @@ final class LanBoardServer {
     private volatile boolean stopped;
     private Thread maintenance;
     private LanBoardBeacon beacon;
+    private final Set<Socket> clients = new HashSet<>();
+    // Keep range reads off the accept loop so a viewer cannot stall a
+    // peer identity ping. Bounded queue and hard connection lifetime.
+    private final ThreadPoolExecutor workers = new ThreadPoolExecutor(
+        4, 4, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(8),
+        task -> {
+            Thread thread = new Thread(task, "Halo-LAN-board-client");
+            thread.setDaemon(true);
+            return thread;
+        }, new ThreadPoolExecutor.AbortPolicy());
+    private final ScheduledThreadPoolExecutor deadlines = new ScheduledThreadPoolExecutor(1,
+        task -> {
+            Thread thread = new Thread(task, "Halo-LAN-board-deadline");
+            thread.setDaemon(true);
+            return thread;
+        });
 
     private LanBoardServer(Context context) {
         this.context = context.getApplicationContext();
         gameOpen = context instanceof HaloActivity;
+        deadlines.setRemoveOnCancelPolicy(true);
     }
 
     static LanBoardServer start(Context context) {
@@ -60,6 +85,12 @@ final class LanBoardServer {
                 try { listener.close(); } catch (IOException ignored) { }
             bound.clear();
         }
+        synchronized (clients) {
+            for (Socket client : clients) closeSocket(client);
+            clients.clear();
+        }
+        workers.shutdownNow();
+        deadlines.shutdownNow();
     }
 
     /** Refresh only local interface bindings, not remote clients. Allows
@@ -130,45 +161,76 @@ final class LanBoardServer {
         }
     }
 
+    private static void closeSocket(Socket socket) {
+        try { socket.close(); } catch (IOException ignored) { }
+    }
+
     private void accept(ServerSocket listener, byte[] local, int prefix) {
         while (!stopped && !listener.isClosed()) {
             try {
-                Socket client = listener.accept();
-                try (Socket socket = client) {
-                    socket.setSoTimeout(2500);
-                    if (!(socket.getInetAddress() instanceof Inet4Address)) continue;
-                    String peer = socket.getInetAddress().getHostAddress();
-                    if (LanUpdateProtocol.privateAddress(peer) == null ||
-                        java.util.Arrays.equals(local, socket.getInetAddress().getAddress()) ||
-                        !LanUpdateProtocol.sameSubnet(local,
-                            socket.getInetAddress().getAddress(), prefix))
-                        continue;
-                    handle(socket);
+                Socket socket = listener.accept();
+                if (stopped || !(socket.getInetAddress() instanceof Inet4Address) ||
+                    LanUpdateProtocol.privateAddress(socket.getInetAddress().getHostAddress()) == null ||
+                    java.util.Arrays.equals(local, socket.getInetAddress().getAddress()) ||
+                    !LanUpdateProtocol.sameSubnet(local, socket.getInetAddress().getAddress(), prefix)) {
+                    closeSocket(socket); continue;
+                }
+                synchronized (clients) {
+                    if (stopped || clients.size() >= 12) { closeSocket(socket); continue; }
+                    clients.add(socket);
+                }
+                ScheduledFuture<?> expiry = null;
+                try {
+                    expiry = deadlines.schedule(() -> closeSocket(socket), 8, TimeUnit.SECONDS);
+                    final ScheduledFuture<?> timeout = expiry;
+                    workers.execute(() -> {
+                        try (Socket connection = socket) {
+                            connection.setSoTimeout(2500);
+                            if (!stopped && !listener.isClosed()) handle(connection);
+                        } catch (IOException | RuntimeException unavailable) {
+                            // A disconnected viewer, disabled sharing, or an older protocol.
+                        } finally {
+                            timeout.cancel(false);
+                            synchronized (clients) { clients.remove(socket); }
+                        }
+                    });
+                } catch (RejectedExecutionException unavailable) {
+                    if (expiry != null) expiry.cancel(false);
+                    closeSocket(socket);
+                    synchronized (clients) { clients.remove(socket); }
                 }
             } catch (SocketTimeoutException idle) {
-                // Recheck stop flag, no thread or socket growth.
+                // Recheck stop flag.
             } catch (IOException failed) {
                 if (!stopped && !listener.isClosed())
-                    Log.i(TAG, "LAN board connection ended: " +
-                        failed.getClass().getSimpleName());
+                    Log.i(TAG, "LAN board listener ended: " + failed.getClass().getSimpleName());
             }
         }
     }
 
     private void handle(Socket socket) throws IOException {
         String request = LanBoardProtocol.boundedLine(socket.getInputStream());
-        if (stopped) return;
+        if (stopped || !LanShareSettings.career(context)) return;
         String ping = LanBoardPresence.readQuery(request);
         if (ping != null) {
             // A live presence reply uses identity only, no career read,
             // LanBoardStore merge, stats transmission or sync timestamp.
-            String reply = LanBoardPresence.answer(ping, LanBoardIdentity.id(context),
-                LanBoardIdentity.name(context), gameOpen);
+            String id = LanBoardIdentity.id(context);
+            String name = LanBoardIdentity.name(context);
+            String reply = request.startsWith(LanBoardPresence.QUERY2 + "|") ?
+                LanBoardPresence.answerModern(ping, id, name, gameOpen, LanShareSettings.reels(context)) :
+                LanBoardPresence.answer(ping, id, name, gameOpen);
             socket.getOutputStream().write(reply.getBytes(StandardCharsets.US_ASCII));
             socket.getOutputStream().flush();
             return;
         }
         String[] parts = request.split("\\|", -1);
+        if (LanReelProtocol.request(request)) {
+            LanReelProtocol.serve(request, context.getExternalFilesDir(null),
+                LanBoardIdentity.id(context), !stopped && LanShareSettings.reels(context),
+                socket.getOutputStream());
+            return;
+        }
         if (parts.length != 12 || !LanBoardProtocol.CARD.equals(parts[0]) ||
             !LanBoardProtocol.nonceValid(parts[1])) return;
         String nonce = parts[1];
@@ -178,6 +240,7 @@ final class LanBoardServer {
         if (offered.id.equals(local.id)) return; // Never overwrite host identity.
         List<LanBoardProtocol.Entry> incoming = new ArrayList<>();
         incoming.add(offered.seen(System.currentTimeMillis()));
+        if (stopped || !LanShareSettings.career(context)) return;
         List<LanBoardProtocol.Entry> board = LanBoardStore.merge(
             root, local, incoming, System.currentTimeMillis());
         StringBuilder reply = new StringBuilder(LanBoardProtocol.header(nonce, board.size()));

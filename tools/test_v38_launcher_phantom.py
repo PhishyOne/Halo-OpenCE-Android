@@ -22,12 +22,12 @@ class V38Tests(unittest.TestCase):
         cls.voice_script = (ROOT / "tools/generate_phantom_audio.py").read_text()
 
     def test_profile_is_primary_screen(self):
-        self.assertIn('"Profile", "Offline Match", "Campaign", "Host", "Join", "Tools"',
+        self.assertIn('"Leaderboard", "Offline Match", "Campaign", "Host", "Join", "Tools"',
                       self.launcher)
-        self.assertIn("CareerProfile.dashboard(this, dataRoot, dashboardPanel)", self.launcher)
+        self.assertIn("socialUi = new LanBoardUi(this, dataRoot, dashboardPanel, scroll)", self.launcher)
         self.assertIn("final boolean[] homeVisible = { !invitePending };", self.launcher)
         self.assertIn("dashboardPanel.setVisibility(homeVisible[0]", self.launcher)
-        self.assertIn("updateMode.run(); // hide PLAY on the default service-record screen",
+        self.assertIn("updateMode.run(); // hide PLAY on the default leaderboard screen",
                       self.launcher)
 
     def test_clean_host_join_and_accurate_map_importers(self):

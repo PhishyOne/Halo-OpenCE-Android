@@ -61,7 +61,8 @@ final class LanBoardBeacon {
                 } catch (SocketTimeoutException idle) {
                     continue;
                 }
-                if (!(incoming.getAddress() instanceof Inet4Address)) continue;
+                if (!LanShareSettings.career(context) ||
+                    !(incoming.getAddress() instanceof Inet4Address)) continue;
                 byte[] peer = incoming.getAddress().getAddress();
                 String nonce = LanBoardDiscovery.readProbe(
                     incoming.getData(),incoming.getLength());

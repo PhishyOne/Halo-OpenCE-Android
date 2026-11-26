@@ -17,8 +17,8 @@ class HaloLauncherLayoutTests(unittest.TestCase):
 
     def test_compact_mode_navigation_above_one_play(self):
         s = self.source
-        self.assertIn('"Profile", "Offline Match", "Campaign", "Host", "Join", "Tools"', s)
-        self.assertIn('CareerProfile.dashboard(this, dataRoot, dashboardPanel)', s)
+        self.assertIn('"Leaderboard", "Offline Match", "Campaign", "Host", "Join", "Tools"', s)
+        self.assertIn('socialUi = new LanBoardUi(this, dataRoot, dashboardPanel, scroll)', s)
         self.assertIn('final boolean[] homeVisible = { !invitePending };', s)
         self.assertIn('Button[] modeTabs = new Button[modeNames.length];', s)
         self.assertIn('offlineMode.setText("OFFLINE BOTS");', s)

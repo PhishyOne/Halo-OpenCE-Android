@@ -15,20 +15,23 @@ import java.util.Map;
  * multiplayer roster. Never save presence as a leaderboard timestamp. */
 final class LanBoardPresence {
     static final String QUERY = "HBP1", ANSWER = "HPA1";
+    static final String QUERY2 = "HBP2", ANSWER2 = "HPA2";
     static final long FRESH_MS = 15000;
     static final int MAX_PEERS = 16;
 
     static final class Peer {
         final String id, name, ip;
-        final boolean gameOpen;
+        final boolean gameOpen, modern, reels;
 
-        private Peer(String id, String name, String ip, boolean gameOpen) {
+        private Peer(String id, String name, String ip, boolean gameOpen,
+                     boolean modern, boolean reels) {
             this.id = id; this.name = name; this.ip = ip; this.gameOpen = gameOpen;
+            this.modern = modern; this.reels = reels;
         }
         static Peer legacy(String ip) {
             if (LanUpdateProtocol.privateAddress(ip) == null)
                 throw new IllegalArgumentException("Not a private peer IP");
-            return new Peer(null, "Unnamed Halo", ip, false);
+            return new Peer(null, "Unnamed Halo", ip, false, false, false);
         }
         boolean named() { return id != null; }
         String location() { return named() ? (gameOpen ? "Game open" : "Launcher") : "Discovery only"; }
@@ -55,6 +58,11 @@ final class LanBoardPresence {
             this.observed = observed;
             this.scanned = scanned;
         }
+        Peer byId(String id, long now) {
+            if (id != null && fresh(now))
+                for (Peer p : peers) if (id.equals(p.id)) return p;
+            return null;
+        }
         boolean fresh(long now) { return scanned && now >= observed && now - observed <= FRESH_MS; }
         static Snapshot empty() { return new Snapshot(Collections.emptyList(), 0, false); }
         int ready() {
@@ -76,9 +84,13 @@ final class LanBoardPresence {
         if (!LanBoardProtocol.nonceValid(nonce)) throw new IllegalArgumentException("Bad presence nonce");
         return QUERY + "|" + nonce + "\n";
     }
+    static String queryModern(String nonce) {
+        if (!LanBoardProtocol.nonceValid(nonce)) throw new IllegalArgumentException("Bad presence nonce");
+        return QUERY2 + "|" + nonce + "\n";
+    }
     static String readQuery(String line) {
         if (line == null || line.length() != QUERY.length() + 17 ||
-            !line.startsWith(QUERY + "|")) return null;
+            !(line.startsWith(QUERY + "|") || line.startsWith(QUERY2 + "|"))) return null;
         String nonce = line.substring(QUERY.length() + 1);
         return LanBoardProtocol.nonceValid(nonce) ? nonce : null;
     }
@@ -88,21 +100,37 @@ final class LanBoardPresence {
         return ANSWER + "|" + nonce + "|" + id + "|" +
             LanBoardProtocol.nameWire(name) + "|" + (gameOpen ? "G" : "L") + "\n";
     }
+    static String answerModern(String nonce, String id, String name,
+                               boolean gameOpen, boolean reels) {
+        String old = answer(nonce, id, name, gameOpen);
+        return ANSWER2 + old.substring(ANSWER.length(), old.length() - 1) +
+            "|" + (reels ? "1" : "0") + "\n";
+    }
     static Peer readAnswer(String line, String nonce, String ip) throws IOException {
         if (line == null || line.length() > LanBoardProtocol.MAX_LINE ||
             LanUpdateProtocol.privateAddress(ip) == null || !LanBoardProtocol.nonceValid(nonce))
             throw new IOException("Invalid presence reply");
         String[] p = line.split("\\|", -1);
-        if (p.length != 5 || !ANSWER.equals(p[0]) || !nonce.equals(p[1]) ||
+        boolean modern = p.length == 6 && ANSWER2.equals(p[0]) &&
+            ("0".equals(p[5]) || "1".equals(p[5]));
+        if (!(modern || (p.length == 5 && ANSWER.equals(p[0]))) || !nonce.equals(p[1]) ||
             !LanBoardProtocol.idValid(p[2]) || !("G".equals(p[4]) || "L".equals(p[4])))
             throw new IOException("Unrelated presence reply");
-        return new Peer(p[2], LanBoardProtocol.readName(p[3]), ip, "G".equals(p[4]));
+        return new Peer(p[2], LanBoardProtocol.readName(p[3]), ip, "G".equals(p[4]),
+            modern, modern && "1".equals(p[5]));
     }
 
     static Peer exchange(Socket socket, String challenge, String ip) throws IOException {
         socket.getOutputStream().write(query(challenge).getBytes(StandardCharsets.US_ASCII));
         socket.getOutputStream().flush();
         return readAnswer(presenceLine(socket), challenge, ip);
+    }
+    static Peer exchangeModern(Socket socket, String challenge, String ip) throws IOException {
+        socket.getOutputStream().write(queryModern(challenge).getBytes(StandardCharsets.US_ASCII));
+        socket.getOutputStream().flush();
+        Peer peer = readAnswer(presenceLine(socket), challenge, ip);
+        if (!peer.modern) throw new IOException("No modern presence response");
+        return peer;
     }
 
     /** Read one bounded ASCII frame with an absolute deadline. A slow or

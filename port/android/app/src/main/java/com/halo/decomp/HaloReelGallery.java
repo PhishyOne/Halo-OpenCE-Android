@@ -87,6 +87,10 @@ final class HaloReelGallery {
     }
 
     private static void manage(LauncherActivity activity, File appRoot) {
+        manage(activity, appRoot, () -> show(activity, appRoot));
+    }
+
+    static void manage(LauncherActivity activity, File appRoot, Runnable onDone) {
         HaloVideoFiles.Entry[] entries = HaloVideoFiles.deletable(appRoot);
         if (entries.length == 0) {
             new AlertDialog.Builder(activity)
@@ -127,14 +131,14 @@ final class HaloReelGallery {
                 return;
             }
             confirmDelete(activity, appRoot, manager,
-                selected.toArray(new HaloVideoFiles.Entry[0]));
+                selected.toArray(new HaloVideoFiles.Entry[0]), onDone);
         });
         manager.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(view ->
-            confirmDelete(activity, appRoot, manager, entries));
+            confirmDelete(activity, appRoot, manager, entries, onDone));
     }
 
     private static void confirmDelete(LauncherActivity activity, File appRoot,
-            AlertDialog manager, HaloVideoFiles.Entry[] confirmed) {
+            AlertDialog manager, HaloVideoFiles.Entry[] confirmed, Runnable onDone) {
         long bytes = 0;
         boolean originals = false;
         for (HaloVideoFiles.Entry entry : confirmed) {
@@ -165,14 +169,14 @@ final class HaloReelGallery {
                                 + size(result.bytes) + "."
                                 + (result.skipped > 0 ? "\n" + result.skipped
                                     + " file(s) could not be deleted or changed. Refresh and try again." : ""))
-                            .setPositiveButton("DONE", (dialog, button) -> show(activity, appRoot))
+                            .setPositiveButton("DONE", (dialog, button) -> onDone.run())
                             .show();
                     });
                 }, "Halo-delete-local-videos").start();
             }).show();
     }
 
-    private static void play(LauncherActivity activity, File clip) {
+    static void play(LauncherActivity activity, File clip) {
         if (!clip.isFile() || !HaloVideoFiles.validName(clip.getName()) ||
             clip.length() < 2048 ||
             clip.length() > ReelSessionIndex.SOURCE_LIMIT)

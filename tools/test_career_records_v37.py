@@ -42,7 +42,7 @@ class CareerV37Tests(unittest.TestCase):
         self.assertNotIn("network_protocol", self.native)
 
     def test_ui_and_reader_have_limits(self):
-        self.assertIn("CareerProfile.dashboard(this, dataRoot, dashboardPanel)", self.launcher)
+        self.assertIn("socialUi = new LanBoardUi(this, dataRoot, dashboardPanel, scroll)", self.launcher)
         self.assertNotIn('MY SPARTAN PROFILE & ACHIEVEMENTS', self.launcher)
         self.assertIn("MAX_FILE_BYTES = 2 * 1024 * 1024", self.reader)
         self.assertIn("java.util.LinkedHashMap<String, Match> records", self.reader)

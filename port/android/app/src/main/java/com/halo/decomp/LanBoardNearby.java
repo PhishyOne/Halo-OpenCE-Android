@@ -202,6 +202,11 @@ final class LanBoardNearby {
     }
 
     private static LanBoardPresence.Peer ping(String ip) throws IOException {
+        try { return ping(ip, true); }
+        catch (IOException unavailable) { return ping(ip, false); }
+    }
+
+    private static LanBoardPresence.Peer ping(String ip, boolean modern) throws IOException {
         byte[] address = LanUpdateProtocol.privateAddress(ip);
         if (address == null) throw new IOException("Not a private peer");
         Inet4Address local = LanBoardClient.localInterface(address);
@@ -211,7 +216,8 @@ final class LanBoardNearby {
             socket.bind(new InetSocketAddress(local, 0));
             socket.connect(new InetSocketAddress(LanUpdateProtocol.asAddress(address),
                 LanBoardProtocol.PORT), 700);
-            return LanBoardPresence.exchange(socket, challenge, ip);
+            return modern ? LanBoardPresence.exchangeModern(socket, challenge, ip) :
+                LanBoardPresence.exchange(socket, challenge, ip);
         }
     }
 

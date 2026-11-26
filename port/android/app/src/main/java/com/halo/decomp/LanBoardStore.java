@@ -83,6 +83,34 @@ final class LanBoardStore {
             throw new IOException("Unusable local LAN leaderboard identity");
         if (received != null && received.size() > LanBoardProtocol.MAX_PEERS)
             throw new IOException("Too many leaderboard peers");
+        // The launcher and :game process can briefly overlap during handoff.
+        // Serialize their cache merges, not only threads in this Java process.
+        File lockFile = new File(root, "lan-board-v1.lock");
+        try (java.nio.channels.FileChannel channel = java.nio.channels.FileChannel.open(
+                lockFile.toPath(), java.nio.file.StandardOpenOption.CREATE,
+                java.nio.file.StandardOpenOption.WRITE, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+            java.nio.channels.FileLock lock = null;
+            long until = System.nanoTime() + 1_000_000_000L;
+            while (lock == null && System.nanoTime() < until) {
+                lock = channel.tryLock();
+                if (lock == null) {
+                    try { Thread.sleep(25); }
+                    catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("Leaderboard merge cancelled", interrupted);
+                    }
+                }
+            }
+            if (lock == null) throw new IOException("Leaderboard cache is busy");
+            try (java.nio.channels.FileLock acquired = lock) {
+                return mergeLocked(root, local, received, now);
+            }
+        }
+    }
+
+    private static List<LanBoardProtocol.Entry> mergeLocked(
+            File root, LanBoardProtocol.Entry local,
+            List<LanBoardProtocol.Entry> received, long now) throws IOException {
         Map<String, LanBoardProtocol.Entry> byId = new LinkedHashMap<>();
         for (LanBoardProtocol.Entry entry : read(root)) {
             // A disconnected player's last valid data is useful even
