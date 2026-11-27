@@ -63,6 +63,26 @@ class Sector:
         if not barn:
             self.box('brick',x+w*0.69,y+d*0.7,h,0.8,0.8,w*0.30+0.8,False)
 
+    def fence(self, x, y, spans):
+        for i in range(spans+1):
+            self.box('timber',x+i*3,y,0,.18,.18,1.20)
+        for z in (.40,.92):
+            self.box('timber',x,y,z,spans*3,.15,.15)
+
+    def water_tower(self,x,y):
+        # Four exposed legs keep the approach underneath open.
+        for dx in (-2,2):
+            for dy in (-2,2):
+                self.box('timber',x+dx-.18,y+dy-.18,0,.36,.36,8.3)
+        self.box('slate',x-2.7,y-2.7,8.2,5.4,5.4,.3)
+        n=12
+        rim=[(x+2.6*math.cos(i*2*math.pi/n),y+2.6*math.sin(i*2*math.pi/n),8.5) for i in range(n)]
+        top=[(a,b,12.2) for a,b,_ in rim]
+        for i in range(n):
+            j=(i+1)%n
+            self.face('slate',rim[i],rim[j],top[j],top[i])
+            self.face('roof',top[i],top[j],(x,y,13.2))
+
     def tree(self,x,y,pine,rng):
         h=rng.uniform(8,11) if pine else rng.uniform(5,7)
         self.box('bark',x-.26,y-.26,0,.52,.52,h*.76)
@@ -95,6 +115,10 @@ def build():
         (35,-21,7,6,3.2,'brick','slate',False)]:
         s.building(x,y,w,d,h,wall,roof,barn)
         s.slab('lane',x+w*.5-1.5,y-3,3,3,.024)
+    s.fence(-55,8,4)
+    s.fence(-34,8,6)
+    s.fence(28,-10,5)
+    s.water_tower(36,-41)
     rng=random.Random(6217)
     for row in range(4):
         for col in range(6):

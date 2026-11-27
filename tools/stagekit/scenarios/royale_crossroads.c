@@ -75,7 +75,7 @@ static void make_mesh(struct structure_bsp *bsp)
 	long material, face=0, i;
 	sub->bounds = bsp->world_bounds;
 	light->bitmap_index = NONE;
-	bsp->default_lighting.ambient_color.r = bsp->default_lighting.ambient_color.g = bsp->default_lighting.ambient_color.b = 1;
+	bsp->default_lighting.ambient_color.red = bsp->default_lighting.ambient_color.green = bsp->default_lighting.ambient_color.blue = 1;
 	for (material=0; material<NUMBEROF(paints); ++material, ++mat) {
 		long count = paints[material].count;
 		struct ce_vertex *v = cache_bsp_allocate(count*3*sizeof(*v));
