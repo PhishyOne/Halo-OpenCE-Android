@@ -259,6 +259,32 @@ static void release(struct rider *r, struct biped_datum *b, real_point3d positio
 	platform_log("Echo 419: dropped seat %d at tick %d", slot, flight.tick);
 }
 
+/* Supply the target velocity to Halo's airborne acceleration step so ordinary
+   stick braking and bot guidance do not fight each other before collision. */
+boolean battle_royale_guided_velocity(long biped_index, real_vector2d *desired)
+{
+	struct biped_datum *b;
+	struct rider const *r;
+	real dx, dy, distance, scale;
+	long player;
+	if (!flight.enabled || !flight.started)
+		return FALSE;
+	b = biped_get(biped_index);
+	player = b->unit.player_index;
+	if (player == NONE)
+		return FALSE;
+	r = &flight.riders[DATUM_INDEX_TO_ABSOLUTE_INDEX(player)];
+	if (r->state != FALLING || !r->release_tick || r->player != player || r->biped != biped_index)
+		return FALSE;
+	dx = r->target.x - b->object.position.x;
+	dy = r->target.y - b->object.position.y;
+	distance = square_root(dx*dx + dy*dy);
+	scale = .22f / MAX(1.25f, distance);
+	desired->i = dx * scale;
+	desired->j = dy * scale;
+	return TRUE;
+}
+
 static void steer(struct rider *r, struct biped_datum *b)
 {
 	real_vector3d aim = b->unit.aiming_vector;
@@ -273,14 +299,7 @@ static void steer(struct rider *r, struct biped_datum *b)
 	/* World units per tick. Use the normal biped collision for roofs,
 	   terrain and obstacles; return all subsequent falls to normal rules. */
 	aim.k = 0;
-	if (r->release_tick) {
-		real dx = r->target.x - b->object.position.x;
-		real dy = r->target.y - b->object.position.y;
-		real distance = square_root(dx*dx + dy*dy);
-		real speed = .22f / MAX(1.25f, distance);
-		b->object.translational_velocity.i += .12f * (dx*speed - b->object.translational_velocity.i);
-		b->object.translational_velocity.j += .12f * (dy*speed - b->object.translational_velocity.j);
-	} else if (normalize3d(&aim) > 0) {
+	if (!r->release_tick && normalize3d(&aim) > 0) {
 		real forward = b->unit.throttle.i * .22f;
 		real left = b->unit.throttle.j * .22f;
 		b->object.translational_velocity.i += .12f * (aim.i*forward - aim.j*left - b->object.translational_velocity.i);
