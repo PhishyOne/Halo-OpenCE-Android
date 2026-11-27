@@ -23,7 +23,7 @@ def test_unclaimed_loot_survives_the_flight(tmp_path):
     # supplies before the first 900-tick abandoned-item purge.
     proc = runner.launch(tmp_path, "idle", "127.27.0.10", "127.27.0.11",
                          r"local:custom_maps\halo_royale:slayer", HALO_BOTS="0",
-                         HALO_NETWORK_TEST_START="1", **runner.cue_settings([(0, "game_speed 12")], 1))
+                         HALO_NETWORK_TEST_START="8", **runner.cue_settings([(0, "game_speed 12")], 1))
     log_path = tmp_path / "game.log"
     try:
         deadline = time.monotonic() + 150
