@@ -42,7 +42,19 @@ final class MatchWorkshopUi {
     }
     View view(){return body;}
     private MatchWorkshopUi(Activity a,File root,boolean embedded,Consumer<MatchWorkshop.Library> onSaved)throws IOException{
-        activity=a;store=a.getFilesDir();library=MatchWorkshop.read(store);
+        activity=a;store=a.getFilesDir();
+        PlaylistInbox inbox = new PlaylistInbox(store);
+        if (inbox.accepts(PlaylistInbox.CROSSFIRE)) {
+            try (InputStream in = a.getAssets().open("playlists/crossfire.haloplaylist")) {
+                inbox.add(PlaylistInbox.CROSSFIRE, in);
+            } catch (IOException error) {
+                android.util.Log.w("HaloWorkshop", "Crossfire import: " + error.getMessage());
+            }
+        }
+        for (File media : a.getExternalMediaDirs()) {
+            if (media != null) inbox.scan(new File(media, "Playlists"), warning -> android.util.Log.w("HaloWorkshop", warning));
+        }
+        library=inbox.library();
         this.embedded=embedded;this.onSaved=onSaved;
         maps=WorkshopMapCatalog.installed(root);body=column();
     }

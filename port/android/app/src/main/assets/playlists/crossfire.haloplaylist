@@ -1,0 +1,13 @@
+format=1
+id=e73659b2-6113-4e6d-be40-dee85f36bbe9
+title=Halo Night: Crossfire
+shuffle=false
+loop=false
+rounds=6
+# map mode assignment bots difficulty(0..5) killstreaks [rule=value ...]
+round.1=beavercreek team_slayer BALANCED 4 2 true time_limit=8 score_to_win=30
+round.2=ratrace gun_game FREE_FOR_ALL 2 2 false time_limit=8 gun_game_order=1 gun_game_melee_demotes=1
+round.3=hangemhigh swat BALANCED 4 2 false time_limit=8 score_to_win=25
+round.4=damnation team_king BALANCED 4 2 false time_limit=8 moving_hill=1
+round.5=longest rockets FREE_FOR_ALL 2 2 false time_limit=6 score_to_win=15
+round.6=bloodgulch ctf BALANCED 6 2 false time_limit=12 score_to_win=3
