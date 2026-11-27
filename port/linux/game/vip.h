@@ -1,6 +1,8 @@
 #ifndef HALO_VIP_H
 #define HALO_VIP_H
 
+enum { VIP_WINS = 3, VIP_ROUNDS = 2 * VIP_WINS - 1 };
+
 struct game_engine;
 union real_point3d;
 boolean vip_enabled(void);

@@ -232,7 +232,7 @@ void game_modes_gametype(
 		variant->universal_variant.respawn_time_growth = 0;
 		variant->universal_variant.suicide_penalty = 0;
 		variant->universal_variant.goal_radar = GOAL_RADAR_NAV_POINT;
-		variant->universal_variant.score_to_win = 2;
+		variant->universal_variant.score_to_win = VIP_WINS;
 		SET_FLAG(variant->universal_variant.flags, _game_variant_no_shields_bit, FALSE);
         break;
 	default:

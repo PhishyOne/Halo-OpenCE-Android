@@ -34,6 +34,7 @@ class VipTests(unittest.TestCase):
         modes=(GAME/"game_modes.c").read_text()
         bots=(GAME/"bots.c").read_text()
         self.assertIn("return vip_engine_get(engine)",modes)
+        self.assertIn("variant->universal_variant.score_to_win = VIP_WINS;",modes)
         self.assertIn("vip_write_network_state",function(engine,"game_engine_write_network_state"))
         self.assertIn("vip_read_network_state",function(engine,"game_engine_read_network_state"))
         self.assertIn("infection_enabled() || vip_enabled()",function(engine,"game_engine_should_end_game"))

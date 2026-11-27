@@ -38,7 +38,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          ref: 7328ce2d754e3aae742ac3c219ee14e29b9d5da3
+          ref: 20de117c088738f02b21d5d7caea57ed7958a4d2
 
       - uses: actions/cache@v4
         with:
@@ -375,7 +375,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 7328ce2d754e3aae742ac3c219ee14e29b9d5da3
+          ref: 20de117c088738f02b21d5d7caea57ed7958a4d2
 
       - uses: actions/cache@v4
         with:
