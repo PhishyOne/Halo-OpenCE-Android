@@ -88,6 +88,10 @@ symbols in this file:
 #include "units/units.h"
 #include "network_chat.h" /* port: port/linux/game/network_chat.c */
 
+#ifdef HALO_ANDROID
+#include "battle_royale_flight.h"
+#endif
+
 /* ---------- constants */
 
 enum
@@ -909,7 +913,13 @@ void hud_render_unit_interface(
 				struct unit_hud_interface_definition *hud_definition =
 					unit_hud_interface_definition_get(unit_hud_indices[unit_count]);
 
-				if (hud_definition->background.interface_bitmap.index != NONE)
+				/* The Android island overlay draws the local Spartan's two
+                   vitals together. Vehicle-specific instruments remain native. */
+                boolean draw_vitals = TRUE;
+#ifdef HALO_ANDROID
+                draw_vitals = unit_count != 0 || !battle_royale_island_map();
+#endif
+                if (draw_vitals && hud_definition->background.interface_bitmap.index != NONE)
 				{
 					short draw_flags = 0;
 
@@ -929,7 +939,7 @@ void hud_render_unit_interface(
 						NONE);
 				}
 
-				if (game_engine_has_shield(player_index) &&
+				if (draw_vitals && game_engine_has_shield(player_index) &&
 					!TEST_FLAG(
 						unit_hud_globals->script_flags,
 						_hud_panel_shield_dont_show_bit))
@@ -1049,7 +1059,7 @@ void hud_render_unit_interface(
 					}
 				}
 
-				if (!TEST_FLAG(
+				if (draw_vitals && !TEST_FLAG(
 					unit_hud_globals->script_flags,
 					_hud_panel_health_dont_show_bit))
 				{

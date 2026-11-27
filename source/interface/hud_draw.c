@@ -1069,8 +1069,9 @@ void hud_calculate_point(
 	}
 
 #ifdef HALO_ANDROID
-	/* port: keep the shield and health cluster intact beneath the ammo HUD.
-	   The Royale minimap occupies the opposite corner. */
+	/* Leave the island overlay a shallow row above the native ammo HUD. */
+	if (corner == _hud_anchor_top_left && battle_royale_island_map())
+		point.y += 30 * scale;
 	if (corner == _hud_anchor_top_right && battle_royale_island_map())
 	{
 		point.x += 230 - (render.camera.window_bounds.x1 - render.camera.window_bounds.x0);

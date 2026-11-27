@@ -22,7 +22,7 @@ import java.util.Locale;
 /** Read-only view of the offline game's position, flight and safe-zone snapshot. */
 final class RoyaleMinimap {
     static final int INACTIVE = 0, EXPLORE = 1, INSERTION = 2, HOLD = 3, CLOSE = 4, FINAL = 5;
-    final float[] data = new float[22];
+    final float[] data = new float[24];
     private static final int CURRENT = 0xff63d6ff, NEXT = 0xfff1f5ec, YOU = 0xffffcc58;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Paint stormHaze = new Paint(Paint.DITHER_FLAG);
@@ -55,7 +55,7 @@ final class RoyaleMinimap {
         viewWidth = width;
         viewHeight = height;
         statusLeft = Math.max(16, insetLeft + 6);
-        statusTop = Math.max(height * .24f, insetTop + 12);
+        statusTop = Math.max(8, insetTop + 6);
         float size = expanded ? Math.min(height * .67f, width * .65f) : COMPACT_SIZE;
         float left = expanded ? (width - size) / 2 : width - Math.max(16, insetRight + 6) - size;
         float top = expanded ? (height - size - 53) / 2 : Math.max(12, insetTop + 6);
@@ -183,6 +183,19 @@ final class RoyaleMinimap {
         c.restore();
     }
 
+    private void vital(Canvas canvas, String label, float y, float value, int color) {
+        float left = statusLeft + 29, width = 99;
+        text(canvas, label, statusLeft + 7, y + 9, 10, NEXT);
+        fill(0xff42515c);
+        canvas.drawRect(left, y, left + width, y + 9, paint);
+        fill(color);
+        canvas.drawRect(left, y, left + width * Math.max(0, Math.min(1, value)), y + 9, paint);
+        if (value > 1) {
+            fill(0xfff8c562);
+            canvas.drawRect(left, y, left + width * Math.min(1, value - 1), y + 4, paint);
+        }
+    }
+
     void draw(Canvas c) {
         load();
         boolean flight = data[17] > 0;
@@ -231,11 +244,14 @@ final class RoyaleMinimap {
                 outside ? "IN STORM" : gap > 0 ? "Next zone" : "Inside next zone";
         if (!flight && gap > 0) guide += "  " + Math.round(gap*unit) + " m";
         paint.setTextSize(13);
-        float statusWidth = Math.max(paint.measureText(title), paint.measureText(guide)) + 16;
-        fill(0xda202c30);
-        c.drawRoundRect(statusLeft, statusTop, statusLeft + statusWidth, statusTop + 37, 4, 4, paint);
-        text(c,title,statusLeft+8,statusTop+15,13,outside ? 0xffffa075 : NEXT);
-        text(c,guide,statusLeft+8,statusTop+30,12,outside ? 0xffffa075 : 0xffbadce2);
+        float zoneLeft = statusLeft + 138;
+        float statusRight = zoneLeft + Math.max(paint.measureText(title), paint.measureText(guide)) + 12;
+        fill(0xdc17272e);
+        c.drawRoundRect(statusLeft, statusTop, statusRight, statusTop + 37, 4, 4, paint);
+        vital(c, "SH", statusTop + 7, data[22], CURRENT);
+        vital(c, "HP", statusTop + 22, data[23], data[23] < .25f ? 0xffff795b : 0xff91df96);
+        text(c,title,zoneLeft,statusTop+15,13,outside ? 0xffffa075 : NEXT);
+        text(c,guide,zoneLeft,statusTop+30,12,outside ? 0xffffa075 : 0xffbadce2);
         if (expanded) {
             float left = map.left + 3, base = map.bottom+18;
             text(c,"▲ You",left,base,12,YOU);

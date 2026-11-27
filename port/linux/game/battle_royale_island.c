@@ -118,7 +118,7 @@ static void publish_map(void)
 	struct unit_datum *u = p && p->unit_index != NONE ? unit_try_and_get(p->unit_index) : NULL;
 	struct br_storm_view *s = &island.storm;
 	real_point3d pos;
-	float values[22];
+	float values[24];
 	if (!u || TEST_FLAG(u->object.damage_flags, _object_dead_bit)) {
 		host_royale_map_publish(NULL);
 		return;
@@ -134,6 +134,7 @@ static void publish_map(void)
 	values[17] = !island.landed;
 	values[18] = island.route.start.x; values[19] = island.route.start.y;
 	values[20] = island.route.end.x; values[21] = island.route.end.y;
+	values[22] = u->object.shield_vitality; values[23] = u->object.body_vitality;
 	host_royale_map_publish(values);
 }
 #endif
