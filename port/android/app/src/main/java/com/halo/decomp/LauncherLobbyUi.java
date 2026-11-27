@@ -173,7 +173,7 @@ final class LauncherLobbyUi implements AutoCloseable {
                 LobbyModel.Snapshot s=model.hostSnapshot(LanLobbyTransport.now());
                 final LanLobbyTransport.Host result=opened;
                 List<WorkshopMapCatalog.MapItem> maps=WorkshopMapCatalog.installed(dataRoot);
-                ui.post(()->{if(closed||g!=generation){result.close();return;}host=result;sessionMaps=maps;snapshot=s;prefs.edit().putString("last_lobby_name",s.lobbyName).apply();busy=false;connectionLost=false;lastContact=LanLobbyTransport.now();showSession();schedule();});
+                ui.post(()->{if(closed||g!=generation){result.close();return;}host=result;snapshot=s;sessionMaps=maps;prefs.edit().putString("last_lobby_name",s.lobbyName).apply();busy=false;connectionLost=false;lastContact=LanLobbyTransport.now();showSession();schedule();});
             }catch(IOException|RuntimeException error){
                 if(opened!=null)opened.close();failedOpen(g,"Couldn't create lobby: "+error.getMessage());
             }
@@ -192,7 +192,7 @@ final class LauncherLobbyUi implements AutoCloseable {
                 List<WorkshopMapCatalog.MapItem> maps=WorkshopMapCatalog.installed(dataRoot);
                 ui.post(()->{
                     if(closed||g!=generation){result.close();return;}
-                    guest=result;sessionMaps=maps;snapshot=s;busy=false;connectionLost=false;lastContact=LanLobbyTransport.now();
+                    guest=result;snapshot=s;sessionMaps=maps;busy=false;connectionLost=false;lastContact=LanLobbyTransport.now();
                     prefs.edit().putString("last_host",ip).apply();showSession();schedule();
                 });
             }catch(IOException|RuntimeException error){if(opened!=null)opened.close();failedOpen(g,"Couldn't join lobby: "+error.getMessage());}
