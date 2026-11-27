@@ -239,6 +239,7 @@ symbols in this file:
 #include "data.h"
 #include "devices/devices.h"
 #include "network_coop.h" /* port: port/linux/game/network_coop.c */
+#include "battle_royale_flight.h" /* port: port/linux/game/battle_royale_flight.c */
 #include "bots.h" /* port: port/linux/game/bots.c */
 #include "cutscene/cinematics.h" /* port: network co-op's first spawns */
 #include "editor/editor_stubs.h"
@@ -5010,6 +5011,8 @@ void players_update_before_game(
 						action->control_flags &= ~(UNIT_CONTROL_GUNNER_MASK | FLAG(_unit_control_use_equipment_bit));
                         action->primary_trigger = 0.0f;
                     }
+					/* port: read Jump before a vehicle seat interprets the controls */
+					battle_royale_cabin_controls(iterator.datum_index, action);
 					network_player_log_idle_action(iterator.datum_index, action->control_flags);
 					/* port: not for the keyboard's action key, which only acts
 					(units.h, UNIT_CONTROL_PORT_ACTION_ONLY_BIT) */
