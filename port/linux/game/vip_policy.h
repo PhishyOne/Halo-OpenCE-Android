@@ -4,7 +4,7 @@
 
 enum { VIP_WAITING, VIP_ACTIVE, VIP_INTERMISSION, VIP_FINISHED };
 enum { VIP_NONE, VIP_EXTRACTED, VIP_LOST, VIP_TIMEOUT, VIP_DEFENDERS_LEFT, VIP_ABORTED };
-enum { VIP_WINS = 3, VIP_ROUNDS = 2 * VIP_WINS - 1 };
+#include "vip.h"
 enum { VIP_ROUND_TICKS=5400, VIP_STAGE_TICKS=90, VIP_WAIT_LIMIT=900 };
 
 /* The same policy is used by the game and the native fixture. The VIP's
