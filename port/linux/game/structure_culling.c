@@ -21,6 +21,11 @@ Six-plane rejection and conservative facing summaries for structure buckets.
 #include "render/render_debug.h"
 #include "render/render_debug_geometry.h"
 #include "structures/structure_visibility.h"
+#ifdef HALO_ANDROID
+#include "map_draw_distance.h"
+#include "scenario/scenario_definitions.h"
+real structure_map_draw_distance;
+#endif
 #include <float.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -839,6 +844,9 @@ long structure_culling_gather_pairings(long const *list, long list_count, boolea
 
 void structure_culling_dispose(void)
 {
+#ifdef HALO_ANDROID
+	structure_map_draw_distance = 0;
+#endif
 	/* debug_free rejects NULL, including before the first bsp load */
 	if (structure_culling.allocation)
 	{
@@ -1000,7 +1008,11 @@ boolean structure_culling_traverse(struct structure_bsp *structure)
 		planes[_structure_culling_frustum_plane_far].n.i * render.camera.position.x +
 		planes[_structure_culling_frustum_plane_far].n.j * render.camera.position.y +
 		planes[_structure_culling_frustum_plane_far].n.k * render.camera.position.z +
+#ifdef HALO_ANDROID
+		MAX(structure_map_draw_distance, rasterizer_globals.far_clip_distance);
+#else
 		rasterizer_globals.far_clip_distance;
+#endif
 	/* mirror projections are oblique: this perpendicular plane is not their GPU far clip */
 	if (render.camera.z_near == 0.0f)
 	{
@@ -1163,6 +1175,10 @@ void structure_culling_structure_bsp_loaded(void)
 	{
 		return;
 	}
+#ifdef HALO_ANDROID
+	if (getenv("HALO_MAP_DRAW_DISTANCE") && global_scenario_get()->type != _scenario_type_main_menu)
+		structure_map_draw_distance = map_draw_diagonal(&structure->world_bounds);
+#endif
 	for (l = 0; l < structure->lightmaps.count; ++l)
 	{
 		long count = TAG_BLOCK_GET_ELEMENT(&structure->lightmaps, l, struct structure_lightmap)->materials.count;
