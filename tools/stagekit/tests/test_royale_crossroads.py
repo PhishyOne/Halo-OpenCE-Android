@@ -118,4 +118,28 @@ def test_every_building_is_searchable_standing():
         assert len(points)==4
         for a,b,z in points:
             assert any((px-a)**2+(py-b)**2+z*z <= (3.048*.5)**2
-                       for px,py in positions), (number,a,b,z)
+                       for px,py in positions if x<px<x+w and y<py<y+d and
+                       (py < y+d*.52)==(b < y+d*.52)), (number,a,b,z)
+
+def test_walk_through_each_front_and_inner_door(stagekit, tmp_path):
+    import math
+    import struct
+    import runner
+    import orchard
+    # Each independent copy changes only the fixture player's start and facing.
+    # Preserve the actual compiled walls, ceilings, furniture and collision.
+    f32 = lambda v: struct.unpack('<f',struct.pack('<f',v))[0]
+    unit = f32(3.048)
+    original = struct.pack('<4f', f32(11/unit)-1.25, -33/unit, .1, 0)
+    for i,(x,y,w,d) in enumerate(orchard.build().buildings):
+        folder = tmp_path/str(i)
+        path = runner.generate(stagekit,'royale_crossroads',folder)
+        data = bytearray(path.read_bytes())
+        assert data.count(original)==1
+        struct.pack_into('<4f',data,data.index(original),(x+w/2)/unit,(y-2.3)/unit,.1,math.pi/2)
+        path.write_bytes(data)
+        session=runner.play(folder,seconds=12,input='walk-forward')
+        positions=[py*unit for _,py,_ in session.places()]
+        back_wall=y+d-.35-.25*unit
+        assert max(positions) >= back_wall-.12, (i, positions)
+        assert max(positions) <= back_wall+.12 and session.deaths(0)==0

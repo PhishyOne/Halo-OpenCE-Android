@@ -1,5 +1,6 @@
 /* Read only the map's loot flags. Other named points remain available to scripts. */
 #include "cseries.h"
+#include "math/real_math.h"
 #include "scenario/scenario_definitions.h"
 #include "battle_royale_round.h"
 

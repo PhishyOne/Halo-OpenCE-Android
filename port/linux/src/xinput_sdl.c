@@ -976,6 +976,7 @@ static void test_input_gamepad(XINPUT_GAMEPAD *pad)
 	static const int analog[] = { XINPUT_GAMEPAD_A, XINPUT_GAMEPAD_B, XINPUT_GAMEPAD_X, XINPUT_GAMEPAD_Y };
 	static int checked;
 	static int seed = -1;
+	static int walk_forward;
 	static int looking;
 	double t;
 	int index;
@@ -1012,6 +1013,8 @@ static void test_input_gamepad(XINPUT_GAMEPAD *pad)
 		}
 		else if (!strncmp(setting, "bot:", 4))
 			seed = atoi(setting + 4);
+		else if (!strcmp(setting, "walk-forward"))
+			walk_forward = 1;
 		else if (!strcmp(setting, "bot"))
 			seed = 0;
 		else if (!strncmp(setting, "look:", 5))
@@ -1023,6 +1026,11 @@ static void test_input_gamepad(XINPUT_GAMEPAD *pad)
 	if (test_input_menu[0])
 	{
 		test_input_menu_gamepad(pad);
+		return;
+	}
+	if (walk_forward)
+	{
+		pad->sThumbLY = 32000;
 		return;
 	}
 	if (seed < 0)
