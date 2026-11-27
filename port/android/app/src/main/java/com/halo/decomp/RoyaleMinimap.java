@@ -7,7 +7,9 @@ import android.graphics.Canvas;
 import android.graphics.DashPathEffect;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.RadialGradient;
 import android.graphics.RectF;
+import android.graphics.Shader;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.BufferedReader;
@@ -23,25 +25,34 @@ final class RoyaleMinimap {
     final float[] data = new float[22];
     private static final int CURRENT = 0xff63d6ff, NEXT = 0xfff1f5ec, YOU = 0xffffcc58;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    private final Paint stormHaze = new Paint(Paint.DITHER_FLAG);
     private final Path path = new Path();
     private final RectF panel = new RectF(), map = new RectF(), dest = new RectF();
     private final DashPathEffect dash = new DashPathEffect(new float[]{5, 4}, 0);
     private final AssetManager assets;
     private boolean loaded, expanded;
     private float unit = 3.048f, centerX, centerY, scale;
+    private float viewWidth, viewHeight;
     private Bitmap[] tiles = new Bitmap[0];
     private float[][] bounds = new float[0][];
     private String[] names = new String[0];
     private float[][] landmarks = new float[0][];
     private RectF[] labels = new RectF[0];
 
-    RoyaleMinimap(AssetManager assets) { this.assets = assets; }
+    RoyaleMinimap(AssetManager assets) {
+        this.assets = assets;
+        stormHaze.setShader(new RadialGradient(0, 0, 1,
+                new int[]{0x104877ae, 0x244877ae, 0x704976b9},
+                new float[]{0f, .55f, 1f}, Shader.TileMode.CLAMP));
+    }
 
     void close() { expanded = false; }
     boolean contains(float x, float y) { return panel.contains(x, y); }
     void toggle() { expanded = !expanded; }
 
     void layout(float width, float height, float insetLeft, float insetTop) {
+        viewWidth = width;
+        viewHeight = height;
         float size = expanded ? Math.min(height * .67f, width * .65f) : 116;
         float left = expanded ? (width - size) / 2 : Math.max(16, insetLeft + 6);
         float top = expanded ? (height - size - 53) / 2 : Math.max(74, insetTop + 18);
@@ -172,6 +183,15 @@ final class RoyaleMinimap {
     void draw(Canvas c) {
         load();
         boolean flight = data[17] > 0;
+        boolean outside = !flight && data[0] >= HOLD
+                && Math.hypot(data[3]-data[11], data[4]-data[12]) > data[13];
+        if (outside) {
+            c.save();
+            c.translate(viewWidth * .5f, viewHeight * .5f);
+            c.scale(viewWidth * .5f, viewHeight * .5f);
+            c.drawRect(-1, -1, 1, 1, stormHaze);
+            c.restore();
+        }
         boolean whole = expanded || flight;
         float half = whole ? Math.max(data[9]-data[7], data[10]-data[8]) * .52f :
                 Math.max(65, Math.min(165, data[16] * .22f));
@@ -200,14 +220,13 @@ final class RoyaleMinimap {
         c.restore();
 
         int state = (int)data[0], seconds = (int)data[2];
-        boolean outside = hasZone && Math.hypot(data[3]-data[11], data[4]-data[12]) > data[13];
         String clock = String.format(Locale.ROOT,"%d:%02d",seconds/60,seconds%60);
         String title = state == EXPLORE ? "East Millworks" : state == INSERTION ? "Echo 419" :
                 state == FINAL ? "Final zone closed" : (state == CLOSE ? "Closing " : "Zone " + (int)data[1] + " in ") + clock;
         text(c,title,map.left+3,map.bottom+13,12, outside ? 0xffffa075 : NEXT);
         double gap = hasZone ? Math.hypot(data[3]-data[14],data[4]-data[15])-data[16] : 0;
         String guide = flight ? "Flight path" : !hasZone ? "Explore" :
-                outside ? "OUTSIDE" : gap > 0 ? "Next zone" : "Inside next zone";
+                outside ? "IN STORM" : gap > 0 ? "Next zone" : "Inside next zone";
         if (!flight && gap > 0) guide += "  " + Math.round(gap*unit) + " m";
         text(c,guide,map.left+3,map.bottom+26,10,outside ? 0xffffa075 : 0xffbadce2);
         if (expanded) {
