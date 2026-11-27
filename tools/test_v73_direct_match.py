@@ -14,12 +14,17 @@ class DirectMatchTest(unittest.TestCase):
         source = (ROOT/"source/main/main.c").read_text()
         with tempfile.TemporaryDirectory(prefix="halo-launcher-match-") as temp:
             temp = Path(temp)
-            (temp/"launcher_match_function.inc").write_text(function(source, "launcher_match_update"))
+            maps = (ROOT/"port/linux/game/launcher_lan_match.h").read_text()
+            (temp/"launcher_match_function.inc").write_text(
+                function(maps, "launcher_map_path") + "\n" +
+                function(maps, "launcher_map_playable") + "\n" +
+                function(source, "launcher_match_update"))
             binary=temp/"launcher_match"
             subprocess.run([os.environ.get("CC","cc"),"-std=gnu99","-Wall","-Wextra","-Werror",
                 "-Wno-sign-compare","-I"+str(temp),str(ROOT/"tools/lan/launcher_match_test.c"),
                 "-o",str(binary)],check=True)
-            for case in ("classic","badmap","badmode","missing","serverfail","clientfail","valid","gun","changed","timeout"):
+            for case in ("classic","badmap","badmode","missing","serverfail","clientfail","valid","gun","changed","timeout",
+                         "millworks","badcustom","emptybuild"):
                 with self.subTest(case=case):
                     subprocess.run([str(binary),case],check=True,timeout=10)
 

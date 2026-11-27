@@ -14,4 +14,4 @@ static void walk_build(
 }
 
 struct stagekit_scenario const scenario_walk = {
-	"walk", "a biped spawns in the chamber, walks and jumps", walk_build };
+	"walk", "a biped spawns in the chamber, walks and jumps", walk_build, CHAMBER_HALF_WIDTH };

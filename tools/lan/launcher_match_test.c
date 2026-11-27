@@ -34,6 +34,7 @@ static int server_failure, client_failure, map_present = 1, map_valid = 1;
 static int client_state = 2, ready = 1, bots = 3, starts, joins, opens, errors;
 static int restored_profile, returned_menu, mode_changes, map_changes, skipped;
 static unsigned long now;
+static const char *expected_path = "levels\\test\\bloodgulch\\bloodgulch";
 static boolean game_modes_gametype_by_name(const char *name, struct game_variant *v, struct game_variant_options *o) {
     if (strcmp(name,"gun_game")) return 0;
     v->game_engine_index = 2; v->universal_variant.teams = 0; o->mode=3; return 1;
@@ -66,10 +67,12 @@ static void bink_playback_stop(void) { movie=0; skipped++; }
 static boolean ui_main_menu_music_active(void) { return music; }
 static boolean network_game_is_active(void) { return server_live||client_live; }
 static boolean cache_files_map_present(const char *path, unsigned long version) {
-    assert(!strcmp(path,"levels\\test\\bloodgulch\\bloodgulch")); assert(!version); return map_present;
+    assert(!strcmp(path, expected_path)); assert(!version); return map_present;
 }
 static boolean cache_files_map_plays_multiplayer(const char *path, char build[32]) {
-    assert(!strcmp(path,"levels\\test\\bloodgulch\\bloodgulch")); strcpy(build,map_valid?"valid":""); return map_valid;
+    assert(!strcmp(path, expected_path));
+    strcpy(build, map_valid && strncmp(path, "custom_maps\\", 12) ? "valid" : "");
+    return 1;
 }
 static long player_ui_get_player1_last_used_profile_index(void) { return 7; }
 static boolean player_profile_get(long id, struct player_profile *profile) { assert(id==7); profile->value=42; return 1; }
@@ -121,19 +124,26 @@ int main(int argc,char **argv) {
     if (!strcmp(test,"classic")) {
         launcher_match_update(1); assert(!opens && !starts); return 0;
     }
-    setenv("HALO_LAUNCHER_MATCH_MAP",!strcmp(test,"badmap")?"../bad":"bloodgulch",1);
+    const char *map = "bloodgulch";
+    if (!strcmp(test,"millworks")) {
+        map = "ce:halo_royale";
+        expected_path = "custom_maps\\halo_royale";
+    } else if (!strcmp(test,"badcustom")) map = "ce:../halo_royale";
+    else if (!strcmp(test,"badmap")) map = "../bad";
+    setenv("HALO_LAUNCHER_MATCH_MAP",map,1);
     setenv("HALO_LAUNCHER_MATCH_MODE",!strcmp(test,"badmode")?"unknown":!strcmp(test,"gun")?"gun_game":"team_slayer",1);
-    if (!strcmp(test,"badmap")||!strcmp(test,"badmode")) {
+    if (!strcmp(test,"badmap")||!strcmp(test,"badmode")||!strcmp(test,"badcustom")) {
         music=1; launcher_match_update(1); assert(!opens && !starts); return 0;
     }
     if (!strcmp(test,"missing")) map_present=0;
+    if (!strcmp(test,"emptybuild")) map_valid=0;
     if (!strcmp(test,"serverfail")) server_failure=1;
     if (!strcmp(test,"clientfail")) client_failure=1;
     launcher_match_update(0); assert(!opens);
     movie=1; launcher_match_update(1); assert(skipped==1&&!opens);
     launcher_match_update(1); assert(!opens);
     music=1; launcher_match_update(1);
-    if (!strcmp(test,"missing")) { assert(!opens && errors==1); return 0; }
+    if (!strcmp(test,"missing")||!strcmp(test,"emptybuild")) { assert(!opens && errors==1); return 0; }
     if (!strcmp(test,"serverfail")||!strcmp(test,"clientfail")) {
         assert(!server_live && !client_live && returned_menu==1); return 0;
     }

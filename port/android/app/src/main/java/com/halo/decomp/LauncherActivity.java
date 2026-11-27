@@ -1219,21 +1219,26 @@ public class LauncherActivity extends Activity {
         String[] offlineSkills = { "Recruit", "Easy", "Normal", "Heroic", "Veteran", "Legendary" };
         ChoiceButton offlineSkill = botChoice(offlineBotOptions, "DIFFICULTY",
             offlineSkills, offlinePreferences.getInt("skill", 2));
-        // A small direct-launch proof before replacing the existing setup.
-        // Classic remains available, and only installed stock maps are offered.
-        final LauncherMatch.MapChoice[] directMaps = LauncherMatch.installedMaps(dataRoot);
-        String[] directMapLabels = new String[directMaps.length];
-        int directMapSelection = 0;
-        String rememberedMap = offlinePreferences.getString("direct_map", "");
-        for (int i = 0; i < directMaps.length; i++) {
-            directMapLabels[i] = directMaps[i].label;
-            if (directMaps[i].id.equals(rememberedMap)) directMapSelection = i;
-        }
+        ArrayList<LauncherMatch.MapChoice> directMaps = new ArrayList<>();
         LinearLayout directMatchPanel = setupColumn();
         setupGroupBorder(directMatchPanel);
         offlineLeft.addView(directMatchPanel);
-        ChoiceButton directMap = botChoice(directMatchPanel, "MAP",
-            directMapLabels, directMapSelection);
+        ChoiceButton directMap = botChoice(directMatchPanel, "MAP", new String[]{"Classic menus"}, 0);
+        Runnable refreshDirectMaps = () -> {
+            String selected = directMaps.isEmpty() ? offlinePreferences.getString("direct_map", "")
+                : directMaps.get(directMap.getSelectedItemPosition()).id;
+            directMaps.clear();
+            java.util.Collections.addAll(directMaps, LauncherMatch.installedMaps(dataRoot));
+            String[] labels = new String[directMaps.size()];
+            int position = 0;
+            for (int i = 0; i < labels.length; i++) {
+                LauncherMatch.MapChoice map = directMaps.get(i);
+                labels[i] = map.label;
+                if (map.id.equals(selected)) position = i;
+            }
+            directMap.replaceChoices(labels, position);
+        };
+        refreshDirectMaps.run();
         java.util.ArrayList<MatchWorkshop.Preset> directPresets=new java.util.ArrayList<>();
         for(String base:MatchWorkshop.BASE_IDS)directPresets.add(MatchWorkshop.Preset.standard(base));
         ChoiceButton directMode = botChoice(directMatchPanel, "GAME MODE",
@@ -1263,8 +1268,9 @@ public class LauncherActivity extends Activity {
             MatchWorkshop.Preset selected=directPresets.get(directMode.getSelectedItemPosition());
             offlinePreferences.edit().putString("direct_mode",selected.id.isEmpty()?selected.base:selected.id).apply();
         });
-        directMap.onSelectionChanged(() -> ((View) directMode.getParent()).setVisibility(
-            directMap.getSelectedItemPosition() == 0 ? View.GONE : View.VISIBLE));
+        Runnable showDirectMode = () -> ((View) directMode.getParent()).setVisibility(
+            directMap.getSelectedItemPosition() == 0 ? View.GONE : View.VISIBLE);
+        directMap.onSelectionChanged(showDirectMode);
 
         String[] offlineTeams = { "Balanced", "Bots vs players" };
         LinearLayout offlineTeamOptions = setupColumn();
@@ -1577,6 +1583,8 @@ public class LauncherActivity extends Activity {
         });
         modeTabs[2].setOnClickListener(view -> {
             homeVisible[0] = toolsVisible[0] = false;
+            refreshDirectMaps.run();
+            showDirectMode.run();
             refreshDirectPresets.run();
             lanMode.setChecked(false);
             offlineMode.setChecked(botMatch.isChecked());
@@ -1647,7 +1655,7 @@ public class LauncherActivity extends Activity {
                 // to CTF/King by the native bot planner, so Slayer is unaffected.
                 boolean crews = true;
                 boolean objectives = true;
-                LauncherMatch.MapChoice map = directMaps[directMap.getSelectedItemPosition()];
+                LauncherMatch.MapChoice map = directMaps.get(directMap.getSelectedItemPosition());
                 MatchWorkshop.Preset preset=directPresets.get(directMode.getSelectedItemPosition());
                 String mode=preset.id.isEmpty()?preset.base:preset.id;
                 LauncherMatch match;

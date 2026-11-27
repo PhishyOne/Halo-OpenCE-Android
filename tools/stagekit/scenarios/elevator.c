@@ -20,4 +20,4 @@ static void elevator_build(
 }
 
 struct stagekit_scenario const scenario_elevator = {
-	"elevator", "a platform the player rides up and down", elevator_build };
+	"elevator", "a platform the player rides up and down", elevator_build, CHAMBER_HALF_WIDTH };

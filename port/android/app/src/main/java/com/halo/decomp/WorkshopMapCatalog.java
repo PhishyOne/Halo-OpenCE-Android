@@ -14,13 +14,16 @@ final class WorkshopMapCatalog {
         MapItem(String id,String name,File file,File preview){this.id=id;this.name=name;this.file=file;this.preview=preview;}
     }
     static List<MapItem> installed(File root){
+        return installed(root, true);
+    }
+    static List<MapItem> installed(File root, boolean withPreviews){
         ArrayList<MapItem> out=new ArrayList<>();
         if(root==null)return out;
-        for(LauncherMatch.MapChoice map:LauncherMatch.installedMaps(root)){
-            if(map.id.isEmpty())continue;
-            File file=new File(root,"maps/"+map.id+".map");
-            if(Files.isSymbolicLink(file.toPath()))continue;
-            out.add(new MapItem(map.id,map.label,file,preview(new File(root,"maps"),map.id)));
+        File stock = new File(root, "maps");
+        for (LauncherMatch.MapChoice map : LauncherMatch.STOCK) {
+            File file = new File(stock, map.id + ".map");
+            if (!file.isFile() || file.length() <= 2048 || Files.isSymbolicLink(file.toPath())) continue;
+            out.add(new MapItem(map.id, map.label, file, withPreviews ? preview(stock, map.id) : null));
         }
         File folder=new File(root,"custom_maps");
         if(!folder.isDirectory()||Files.isSymbolicLink(folder.toPath()))return out;
@@ -37,7 +40,9 @@ final class WorkshopMapCatalog {
                 try(RandomAccessFile in=new RandomAccessFile(map,"r")){
                     in.seek(0x60); if(in.readUnsignedByte()!=1||in.readUnsignedByte()!=0)continue;
                 }
-                out.add(new MapItem(key,id,map,preview(folder,id)));added++;
+                String label = "halo_royale".equals(id) ? "Halo Royale (East Millworks)" : id;
+                out.add(new MapItem(key, label, map, withPreviews ? preview(folder, id) : null));
+                added++;
             }catch(IOException|IllegalArgumentException ignored){}
         }
         return out;

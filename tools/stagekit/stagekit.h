@@ -40,6 +40,7 @@ scenarios place (props.c), and a scenario itself (scenarios/).
 #undef strcpy
 #undef strcmp
 #undef memcpy
+#undef memcmp
 #undef memset
 
 /* ---------- constants */
@@ -47,6 +48,8 @@ scenarios place (props.c), and a scenario itself (scenarios/).
 /* the chamber: a box from (-CHAMBER_HALF_WIDTH, -CHAMBER_HALF_WIDTH, 0) to
 (CHAMBER_HALF_WIDTH, CHAMBER_HALF_WIDTH, CHAMBER_HEIGHT), in world units */
 #define CHAMBER_HALF_WIDTH 500.f
+/* An 8 km side at 3.048 metres per Halo world unit. */
+#define ROYALE_HALF_WIDTH (4000.f / 3.048f)
 #define CHAMBER_HEIGHT 100.f
 
 #define FOURCC(a, b, c, d) (((unsigned long)(a) << 24) | ((unsigned long)(b) << 16) | ((c) << 8) | (d))
@@ -57,6 +60,7 @@ scenarios place (props.c), and a scenario itself (scenarios/).
 struct stage
 {
 	struct scenario *scenario;
+	struct structure_bsp *bsp;
 };
 
 struct stagekit_scenario
@@ -65,13 +69,16 @@ struct stagekit_scenario
 	char const *description;
 	/* places what the scenario adds to the stage (stage.c) */
 	void (*build)(struct stage *stage);
+	real half_width;
+	unsigned long bsp_reserve;
 };
 
 /* ---------- prototypes/CACHE.C */
 
 /* the tag cache at the game's address for a Custom Edition map's tags; the
 structure BSP's room at its top */
-void cache_open(void);
+void cache_open(unsigned long bsp_reserve);
+unsigned long cache_bsp_file_offset(void const *data);
 void *cache_allocate(unsigned long size);
 void *cache_block(struct tag_block *block, long count, unsigned long element_size);
 /* one more element at the block's end, zeroed */
@@ -115,6 +122,12 @@ long prop_empty_model(void);
 /* a scenery box standing at position (bounds in its own space), solid to anything */
 void prop_obstacle(struct stage *stage, char const *name, real_rectangle3d const *bounds,
 	real_point3d const *position);
+
+struct stage_box { float position[3]; short shape; };
+void prop_box_batch(struct stage *stage, float const shapes[][3], int shape_count,
+    struct stage_box const *boxes, int box_count);
+
+void prop_place_obstacle(struct stage *stage, short palette, real_point3d const *position);
 
 /* a platform (bounds in its own space) at position that rises rise in seconds
 when its position is set to 1 (device_set_position <name> 1) and comes down

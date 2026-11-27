@@ -2,6 +2,9 @@ package com.halo.decomp;
 import java.io.*;
 import java.nio.file.*;
 import java.util.Arrays;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 
 public final class LauncherMatchTest {
     static int checks;
@@ -13,6 +16,15 @@ public final class LauncherMatchTest {
         catch (IllegalArgumentException expected) { checks++;return; }
         throw new AssertionError("invalid request accepted");
     }
+    private static void writeCustomMap(Path file, String scenario, int type) throws IOException {
+        ByteBuffer cache = ByteBuffer.allocate(4096).order(ByteOrder.LITTLE_ENDIAN);
+        cache.putInt(0, 0x68656164).putInt(4, 609).putInt(8, cache.capacity());
+        cache.putInt(16, 2048).putInt(20, 512);
+        cache.position(32);
+        cache.put(scenario.getBytes(StandardCharsets.US_ASCII));
+        cache.putShort(96, (short)type).putInt(2044, 0x666f6f74);
+        Files.write(file, cache.array());
+    }
     public static void main(String[] args) throws Exception {
         File root=Files.createTempDirectory("halo-match-test").toFile();
         File maps=new File(root,"maps"); maps.mkdir();
@@ -22,6 +34,25 @@ public final class LauncherMatchTest {
             try (RandomAccessFile f=new RandomAccessFile(map,"rw")) { f.setLength(4096); }
             check(LauncherMatch.installedMaps(root).length==2,"one installed stock map");
             check(LauncherMatch.installedMaps(root)[1].id.equals("bloodgulch"),"stable map ID");
+            Path custom = Files.createDirectory(root.toPath().resolve("custom_maps"));
+            Path royale = custom.resolve("halo_royale.map");
+            try {
+                writeCustomMap(royale, "halo_royale", 0);
+                check(LauncherMatch.installedMaps(root).length==2, "exclude campaign caches");
+                writeCustomMap(royale, "halo_royale", 1);
+                LauncherMatch.MapChoice item = LauncherMatch.installedMaps(root)[2];
+                check(item.label.equals("Halo Royale (East Millworks)") && item.id.equals("ce:halo_royale"),
+                    "show the imported multiplayer map in Offline Match");
+                LauncherMatch round = LauncherMatch.offlinePreset(root, item.id,
+                    MatchWorkshop.Preset.standard("slayer"), 3, "normal", "even", true);
+                check(round.arguments()[1].equals("ce:halo_royale") && round.arguments()[2].equals("slayer"),
+                    "pass the custom map and free-for-all preset to the engine");
+                Files.delete(royale);
+                reject(root, item.id, "slayer", 3, "normal", "even");
+            } finally {
+                Files.deleteIfExists(royale);
+                Files.delete(custom);
+            }
             check(LauncherMatch.modeId(LauncherMatch.modeIndex("gun_game")).equals("gun_game"),"mode roundtrip");
             check(LauncherMatch.modeIndex("unknown")==0,"safe default");
             LauncherMatch m=LauncherMatch.offline(root,"bloodgulch","gun_game",16,"heroic","even",true);

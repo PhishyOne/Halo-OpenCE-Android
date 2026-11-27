@@ -11,8 +11,7 @@ final class LauncherMatch {
         MapChoice(String id, String label) { this.id = id; this.label = label; }
     }
 
-    private static final MapChoice[] STOCK = {
-        new MapChoice("", "Classic menus"),
+    static final MapChoice[] STOCK = {
         new MapChoice("bloodgulch", "Blood Gulch"),
         new MapChoice("beavercreek", "Battle Creek"),
         new MapChoice("sidewinder", "Sidewinder"),
@@ -57,11 +56,9 @@ final class LauncherMatch {
     }
     static MapChoice[] installedMaps(File root) {
         ArrayList<MapChoice> choices = new ArrayList<>();
-        choices.add(STOCK[0]);
-        for (int i = 1; root != null && i < STOCK.length; i++) {
-            File file = new File(root, "maps/" + STOCK[i].id + ".map");
-            if (file.isFile() && file.length() > 2048) choices.add(STOCK[i]);
-        }
+        choices.add(new MapChoice("", "Classic menus"));
+        for (WorkshopMapCatalog.MapItem map : WorkshopMapCatalog.installed(root, false))
+            choices.add(new MapChoice(map.id, map.name));
         return choices.toArray(new MapChoice[0]);
     }
     static String[] modeLabels() { return MODE_LABELS.clone(); }

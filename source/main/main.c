@@ -3480,18 +3480,12 @@ static void launcher_match_update(boolean menu_loaded)
     long index;
     short machine;
     boolean local_player = FALSE;
-    char build[0x20];
 
     if (state == done)
         return;
     if (!initialized)
     {
         char const *map = getenv("HALO_LAUNCHER_MATCH_MAP");
-        static char const *const allowed_maps[] = {
-            "beavercreek", "sidewinder", "damnation", "ratrace", "prisoner",
-            "hangemhigh", "chillout", "carousel", "boardingaction", "bloodgulch",
-            "wizard", "putput", "longest"
-        };
         initialized = TRUE;
         mode = getenv("HALO_LAUNCHER_MATCH_MODE");
         if (!map || !*map || !mode || !*mode)
@@ -3499,14 +3493,12 @@ static void launcher_match_update(boolean menu_loaded)
             state = done;
             return;
         }
-        for (index = 0; index < NUMBEROF(allowed_maps); index++)
-            if (!strcmp(map, allowed_maps[index])) break;
-        if (index == NUMBEROF(allowed_maps))
+        /* port: resolve installed Custom Edition maps just as the LAN launcher does. */
+        if (!launcher_map_path(map, path, sizeof(path)))
         {
             state = done;
             return;
         }
-        snprintf(path, sizeof(path), "levels\\test\\%s\\%s", map, map);
         if (!launcher_match_preset_build(mode, &variant, &options) ||
             !launcher_match_rules_apply(getenv("HALO_LAUNCHER_MATCH_RULES"), mode, &variant, &options))
         {
@@ -3551,11 +3543,10 @@ static void launcher_match_update(boolean menu_loaded)
             state = done;
             return;
         }
-        if (!cache_files_map_present(path, 0) ||
-            !cache_files_map_plays_multiplayer(path, build) || !build[0])
+        if (!launcher_map_playable(path))
         {
             state = done;
-            error(_error_silent, "launcher match: missing or unsupported stock map");
+            error(_error_silent, "launcher match: missing or unsupported multiplayer map");
             return;
         }
         profile_index = player_ui_get_player1_last_used_profile_index();

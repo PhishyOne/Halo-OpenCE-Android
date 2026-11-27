@@ -39,7 +39,7 @@ static int launcher_decimal(char const *text, int maximum)
     return n;
 }
 
-static boolean launcher_lan_map_path(char const *map)
+static boolean launcher_map_path(char const *map, char *path, size_t capacity)
 {
     static char const *const stock[] = {
         "beavercreek","sidewinder","damnation","ratrace","prisoner","hangemhigh",
@@ -56,15 +56,25 @@ static boolean launcher_lan_map_path(char const *map)
             if ((c>='a' && c<='z') || (c>='A' && c<='Z') || (c>='0' && c<='9')) continue;
             if (!i || (c!='-' && c!='_' && c!='.')) return FALSE;
         }
-        snprintf(launcher_lan.path,sizeof(launcher_lan.path),"custom_maps\\%s",name);
+        if (capacity < sizeof("custom_maps\\") + len) return FALSE;
+        snprintf(path, capacity, "custom_maps\\%s", name);
         return TRUE;
     }
     for (i=0; i<NUMBEROF(stock); i++)
         if (!strcmp(map,stock[i])) {
-            snprintf(launcher_lan.path,sizeof(launcher_lan.path),"levels\\test\\%s\\%s",map,map);
+            if (capacity < sizeof("levels\\test\\\\") + 2 * strlen(map)) return FALSE;
+            snprintf(path, capacity, "levels\\test\\%s\\%s", map, map);
             return TRUE;
         }
     return FALSE;
+}
+
+static boolean launcher_map_playable(char const *path)
+{
+    char build[32];
+    /* CE maps are validated during local conversion and carry no Xbox build string. */
+    return cache_files_map_present(path, 0) && cache_files_map_plays_multiplayer(path, build) &&
+        (build[0] || !strncmp(path, "custom_maps\\", 12));
 }
 
 static boolean launcher_lan_decode(void)
@@ -76,7 +86,8 @@ static boolean launcher_lan_decode(void)
     unsigned int a,b,c,d;
     char trailing;
     if (!round || strlen(round)!=LAUNCHER_ROUND_CHARS || !rows || !*rows || strlen(rows)>800 ||
-        !mode || !peer || !launcher_lan_map_path(getenv("HALO_LOBBY_MAP"))) return FALSE;
+        !mode || !peer || !launcher_map_path(getenv("HALO_LOBBY_MAP"), launcher_lan.path,
+            sizeof(launcher_lan.path))) return FALSE;
     for (i=0; i<LAUNCHER_ROUND_CHARS; i++) if (launcher_hex(round[i])<0) return FALSE;
     local=launcher_decimal(getenv("HALO_LOBBY_SEAT"),LAUNCHER_LAN_SEATS-1);
     bots=launcher_decimal(getenv("HALO_LOBBY_BOTS"),64);
@@ -281,14 +292,11 @@ static void launcher_lan_update(boolean menu)
     }
     if (!menu) return;
     if (state==wait_menu) {
-        char build[32];
         long profile_index;
         struct player_profile profile;
         if (bink_playback_in_progress()) {bink_playback_stop();return;}
         if (!ui_main_menu_music_active()) return;
-        if (network_game_is_active() || !cache_files_map_present(launcher_lan.path,0) ||
-            !cache_files_map_plays_multiplayer(launcher_lan.path,build) ||
-            (!build[0] && strncmp(launcher_lan.path,"custom_maps\\",12))) {
+        if (network_game_is_active() || !launcher_map_playable(launcher_lan.path)) {
             state=finished;launcher_lan_return("Halo could not open the selected multiplayer map.");return;
         }
         profile_index=player_ui_get_player1_last_used_profile_index();

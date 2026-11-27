@@ -151,7 +151,7 @@ static long box_collision_model(
 
 	model = data;
 	node = cache_block(&model->nodes, 1, sizeof(*node));
-	strcpy(node->name, "box");
+	strcpy(node->name, "root"); /* matches the render model's only node */
 	region = cache_block(&model->resistance.regions, 1, sizeof(*region));
 	permutation = cache_block(&region->permutations, 1, sizeof(*permutation));
 	strcpy(region->name, "box");
@@ -165,22 +165,17 @@ static long box_collision_model(
 	return handle;
 }
 
-void prop_obstacle(
-	struct stage *stage,
-	char const *name,
-	real_rectangle3d const *bounds,
-	real_point3d const *position)
+static long obstacle_definition(char const *name, real_rectangle3d const *bounds)
 {
 	struct object_definition *scenery;
-	struct scenario_object_palette_entry *palette;
-	struct scenery_placement *placement;
 	long model_handle, scenery_handle;
 	void *data;
 
 	model_handle = box_collision_model(name, bounds);
 
+	/* The Custom Edition scenery root extends the gameplay object with padding. */
 	scenery_handle = cache_tag_new(FOURCC('s', 'c', 'e', 'n'), FOURCC('o', 'b', 'j', 'e'), NONE, name,
-		sizeof(struct object_definition), &data);
+		0x1FC, &data);
 	scenery = data;
 	scenery->object.type = _object_type_scenery;
 	cache_reference(&scenery->object.model, prop_empty_model());
@@ -188,12 +183,53 @@ void prop_obstacle(
 	/* (round the box, a little past its farthest corner) */
 	scenery->object.bounding_radius = box_reach(bounds) + 0.1f;
 
-	palette = cache_block_add(&stage->scenario->scenery_palette, sizeof(*palette));
-	cache_reference(&palette->reference, scenery_handle);
-	placement = cache_block_add(&stage->scenario->scenery, sizeof(*placement));
-	placement->object.palette_entry_index = (short)(stage->scenario->scenery_palette.count - 1);
+	return scenery_handle;
+}
+
+void prop_obstacle(struct stage *stage, char const *name, real_rectangle3d const *bounds,
+    real_point3d const *position)
+{
+    struct scenario_object_palette_entry *palette = cache_block_add(&stage->scenario->scenery_palette, sizeof(*palette));
+    cache_reference(&palette->reference, obstacle_definition(name, bounds));
+	prop_place_obstacle(stage, (short)(stage->scenario->scenery_palette.count - 1), position);
+}
+
+void prop_place_obstacle(struct stage *stage, short palette, real_point3d const *position)
+{
+	struct scenery_placement *placement = cache_block_add(&stage->scenario->scenery, sizeof(*placement));
+	placement->object.palette_entry_index = palette;
 	placement->object.name_index = NONE;
 	placement->object.position = *position;
+}
+
+/* Allocate both complete scenario blocks once. Positions and dimensions arrive in metres. */
+void prop_box_batch(struct stage *stage, float const shapes[][3], int shape_count,
+    struct stage_box const *boxes, int box_count)
+{
+    struct scenario_object_palette_entry *palette = cache_block(&stage->scenario->scenery_palette,
+        shape_count, sizeof(*palette));
+    struct scenery_placement *placements = cache_block(&stage->scenario->scenery, box_count, sizeof(*placements));
+    int i, k;
+    for (i=0; i<shape_count; ++i) {
+        char name[48];
+        real_rectangle3d bounds;
+        for (k=0; k<3; ++k) {
+            real half = .5f * shapes[i][k] / 3.048f;
+            bounds.n[2*k] = -half;
+            bounds.n[2*k+1] = half;
+        }
+        sprintf(name, "orchard\\solid_%d", i);
+        cache_reference(&palette[i].reference, obstacle_definition(name, &bounds));
+    }
+    for (i=0; i<box_count; ++i) {
+        placements[i].object.name_index = NONE;
+        placements[i].object.palette_entry_index = boxes[i].shape;
+        /* A bridge corner can be buried in the bank. Register its collision
+           at midspan, keeping all six world-space faces in the same place. */
+        for (k=0; k<3; ++k)
+            placements[i].object.position.n[k] =
+                (boxes[i].position[k] + .5f * shapes[boxes[i].shape][k])/3.048f;
+    }
 }
 
 /* the name a scenario's console lines call an object it places by */

@@ -269,6 +269,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/halo-test-classes"
           javac -d "$RUNNER_TEMP/halo-test-classes" \
             port/android/app/src/main/java/com/halo/decomp/LauncherMatch.java \
+            port/android/app/src/main/java/com/halo/decomp/WorkshopMapCatalog.java \
+            port/android/app/src/main/java/com/halo/decomp/CustomMapImporter.java \
             port/android/app/src/main/java/com/halo/decomp/MatchWorkshop.java \
             port/android/app/src/main/java/com/halo/decomp/NativeMatchRules.java \
             tools/lan/LauncherMatchTest.java tools/lan/NativeMatchRulesTest.java

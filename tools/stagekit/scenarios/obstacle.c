@@ -17,4 +17,4 @@ static void obstacle_build(
 }
 
 struct stagekit_scenario const scenario_obstacle = {
-	"obstacle", "a wall the biped walks into and stops at", obstacle_build };
+	"obstacle", "a wall the biped walks into and stops at", obstacle_build, CHAMBER_HALF_WIDTH };

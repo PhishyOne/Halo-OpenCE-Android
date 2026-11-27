@@ -39,13 +39,13 @@ typedef char structure_bsp_header_size_check[sizeof(struct structure_bsp_header)
 
 /* the chamber: its collision, one leaf in one cluster that sees itself */
 static void chamber_build(
-	struct structure_bsp *bsp)
+	struct structure_bsp *bsp, real half_width)
 {
 	struct collision_bsp *collision = cache_bsp_block(&bsp->collision_bsp, 1, sizeof(struct collision_bsp));
 	struct structure_leaf *leaf = cache_bsp_block(&bsp->leaves, 1, sizeof(struct structure_leaf));
 	struct structure_cluster *cluster = cache_bsp_block(&bsp->clusters, 1, sizeof(struct structure_cluster));
 	unsigned long *pvs = cache_bsp_allocate(sizeof(unsigned long));
-	real_rectangle3d room = { { -CHAMBER_HALF_WIDTH, CHAMBER_HALF_WIDTH, -CHAMBER_HALF_WIDTH, CHAMBER_HALF_WIDTH,
+	real_rectangle3d room = { { -half_width, half_width, -half_width, half_width,
 		0.f, CHAMBER_HEIGHT } };
 
 	box_build(collision, cache_bsp_block, &room, FALSE);
@@ -58,10 +58,7 @@ static void chamber_build(
 	*pvs = 1;
 	bsp->cluster_data.size = sizeof(*pvs);
 	bsp->cluster_data.address = pvs;
-	bsp->world_bounds.x0 = bsp->world_bounds.y0 = -CHAMBER_HALF_WIDTH;
-	bsp->world_bounds.x1 = bsp->world_bounds.y1 = CHAMBER_HALF_WIDTH;
-	bsp->world_bounds.z0 = 0.f;
-	bsp->world_bounds.z1 = CHAMBER_HEIGHT;
+	bsp->world_bounds = room;
 	bsp->vehicle_floor = 0.f;
 	bsp->vehicle_ceiling = CHAMBER_HEIGHT;
 }
@@ -206,11 +203,11 @@ void stage_build(
 	char *code;
 	void *data;
 
-	cache_open();
+	cache_open(scenario->bsp_reserve);
 	/* the structure BSP, at the top of the tag cache: its header, then itself */
 	bsp_header = cache_bsp_allocate(sizeof(*bsp_header));
 	bsp = cache_bsp_allocate(sizeof(struct structure_bsp));
-	bsp_header->bsp = bsp;
+	bsp_header->bsp = stage->bsp = bsp;
 	bsp_header->signature = FOURCC('s', 'b', 's', 'p');
 
 	scenario_handle = cache_tag_new(FOURCC('s', 'c', 'n', 'r'), NONE, NONE, "stagekit\\void", sizeof(struct scenario),
@@ -223,7 +220,7 @@ void stage_build(
 	cache_no_reference(&stage->scenario->ingame_help_text, FOURCC('u', 's', 't', 'r'));
 	cache_no_reference(&stage->scenario->hud_messages, FOURCC('h', 'm', 't', ' '));
 	cache_no_reference(&bsp->lightmap_group, FOURCC('b', 'i', 't', 'm'));
-	chamber_build(bsp);
+	chamber_build(bsp, scenario->half_width);
 
 	/* the interface's font, strings (the first: the language code) and HUD */
 	font_handle = cache_tag_new(FOURCC('f', 'o', 'n', 't'), NONE, NONE, "stagekit\\font", sizeof(struct font_header),
