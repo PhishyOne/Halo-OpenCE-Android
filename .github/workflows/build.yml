@@ -1,4 +1,4 @@
-name: Halo Royale landing verification
+name: East Millworks verification
 on:
   push:
     branches: [halo/royale-landing-check]
@@ -29,7 +29,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          ref: a997d64140a53db9e264c270509bd011f07ca33c
+          ref: 7f1919278330a17799a4920fcedd2891367838ec
 
       - uses: actions/cache@v4
         with:
@@ -72,7 +72,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: a997d64140a53db9e264c270509bd011f07ca33c
+          ref: 7f1919278330a17799a4920fcedd2891367838ec
 
       - uses: actions/cache@v4
         with:
@@ -112,31 +112,49 @@ jobs:
           pacman -Syu --noconfirm --needed git python python-pytest ninja clang lld gcc lib32-glibc lib32-gcc-libs sdl3 lib32-sdl3
       - uses: actions/checkout@v4
         with:
-          ref: a997d64140a53db9e264c270509bd011f07ca33c
+          ref: 7f1919278330a17799a4920fcedd2891367838ec
       - name: Build native engine and validator
         run: |
           python configure.py --release --lto=off --pgo=off
           ninja -j4 linux > /tmp/royale-build.log 2>&1 || { tail -100 /tmp/royale-build.log; exit 1; }
-      - name: Run collision, movement, regression and round tests
+      - name: Generate the district cache and retain the native tools for diagnosis
+        run: |
+          mkdir -p millworks-qa
+          PYTHONPATH=tools/stagekit/tests python - <<'PYTHON'
+          from pathlib import Path
+          import runner
+          d = Path("millworks-qa").resolve()
+          exe = runner.build(d)
+          runner.generate(exe, "royale_crossroads", d)
+          PYTHON
+          cp build/linux/halo build/linux/map_validate millworks-qa/
+          mkdir millworks-qa/lib
+          ldd build/linux/halo | awk '{for(i=1;i<=NF;i++) if ($i ~ /^\//) print $i}' | sort -u | while read -r p; do cp -L "$p" millworks-qa/lib/; done
+          tar -C millworks-qa -czf millworks-tools.tgz halo map_validate stagekit custom_maps lib
+      - uses: actions/upload-artifact@v4
+        with:
+          name: millworks-native
+          path: millworks-tools.tgz
+          retention-days: 3
+      - name: Validate the compiled island
+        run: build/linux/map_validate millworks-qa/custom_maps/void.map
+      - name: Exercise the mill before the full regression suite
         run: |
           export HALO_GAME="$(pwd)/build/linux/halo"
-          python -m pytest -v -s --basetemp=/tmp/royale-play tools/stagekit/tests tools/test_battle_royale_round.py
-      - name: Show validation details
-        if: always()
+          python -m pytest -q -x --basetemp=/tmp/millworks-first tools/stagekit/tests/test_millworks.py
+      - name: Run the native suite
         run: |
-          f=$(find /tmp/royale-play -path '*crossroads*/custom_maps/void.map' | head -1)
-          if test -n "$f"; then build/linux/map_validate "$f"; fi
-      - name: Retain footprint and engine evidence
-        if: always()
-        run: |
-          mkdir -p footprint-evidence
-          find /tmp/royale-play -path '*royale_crossroads*' -type f \( -name 'void.map' -o -name 'game.log' -o -name 'debug.txt' \) | while IFS= read -r f; do
-            dest="footprint-evidence/${f#/tmp/royale-play/}"
-            mkdir -p "$(dirname "$dest")"; cp "$f" "$dest"
-          done
-      - uses: actions/upload-artifact@v4
-        if: always()
+          export HALO_GAME="$(pwd)/build/linux/halo"
+          python -m pytest -q -x --basetemp=/tmp/royale-play tools/stagekit/tests --ignore=tools/stagekit/tests/test_millworks.py
+          python -m pytest -q tools/test_battle_royale_round.py
+      - name: Retain failed native play logs
+        if: failure()
+        uses: actions/upload-artifact@v4
         with:
-          name: royale-footprint-evidence
-          path: footprint-evidence
-          retention-days: 7
+          name: millworks-logs
+          path: |
+            /tmp/millworks-first/**/game.log
+            /tmp/millworks-first/**/debug.txt
+            /tmp/royale-play/**/game.log
+            /tmp/royale-play/**/debug.txt
+          retention-days: 3

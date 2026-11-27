@@ -37,6 +37,7 @@ OUTPOSTS = [
 for name, x, y, _ in OUTPOSTS:
     for side,dx,dy in [('west',-8,-8), ('east',8,-8), ('left',-12,2), ('right',12,2)]:
         LANDINGS.append((name+'_'+side,x+dx,y+dy))
+LANDINGS.extend(millworks.LANDINGS)
 
 
 class Sector:

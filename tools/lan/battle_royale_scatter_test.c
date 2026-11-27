@@ -22,7 +22,7 @@ int main(void)
 		if (scanf("%f %f %f",&s->x,&s->y,&s->z)!=3) break;
 		++map.site_count;
 	}
-	assert(map.site_count == 32);
+	assert(map.site_count == 36);
 	for (seed=0; seed<512; ++seed) {
 		int tally[BR_MAX_CLEARINGS] = {0}, shared = 0;
 		unsigned seen[BR_MAX_CLEARINGS] = {0};

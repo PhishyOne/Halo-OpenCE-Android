@@ -194,7 +194,7 @@ def test_landing_clearings_are_open_and_close_to_loot():
             assert min(math.hypot(px-lx, py-ly) for _, (lx, ly, _) in scene.loot) <= 25
             assert all(math.hypot(px-ox, py-oy) > 2*radius for ox, oy in positions)
             positions.append((px, py))
-    assert len(positions) == 512
+    assert len(positions) == 576
 
 
 def check_flown_route(session):

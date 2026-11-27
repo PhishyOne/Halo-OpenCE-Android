@@ -119,11 +119,11 @@ static void make_ground(struct structure_bsp *bsp)
     struct structure_fog_plane *water = cache_bsp_block(&bsp->fog_planes, 1, sizeof(*water));
     struct fog_definition *fog;
     void *data;
-    long handle = cache_tag_new(FOG_TAG, NONE, NONE, "orchard\\millwater", sizeof(*fog), &data);
+    /* fog_definitions.h exposes only the fields used by gameplay. The full
+       on-disk fog root is 0x18C bytes (tag_schema_render.c). */
+    long handle = cache_tag_new(FOG_TAG, NONE, NONE, "orchard\\millwater", 0x18C, &data);
     fog = data;
     fog->flags = 1;
-    fog->background_sound_index = NONE;
-    cache_no_reference(&fog->sound_environment, FOURCC('s','n','d','e'));
     cache_reference(&palette->fog, handle);
     region->weather_palette_index = NONE;
     water->runtime_material_type = _material_water;
