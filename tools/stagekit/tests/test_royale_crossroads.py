@@ -28,7 +28,7 @@ def test_baked_mesh_matches_authored_sector(stagekit, tmp_path):
     def block(pos):
         n, ptr = struct.unpack_from('<iI', data, pos)
         return n, 0x800 + ptr - base
-    n, _ = block(bsp + 0xf8)
+    n, surfaces = block(bsp + 0xf8)
     assert n == sum(map(len, scene.faces.values()))
     n, light = block(bsp + 0x104)
     assert n == 1
@@ -38,7 +38,9 @@ def test_baked_mesh_matches_authored_sector(stagekit, tmp_path):
         mat = material + 256*i
         assert struct.unpack_from('<I', data, mat+0xb4)[0] == 3*len(faces)
         v = 0x800 + struct.unpack_from('<I', data, mat+0xd8+12)[0] - base
-        for tri in faces:
+        for j, tri in enumerate(faces):
+            assert struct.unpack_from('<3H', data, surfaces) == (3*j, 3*j+2, 3*j+1)
+            surfaces += 6
             for point in tri:
                 xyz = struct.unpack_from('<3f', data, v)
                 assert xyz == pytest.approx([a/3.048 for a in point], abs=.0001)

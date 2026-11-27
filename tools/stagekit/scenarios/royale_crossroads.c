@@ -96,9 +96,12 @@ static void make_mesh(struct structure_bsp *bsp)
 		mat->uncompressed_vertex_data.size = count*3*sizeof(*v);
 		*groups++ = 0; *groups++ = material; *groups++ = count;
 		for (i=0; i<count; ++i, ++face) {
-			int k;
 			write_face(v+i*3, triangles[face]);
-			for (k=0; k<3; ++k) surfaces[face].vertex_indices[k] = i*3+k;
+			/* The native environment pass culls counterclockwise faces.
+			   Keep outward lighting normals and submit clockwise indices. */
+			surfaces[face].vertex_indices[0] = i*3;
+			surfaces[face].vertex_indices[1] = i*3+2;
+			surfaces[face].vertex_indices[2] = i*3+1;
 			*groups++ = face;
 		}
 	}
