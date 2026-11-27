@@ -14,6 +14,8 @@ class Sector:
     def __init__(self):
         self.faces = defaultdict(list)
         self.solids = []
+        self.loot = []
+        self.buildings = []
 
     def face(self, mat, *points):
         for i in range(1, len(points)-1):
@@ -37,7 +39,7 @@ class Sector:
         # The door faces south. The side window is a real opening cut into the wall.
         t = 0.35
         door = 3.8 if barn else 1.9
-        lintel = 3.5 if barn else 2.65
+        lintel = 3.5 if barn else 3.15
         side = (w-door)/2
         self.box(mat,x,y,0,side,t,h)
         self.box(mat,x+side+door,y,0,side,t,h)
@@ -62,6 +64,35 @@ class Sector:
         self.face(roof,(ridge,front,peak),(hi,front,h),(hi,back,h),(ridge,back,peak))
         if not barn:
             self.box('brick',x+w*0.69,y+d*0.7,h,0.8,0.8,w*0.30+0.8,False)
+
+    def furnish(self, number, x, y, w, d, h, kind):
+        self.buildings.append((x,y,w,d))
+        # Each front room opens into a second room. Keep the center aisle clear.
+        gap = 3 if kind == 'barn' else 2.35
+        side = (w-gap)/2
+        divider = y+d*.52
+        for xx in (x+.35,x+side+gap):
+            self.box('plaster' if kind=='house' else 'timber',xx,divider,0,side-.35,.25,h)
+        self.box('timber',x+side,divider,3.15,gap,.25,h-3.15)
+        # A low kitchen counter or workbench, and an accessible pickup near its edge.
+        self.box('timber',x+.50,y+.85,0,.80,2.0,.72)
+        self.box('trim',x+.44,y+.80,.72,.90,2.1,.09)
+        if kind=='house':
+            self.box('timber',x+.60,y+d-2.75,0,1.30,2.1,.38)
+            self.box('slate',x+.60,y+d-2.75,.38,1.30,2.1,.17)
+            self.box('trim',x+.65,y+d-1.13,.55,1.20,.40,.12,False)
+        elif kind=='barn':
+            for i in range(3):
+                self.box('field',x+.65+i*1.32,y+d-2.35,0,1.21,1.7,.85)
+            self.box('field',x+.85,y+d-2.22,.85,1.25,1.45,.70)
+        else:
+            self.box('slate',x+.55,y+d-1.88,0,1.4,1.20,.95)
+            self.box('bark',x+.80,y+d-1.65,.95,.38,.74,.45)
+        self.box('timber',x+w-1.15,y+d-1.85,0,.68,1.25,.60)
+        points=[(x+1.28,y+1.72,.84),(x+w-1.55,y+1.55,.08),
+                (x+(5.4 if kind=="barn" else 2.35),y+d-1.5,.08),(x+w-1.08,y+d-1.20,.64)]
+        for i,pos in enumerate(points):
+            self.loot.append((f'br_in_{number:02d}_{i}',pos))
 
     def fence(self, x, y, spans):
         for i in range(spans+1):
@@ -114,6 +145,8 @@ def build():
         (-36,-26,10,8,3.5,'plaster','roof',False),(11,-36,14,17,4.5,'timber','roof',True),
         (35,-21,7,6,3.2,'brick','slate',False)]:
         s.building(x,y,w,d,h,wall,roof,barn)
+        kind = 'barn' if barn else 'utility' if w==7 else 'house'
+        s.furnish(len(s.buildings)+1,x,y,w,d,h,kind)
         s.slab('lane',x+w*.5-1.5,y-3,3,3,.024)
     s.fence(-55,8,4)
     s.fence(-34,8,6)
@@ -126,6 +159,15 @@ def build():
     for x,y in [(-69,-31),(-61,-43),(-53,-36),(-65,-55),(-40,-47),(-22,-48),
                 (49,-29),(58,-38),(55,-50),(43,-46),(74,8),(86,12),(101,23)]:
         s.tree(x,y,True,rng)
+    # Known outdoor supply points have an item every round. Other outdoor
+    # sites form a vetted pool; the round seed decides which are occupied.
+    for name,x,y in [('tower',40,-40),('barnyard',10,-42),('field_gate',12,10)]:
+        s.box('timber',x,y,0,1.3,.85,.65)
+        s.loot.append(('br_fixed_'+name,(x+.22,y+.43,.69)))
+    for i,(x,y) in enumerate([(-54,37),(-40,54),(-29,40),(-65,48),
+            (17,24),(35,42),(64,58),(85,70),(-54,-34),(-57,-50),(51,-35),(44,-43),
+            (-74,10),(70,-10),(-13,30),(26,-54)]):
+        s.loot.append((f'br_wild_{i:02d}',(x,y,.08)))
     return s
 
 
@@ -157,4 +199,6 @@ def write_include(path):
         for batch in batches: f.write(','.join(map(str,batch))+',\n')
         f.write('};\nstatic const float solids[][6] = {\n')
         for box in s.solids: f.write(point(box)+',\n')
+        f.write('};\nstatic const struct loot_site loot_sites[] = {\n')
+        for name,pos in s.loot: f.write('{"'+name+'",'+point(pos)+'},\n')
         f.write('};\n')

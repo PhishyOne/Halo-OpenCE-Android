@@ -58,3 +58,64 @@ def test_barn_entry_and_vehicle_lane_are_open():
     assert all(not blocked(18,y,1.6) for y in range(-43,-23))
     assert blocked(12,-35.9,1.6) and blocked(11.1,-33,1.6)
     assert all(not blocked(x,y,1.5) for x in range(-75,76) for y in (-3,0,3))
+
+
+def test_host_seeds_pickups_from_baked_markers(stagekit, tmp_path):
+    import os
+    import struct
+    import subprocess
+    import runner
+    import orchard
+    scene = orchard.build()
+    data = runner.generate(stagekit, 'royale_crossroads', tmp_path).read_bytes()
+    rows = []
+    for name, metres in scene.loot:
+        field = name.encode().ljust(32, b'\0')
+        assert data.count(field) == 1
+        xyz = struct.unpack_from('<3f',data,data.index(field)+32)
+        assert max(abs(a*3.048-b) for a,b in zip(xyz,metres)) < .001
+        rows.append(name+' '+' '.join(map(str,xyz)))
+    exe = tmp_path/'round'
+    subprocess.run([os.environ.get('CC','cc'), '-std=c99', '-Werror','-Wall',
+                    '-iquote','port/linux/include','-iquote','port/linux/game',
+                    'tools/lan/battle_royale_sector_loot_test.c','port/linux/game/battle_royale_round.c',
+                    '-o',str(exe)], cwd=runner.ROOT, check=True)
+    subprocess.run([exe], input='\n'.join(rows)+'\n',text=True, check=True)
+
+
+def test_every_building_is_searchable_standing():
+    from collections import deque
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    import orchard
+    scene = orchard.build()
+    radius, height, step = .25*3.048, 3.048, .20
+    for number,(x,y,w,d) in enumerate(scene.buildings,1):
+        boxes=[b for b in scene.solids if b[2]<height and b[2]+b[5]>0 and
+               b[0]<x+w+2 and b[0]+b[3]>x-2 and b[1]<y+d+2 and b[1]+b[4]>y-2]
+        def clear(px,py):
+            for a,b,_,bw,bd,_ in boxes:
+                dx=max(a-px,0,px-a-bw)
+                dy=max(b-py,0,py-b-bd)
+                if dx*dx+dy*dy < radius*radius: return False
+            return True
+        # Flood from the front doorstep using the standing biped's radius and height.
+        base_x,base_y=x+w/2,y-1.6
+        queue=deque([(0,0)])
+        visited={(0,0)}
+        positions=[]
+        while queue:
+            i,j=queue.popleft()
+            px,py=base_x+step*i,base_y+step*j
+            positions.append((px,py))
+            for nr in ((i-1,j),(i+1,j),(i,j-1),(i,j+1)):
+                if nr in visited: continue
+                nx,ny=base_x+step*nr[0],base_y+step*nr[1]
+                if x-1<nx<x+w+1 and base_y<=ny<y+d+.8 and clear(nx,ny):
+                    visited.add(nr);queue.append(nr)
+        points=[p for name,p in scene.loot if name.startswith(f'br_in_{number:02d}_')]
+        assert len(points)==4
+        for a,b,z in points:
+            assert any((px-a)**2+(py-b)**2+z*z <= (3.048*.5)**2
+                       for px,py in positions), (number,a,b,z)
