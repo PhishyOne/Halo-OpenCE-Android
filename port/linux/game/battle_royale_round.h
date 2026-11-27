@@ -17,6 +17,9 @@ struct battle_royale_zone
 	int hold_ticks, close_ticks, damage_interval_ticks;
 };
 
+struct battle_royale_circle battle_royale_circle_at(const struct battle_royale_zone *zone, int tick);
+int battle_royale_outside(const struct battle_royale_circle *circle, float x, float y);
+
 enum battle_royale_phase { BR_IDLE, BR_PLAYING, BR_WON, BR_DRAW };
 enum battle_royale_observation_kind { BR_UNOBSERVED, BR_POSITION, BR_OUT };
 
@@ -70,6 +73,7 @@ int battle_royale_place_marked_loot(struct battle_royale_round *round,
 	const uint32_t *weapons, int weapon_count, int indoor_per_building, int random_outdoors, uint32_t seed);
 
 struct scenario;
+int battle_royale_placing_pickups(void);
 void battle_royale_populate_pickups(const struct scenario *map);
 int battle_royale_seed_scenario_loot(struct battle_royale_round *round, const struct scenario *scenario,
 	const uint32_t *weapons, int weapon_count, uint32_t seed);

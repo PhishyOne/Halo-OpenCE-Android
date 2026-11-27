@@ -203,7 +203,7 @@ uint32_t battle_royale_take_loot(struct battle_royale_round *round, int seat, ui
 	return weapon;
 }
 
-static struct battle_royale_circle circle_at(const struct battle_royale_zone *zone, int tick)
+struct battle_royale_circle battle_royale_circle_at(const struct battle_royale_zone *zone, int tick)
 {
 	struct battle_royale_circle circle;
 	double t;
@@ -219,7 +219,7 @@ static struct battle_royale_circle circle_at(const struct battle_royale_zone *zo
 	return circle;
 }
 
-static int outside(const struct battle_royale_circle *circle, float x, float y)
+int battle_royale_outside(const struct battle_royale_circle *circle, float x, float y)
 {
 	double dx = (double)x - circle->x;
 	double dy = (double)y - circle->y;
@@ -236,14 +236,14 @@ int battle_royale_open_tick(struct battle_royale_round *round, int tick,
 		return 0;
 	round->tick_open = 1;
 	round->last_tick = tick;
-	round->circle = circle_at(&round->zone, tick);
+	round->circle = battle_royale_circle_at(&round->zone, tick);
 	if (tick - round->last_damage_tick >= round->zone.damage_interval_ticks)
 	{
 		round->last_damage_tick = tick;
 		for (i = 0; i < HALO_PORT_MAXIMUM_NETWORK_PLAYERS; ++i)
 			if (seats[i].kind == BR_POSITION && battle_royale_alive(round, i, seats[i].identity) &&
 				finite_coordinate(seats[i].x) && finite_coordinate(seats[i].y))
-				damage_due[i] = outside(&round->circle, seats[i].x, seats[i].y);
+				damage_due[i] = battle_royale_outside(&round->circle, seats[i].x, seats[i].y);
 	}
 	return 1;
 }

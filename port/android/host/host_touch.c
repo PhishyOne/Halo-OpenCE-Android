@@ -391,3 +391,33 @@ JNIEXPORT void JNICALL Java_com_halo_decomp_TouchControls_nativeCommanderToggle(
         commander_toggle_pending = 1; /* bounded queue; never spams guest */
     pthread_mutex_unlock(&touch_lock);
 }
+
+/* Guest publishes one immutable snapshot per update. Java never holds a guest pointer. */
+enum { ROYALE_MAP_VALUES = 22 };
+static float royale_map[ROYALE_MAP_VALUES];
+static int royale_map_serial = 1;
+void host_royale_map_publish(const float *values)
+{
+	pthread_mutex_lock(&touch_lock);
+	if (values || royale_map[0] != 0) {
+		if (values) memcpy(royale_map, values, sizeof(royale_map));
+		else memset(royale_map, 0, sizeof(royale_map));
+		royale_map_serial = royale_map_serial == INT32_MAX ? 1 : royale_map_serial + 1;
+	}
+	pthread_mutex_unlock(&touch_lock);
+}
+
+JNIEXPORT jint JNICALL Java_com_halo_decomp_TouchControls_nativeRoyaleMap(
+	JNIEnv *env, jclass cls, jint previous, jfloatArray values)
+{
+	float copy[ROYALE_MAP_VALUES];
+	int serial;
+	(void)cls;
+	pthread_mutex_lock(&touch_lock);
+	serial = royale_map_serial;
+	if (serial != previous) memcpy(copy, royale_map, sizeof(copy));
+	pthread_mutex_unlock(&touch_lock);
+	if (serial != previous && values && (*env)->GetArrayLength(env, values) == ROYALE_MAP_VALUES)
+		(*env)->SetFloatArrayRegion(env, values, 0, ROYALE_MAP_VALUES, copy);
+	return serial;
+}

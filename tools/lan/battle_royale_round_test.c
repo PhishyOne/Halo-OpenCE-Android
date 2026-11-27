@@ -1,4 +1,6 @@
 #include "battle_royale_round.h"
+#include "battle_royale_storm.h"
+#include <math.h>
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -168,8 +170,43 @@ static void unarmed_loot(void)
 	puts("Unarmed starts, seeded loot, 3D reach, contested pickups and eliminated entrants passed.");
 }
 
+static void successive_circles(void)
+{
+    const struct battle_royale_circle island = {120.f, -30.f, 1857.f};
+    const struct battle_royale_point finish = {-600.f, 800.f, 0.f};
+    struct br_storm_view v, previous;
+    int tick, holds = 1, closes = 0;
+    br_storm_sample(&island, &finish, 0, &previous);
+    assert(previous.state == BR_HOLDING && previous.seconds_left == 90);
+    for (tick = 1; tick <= 24000; ++tick) {
+        double dx, dy, margin;
+        br_storm_sample(&island, &finish, tick, &v);
+        assert(v.current.radius <= previous.current.radius);
+        dx = v.next.x - v.current.x;
+        dy = v.next.y - v.current.y;
+        margin = v.current.radius - v.next.radius + .001;
+        assert(dx*dx + dy*dy <= margin*margin);
+        assert(v.seconds_left >= 0);
+        if (previous.state != v.state) {
+            holds += v.state == BR_HOLDING;
+            closes += v.state == BR_CLOSING;
+            assert(fabs(previous.current.radius - v.current.radius) < 1);
+        }
+        if (tick == 2699) assert(v.state == BR_HOLDING && v.seconds_left == 1);
+        if (tick == 2700) assert(v.state == BR_CLOSING && v.seconds_left == 150);
+        if (tick == 7200) assert(v.stage == 2 && v.state == BR_HOLDING && v.seconds_left == 45);
+        previous = v;
+    }
+    assert(holds == 5 && closes == 5);
+    assert(v.state == BR_FINAL && v.current.radius == 0);
+    assert(v.current.x == finish.x && v.current.y == finish.y);
+    assert(!battle_royale_outside(&v.current, finish.x, finish.y));
+    assert(battle_royale_outside(&v.current, finish.x+1, finish.y));
+}
+
 int main(void)
 {
+	successive_circles();
 	unarmed_loot();
 	ring_and_lives();
 	simultaneous_outs_and_invalid_setup();

@@ -107,6 +107,7 @@ and each bot's kills and deaths; debug.bot_trace logs each bot's state.
 #include "tag_files/tag_files.h"
 
 #include "bots.h"
+#include "battle_royale_island.h"
 #include "bots_combat.h"
 #include "bots_objectives_policy.h"
 #include "bot_vehicle_driver_policy.h"
@@ -3903,6 +3904,7 @@ static void bots_bot_update(struct bots_bot *bot, long bot_index, struct player_
 {
 	struct bots_tick tick;
 	real vitality;
+	real_point3d zone_goal;
 
 	csmemset(&tick, 0, sizeof(tick));
 	tick.skill = &bots_skills[bots_globals.skill];
@@ -3997,7 +3999,18 @@ static void bots_bot_update(struct bots_bot *bot, long bot_index, struct player_
 		bots_bot_fight(bot, &tick);
 	/* Objectives may change while we are fighting; update the destination
 	   without waiting for the enemy to disappear. */
-	if (!tick.fighting || bot->goal_kind == _bots_goal_item ||
+	if (battle_royale_island_bot_goal(&tick.position, &zone_goal))
+	{
+		/* This map has broad walkable BSP cells; the normal path follower also
+		   steers directly while a surface search is pending. */
+		if (bot->goal_kind != _bots_goal_objective || bots_distance2d(&zone_goal, &bot->goal_point) > 1.5f)
+		{
+			real_point3d ground = zone_goal;
+			long surface = bots_surface_below(&zone_goal, &ground);
+			bots_set_goal(bot, _bots_goal_objective, surface == NONE ? &zone_goal : &ground, surface);
+		}
+	}
+	else if (!tick.fighting || bot->goal_kind == _bots_goal_item ||
 		bot->goal_kind == _bots_goal_vehicle_flip ||
 		bots_objectives_active())
 		bots_choose_goal(bot, bot->player_index, &tick.position, tick.fighting);

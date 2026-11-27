@@ -13,6 +13,7 @@
 #include "network_distributed.h"
 #include "battle_royale_flight.h"
 #include "battle_royale_scatter.h"
+#include "battle_royale_island.h"
 #include "bots.h"
 
 char const *config_string(char const *name);
@@ -55,6 +56,7 @@ void battle_royale_flight_reset(void)
 	int starts = 0, ends = 0;
 	long i;
 	char const *input;
+	battle_royale_island_reset();
 	memset(&flight, 0, sizeof(flight));
 	flight.ship = NONE;
 	if (!map || (game_connection() != _game_connection_local &&
@@ -125,6 +127,7 @@ static void select_flight(struct structure_bsp const *bsp)
 			flight.poi_tick = pass - POI_LEAD;
 	}
 	br_drop_shuffle_start(&flight.drops, seed);
+	if (flight.has_orchard) battle_royale_island_begin(&flight.route, &flight.drops, seed);
 	platform_log("Echo 419: drop seed %u", (unsigned)seed);
 	platform_log("Echo 419: route %.3f %.3f to %.3f %.3f", flight.entry.x, flight.entry.y, flight.exit.x, flight.exit.y);
 	flight.route_selected = TRUE;
@@ -395,6 +398,7 @@ void battle_royale_flight_tick(void)
 			b->object.translational_velocity = *global_zero_vector3d;
 		}
 	}
+	if (!active) battle_royale_island_landed();
 	if (!active && flight.tick >= BR_ROUTE_TICKS)
 		flight.enabled = FALSE;
 	++flight.tick;

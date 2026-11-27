@@ -82,6 +82,7 @@ symbols in this file:
 #include "interface/interface.h"
 #include "editor_stubs.h"
 #include "render_debug.h"
+#include "battle_royale_island.h" /* port: local Royale boundary */
 #include "objects/object_lights_rendering.h"
 #include "effects/particle_systems.h"
 #include "effects/weather_particle_systems.h"
@@ -417,6 +418,8 @@ static void render_window(
 		structure_render_detail_objects();
 		rasterizer_transparent_geometry_draw(FALSE);
 		rasterizer_transparent_geometry_stop();
+		if (rasterizer_target == _render_target_primary)
+			battle_royale_island_draw_edge(&render.camera.position);
 		structure_render_fog_screen();
 		rasterizer_lens_flares_draw();
 		/* port: the 3D view tone mapped (display.hdr) and antialiased

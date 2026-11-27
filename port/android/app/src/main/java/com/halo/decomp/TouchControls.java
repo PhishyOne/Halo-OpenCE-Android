@@ -61,6 +61,7 @@ public final class TouchControls extends View implements SensorEventListener, In
     private static final int TOOLBAR_SAVE = -8;
     private static final int TOOLBAR_COMMANDER = -9;
     private static final int TOOLBAR_ASSIGN = -10;
+    private static final int ROYALE_MAP = -11;
     private static final float TOOLBAR_RADIUS = 28;
     private static final float OPTIONS_RADIUS = TouchLayout.OPTIONS_RADIUS;
     /** the editor's items, this far apart */
@@ -160,6 +161,7 @@ public final class TouchControls extends View implements SensorEventListener, In
     private static native int nativeRumble();
     private static native int nativeScene();
     private static native int nativeCommanderStatus();
+    private static native int nativeRoyaleMap(int previous, float[] values);
     private static native void nativeCommanderToggle();
     private static native void nativeCommanderAssign();
     private static native int nativeBindings(int[] controls);
@@ -210,11 +212,15 @@ public final class TouchControls extends View implements SensorEventListener, In
     private float scale = 1;
     private float logicalWidth = GRID_WIDTH;
     private float logicalHeight = GRID_HEIGHT;
+    private int insetLeft;
     private int insetRight;
     private int insetTop;
 
     private int scene;
     private int commanderStatus;
+    private final RoyaleMinimap royale;
+    private int royaleSerial;
+    private boolean royaleVisible;
     private boolean controllerConnected;
     private boolean touchscreen;
     private boolean deviceInputActive;
@@ -235,6 +241,15 @@ public final class TouchControls extends View implements SensorEventListener, In
             if (!deviceInputActive)
                 return;
             scene = nativeScene();
+            int nextSerial = nativeRoyaleMap(royaleSerial, royale.data);
+            boolean visible = royale.data[0] != RoyaleMinimap.INACTIVE && (scene & SCENE_KNOWN) != 0
+                && (scene & SCENE_MENUS) == 0 && !editing && openDialogs == 0;
+            if (visible != royaleVisible || (visible && nextSerial != royaleSerial)) {
+                if (!visible) royale.close();
+                royaleVisible = visible;
+                invalidate();
+            }
+            royaleSerial = nextSerial;
             int nextCommanderStatus = nativeCommanderStatus();
             if (commanderStatus != nextCommanderStatus) {
                 commanderStatus = nextCommanderStatus;
@@ -249,6 +264,7 @@ public final class TouchControls extends View implements SensorEventListener, In
 
     public TouchControls(Context context) {
         super(context);
+        royale = new RoyaleMinimap(context.getAssets());
         sensors = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
         gyroscope = sensors == null ? null : sensors.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
         if (Build.VERSION.SDK_INT >= 31) {
@@ -267,15 +283,18 @@ public final class TouchControls extends View implements SensorEventListener, In
         setContentDescription("Halo touch controller");
         setOnApplyWindowInsetsListener((view, insets) -> {
             // (only the toolbar moves: the fingers stay held as the system bars come and go)
+            int left = insetLeft;
             int right = insetRight;
             int top = insetTop;
+            insetLeft = insets.getSystemWindowInsetLeft();
             insetRight = insets.getSystemWindowInsetRight();
             insetTop = insets.getSystemWindowInsetTop();
             if (insets.getDisplayCutout() != null) {
+                insetLeft = Math.max(insetLeft, insets.getDisplayCutout().getSafeInsetLeft());
                 insetRight = Math.max(insetRight, insets.getDisplayCutout().getSafeInsetRight());
                 insetTop = Math.max(insetTop, insets.getDisplayCutout().getSafeInsetTop());
             }
-            if (insetRight != right || insetTop != top)
+            if (insetLeft != left || insetRight != right || insetTop != top)
                 invalidate();
             return insets;
         });
@@ -563,6 +582,7 @@ public final class TouchControls extends View implements SensorEventListener, In
                 return TOOLBAR_COMMANDER;
             if (inside(x, y, logicalWidth / 2, toolbarY(), toolbarRadius(TOOLBAR_RADIUS)))
                 return TOOLBAR_TOGGLE;
+            if (royaleVisible && royale.contains(x, y)) return ROYALE_MAP;
             return hidden ? NOTHING : hitControl(x, y);
         }
         // (the controls first: one dropped over Export, Import or Save can still be dragged away)
@@ -612,6 +632,16 @@ public final class TouchControls extends View implements SensorEventListener, In
     public boolean onTouchEvent(MotionEvent event) {
         int action = event.getActionMasked();
         if (!showing && !editing && openDialogs == 0) {
+            // A connected controller can hide the touch buttons while the map stays usable.
+            if (royaleVisible && (toolbarFingers.size() > 0 ||
+                    action == MotionEvent.ACTION_DOWN && royale.contains(logical(event.getX()), logical(event.getY())))) {
+                int id = event.getPointerId(event.getActionIndex());
+                if (action == MotionEvent.ACTION_DOWN) toolbarFingers.put(id, new float[]{event.getX(), event.getY(), ROYALE_MAP});
+                if (action == MotionEvent.ACTION_UP) fingerUp(id, event.getX(), event.getY());
+                if (action == MotionEvent.ACTION_CANCEL) toolbarFingers.clear();
+                invalidate();
+                return true;
+            }
             // the menus and cinematics take the fingers (SDL's surface below)
             if (action == MotionEvent.ACTION_DOWN)
                 return false;
@@ -669,7 +699,7 @@ public final class TouchControls extends View implements SensorEventListener, In
             floatStick(x, y);
             target = stick;
         }
-        if (target == TOOLBAR_OPTIONS || target == TOOLBAR_TOGGLE) {
+        if (target == TOOLBAR_OPTIONS || target == TOOLBAR_TOGGLE || target == ROYALE_MAP) {
             toolbarFingers.put(id, new float[] {px, py, target});
         } else if (target != NOTHING) {
             owners.put(id, target);
@@ -746,7 +776,9 @@ public final class TouchControls extends View implements SensorEventListener, In
     }
 
     private void toolbarAction(int item) {
-        if (item == TOOLBAR_OPTIONS)
+        if (item == ROYALE_MAP && royaleVisible)
+            royale.toggle();
+        else if (item == TOOLBAR_OPTIONS)
             showOptions();
         else if (item == TOOLBAR_TOGGLE)
             setHidden(!hidden);
@@ -1331,6 +1363,13 @@ public final class TouchControls extends View implements SensorEventListener, In
 
     @Override
     protected void onDraw(Canvas canvas) {
+        if (royaleVisible && !editing && openDialogs == 0) {
+            canvas.save();
+            canvas.scale(scale, scale);
+            royale.layout(logicalWidth, logicalHeight, insetLeft / scale, insetTop / scale);
+            royale.draw(canvas);
+            canvas.restore();
+        }
         if (!showing && !editing)
             return;
         canvas.save();

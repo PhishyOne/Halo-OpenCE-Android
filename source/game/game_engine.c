@@ -536,6 +536,7 @@ symbols in this file:
 
 /* ---------- headers */
 
+#include "battle_royale_round.h" /* port: authored Royale loot already selects its own density */
 #include "cseries.h"
 #include "game_modes.h" /* port: port/linux/game/game_modes.c */
 #include "vip.h"
@@ -3165,12 +3166,12 @@ long game_engine_remap_equipment(
 			weapon_list_index = NONE;
 		}
 
-		if (TEST_FLAG(game_engine_globals.flags, _game_engine_9_or_more_players_bit))
+		if (!battle_royale_placing_pickups() && TEST_FLAG(game_engine_globals.flags, _game_engine_9_or_more_players_bit))
 		{
 			if (real_seed_random(get_global_random_seed_address()) > 0.3f)
 				weapon_list_index = NONE;
 		}
-		else if (TEST_FLAG(game_engine_globals.flags, _game_engine_5_or_more_players_bit))
+		else if (!battle_royale_placing_pickups() && TEST_FLAG(game_engine_globals.flags, _game_engine_5_or_more_players_bit))
 		{
 			if (real_seed_random(get_global_random_seed_address()) > 0.55f)
 				weapon_list_index = NONE;

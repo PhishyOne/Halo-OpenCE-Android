@@ -15,7 +15,8 @@ class BattleRoyaleRoundTest(unittest.TestCase):
             subprocess.run([
                 os.environ.get("CC", "cc"), "-std=c99", "-Wall", "-Wextra", "-Werror", "-O2",
                 "-ffp-contract=off", "-iquote", "port/linux/game", "-iquote", "port/linux/include",
-                "port/linux/game/battle_royale_round.c", "tools/lan/battle_royale_round_test.c",
+                "port/linux/game/battle_royale_round.c", "port/linux/game/battle_royale_storm.c",
+                "tools/lan/battle_royale_round_test.c",
                 "-o", str(program),
             ], cwd=ROOT, check=True)
             subprocess.run([str(program)], check=True)

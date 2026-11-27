@@ -8,6 +8,9 @@
 
 void platform_log(char const *format, ...);
 
+static int placing_royale_loot;
+int battle_royale_placing_pickups(void) { return placing_royale_loot; }
+
 int battle_royale_seed_scenario_loot(struct battle_royale_round *round, const struct scenario *scenario,
 	const uint32_t *weapons, int weapon_count, uint32_t seed)
 {
@@ -53,6 +56,7 @@ void battle_royale_populate_pickups(struct scenario const *map)
     selection.phase = BR_PLAYING;
     selection.last_tick = -1;
     if (!battle_royale_seed_scenario_loot(&selection, map, items, count, seed)) return;
+    placing_royale_loot = 1;
     for (i=0; i<selection.loot_count; ++i) {
         struct battle_royale_pickup const *pickup = &selection.loot[i];
         struct object_placement_data placement;
@@ -60,5 +64,6 @@ void battle_royale_populate_pickups(struct scenario const *map)
         placement.position = (real_point3d){{pickup->position.x, pickup->position.y, pickup->position.z+.035f}};
         if (object_new(&placement) != NONE) ++spawned;
     }
+    placing_royale_loot = 0;
     platform_log("Halo Royale: spawned %d of %d native pickups", spawned, selection.loot_count);
 }
