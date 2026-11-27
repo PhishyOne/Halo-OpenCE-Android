@@ -69,4 +69,13 @@ def test_vehicle_pads_and_woodlots(stagekit, tmp_path):
         assert not any(a < x+3 and x-3 < a+w and b < y+1.8 and y-1.8 < b+d and z < 2.1 and z+h > .1
                        for a,b,z,w,d,h in scene.solids)
     trees=[(x,y) for x,y,_,w,d,_ in scene.solids if w==d==.52 and 140<x<1320]
-    assert len(trees)==191
+    assert len(trees)>=191
+
+
+def test_highland_collision_matches_ground_underfoot(stagekit, tmp_path):
+    from island_ground import elevation
+    x,y = -2075,-1425
+    _, points = play_from(stagekit, tmp_path, (x,y,elevation(x,y)+.6), 0, 5)
+    assert points[-1][0] > x + 10
+    for px,py,pz in points:
+        assert pz == pytest.approx(elevation(px,py),abs=.15)

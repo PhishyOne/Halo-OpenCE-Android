@@ -41,6 +41,7 @@ final class WorkshopMapCatalog {
                     in.seek(0x60); if(in.readUnsignedByte()!=1||in.readUnsignedByte()!=0)continue;
                 }
                 String label = "halo_royale".equals(id) ? "Halo Royale (East Millworks)" : id;
+                if ("east_millworks".equals(id)) label = "East Millworks (Highlands)";
                 out.add(new MapItem(key, label, map, withPreviews ? preview(folder, id) : null));
                 added++;
             }catch(IOException|IllegalArgumentException ignored){}

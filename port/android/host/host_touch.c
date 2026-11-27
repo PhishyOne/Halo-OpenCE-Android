@@ -393,7 +393,7 @@ JNIEXPORT void JNICALL Java_com_halo_decomp_TouchControls_nativeCommanderToggle(
 }
 
 /* Guest publishes one immutable snapshot per update. Java never holds a guest pointer. */
-enum { ROYALE_MAP_VALUES = 24 };
+enum { ROYALE_MAP_VALUES = 25 };
 static float royale_map[ROYALE_MAP_VALUES];
 static int royale_map_serial = 1;
 void host_royale_map_publish(const float *values)

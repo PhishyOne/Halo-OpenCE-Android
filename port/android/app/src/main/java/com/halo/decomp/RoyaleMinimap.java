@@ -22,7 +22,7 @@ import java.util.Locale;
 /** Read-only view of the offline game's position, flight and safe-zone snapshot. */
 final class RoyaleMinimap {
     static final int INACTIVE = 0, EXPLORE = 1, INSERTION = 2, HOLD = 3, CLOSE = 4, FINAL = 5;
-    final float[] data = new float[24];
+    final float[] data = new float[25];
     private static final int CURRENT = 0xff63d6ff, NEXT = 0xfff1f5ec, YOU = 0xffffcc58;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Paint stormHaze = new Paint(Paint.DITHER_FLAG);
@@ -30,7 +30,7 @@ final class RoyaleMinimap {
     private final RectF panel = new RectF(), map = new RectF(), dest = new RectF();
     private final DashPathEffect dash = new DashPathEffect(new float[]{5, 4}, 0);
     private final AssetManager assets;
-    private boolean loaded, expanded;
+    private boolean loaded, highlands, expanded;
     private float unit = 3.048f, centerX, centerY, scale;
     static final float COMPACT_SIZE = 116;
     private float viewWidth, viewHeight, statusLeft, statusTop;
@@ -64,7 +64,8 @@ final class RoyaleMinimap {
     }
 
     private void load() {
-        if (loaded) return;
+        if (loaded && highlands == (data[24] > 0)) return;
+        highlands = data[24] > 0;
         loaded = true;
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(
                 assets.open("royale/atlas.json"), StandardCharsets.UTF_8))) {
@@ -76,7 +77,7 @@ final class RoyaleMinimap {
             for (int i = 0; i < tiles.length; i++) {
                 JSONArray tile = images.getJSONArray(i);
                 for (int j = 0; j < 4; j++) bounds[i][j] = (float)tile.getDouble(j+1) / unit;
-                try (InputStream stream = assets.open("royale/" + tile.getString(0) + ".png")) {
+                try (InputStream stream = assets.open("royale/" + (highlands ? "highlands_" : "") + tile.getString(0) + ".png")) {
                     BitmapFactory.Options options = new BitmapFactory.Options();
                     options.inPreferredConfig = Bitmap.Config.RGB_565;
                     tiles[i] = BitmapFactory.decodeStream(stream, null, options);

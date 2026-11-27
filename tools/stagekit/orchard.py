@@ -5,7 +5,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 import millworks
-from island_ground import Ground
+from island_ground import Ground, elevation
 
 COLORS = dict(meadow=0x748351, field=0xaf995f, furrow=0x978551, verge=0x948771,
               road=0x545857, lane=0xb5a184, plaster=0xc3b8a3, brick=0x945e48,
@@ -154,19 +154,60 @@ class Sector:
 
     def tree(self,x,y,pine,rng):
         h=rng.uniform(8,11) if pine else rng.uniform(5,7)
-        self.box('bark',x-.26,y-.26,0,.52,.52,h*.76,False)
-        self.solids.append((x-.26,y-.26,0,.52,.52,6.0 if pine else 4.0))
+        z = elevation(x,y)
+        self.box('bark',x-.26,y-.26,z,.52,.52,h*.76,False)
+        self.solids.append((x-.26,y-.26,z,.52,.52,6.0 if pine else 4.0))
         n=7
         for k in range(2):
             radius=(2.45 if pine else 2.65)*(1-.25*k)*rng.uniform(.9,1.1)
-            mid=h*(.43+.26*k)
+            mid=z+h*(.43+.26*k)
             ring=[(x+radius*math.cos(i*2*math.pi/n+.31*k),
                    y+radius*math.sin(i*2*math.pi/n+.31*k),mid+rng.uniform(-.28,.28)) for i in range(n)]
             for i in range(n):
                 j=(i+1)%n
                 self.face(('needle' if k else 'pine') if pine else ('crown' if k else 'leaf'),
-                          ring[i],ring[j],(x+.18,y,h*(.77+.23*k)))
+                          ring[i],ring[j],(x+.18,y,z+h*(.77+.23*k)))
                 self.face('pine' if pine else 'leaf',ring[j],ring[i],(x,y,mid-h*.16))
+
+
+def countryside(scene):
+    rng = random.Random(13659)
+    # Low silhouettes and grass tussocks around the drops give the player
+    # near-field motion cues. Keep the center and its landing grid open.
+    centers = [(x,y) for _,x,y,_ in OUTPOSTS] + [(-125,95),(168,-94),(563,118)]
+    centers += [(x+rng.uniform(-140,140), y+rng.uniform(-140,140))
+                for x in range(-3300,3301,950) for y in range(-3300,3301,950)
+                if abs(y)>550 or x < -400 or x > 1450]
+    for cx,cy in centers:
+        for n in range(3):
+            a=rng.uniform(0,2*math.pi)
+            r=rng.uniform(27,62)
+            x,y=cx+r*math.cos(a),cy+r*math.sin(a)
+            # Never place solid foliage on a road, inside a building or on a drop.
+            if -320<x<1400 and -85<y<100: continue
+            if any((x-X)**2+(y-Y)**2 < 12**2 for _,X,Y in LANDINGS): continue
+            scene.tree(x,y,n==0,rng)
+        for n in range(12):
+            a, r = rng.uniform(0,2*math.pi),rng.uniform(8,70)
+            x,y = cx+r*math.cos(a),cy+r*math.sin(a)
+            if -320<x<1400 and -85<y<100: continue
+            z=elevation(x,y)
+            if n%3 == 0:
+                # A low asymmetric bush with a light crown and shaded flanks.
+                rad,h=rng.uniform(.65,1.35),rng.uniform(.65,1.15)
+                ring=[(x+rad*math.cos(a+k*math.tau/5),y+rad*math.sin(a+k*math.tau/5),z+h*.42)
+                      for k in range(5)]
+                for k in range(5):
+                    scene.face('leaf' if k%2 else 'crown',ring[k],ring[(k+1)%5],(x+.18,y,z+h))
+                    scene.face('leaf',ring[(k+1)%5],ring[k],(x,y,z))
+            else:
+                for k in range(3):
+                    angle=a+k*2.4
+                    dx,dy=math.cos(angle),math.sin(angle)
+                    blade=[(x-.18*dx,y-.18*dy,z),(x+.18*dx,y+.18*dy,z),
+                           (x+.28*dy,y-.28*dx,z+rng.uniform(.24,.48))]
+                    scene.face('grass',*blade)
+                    scene.face('grass',*reversed(blade))
 
 
 def build():
@@ -220,6 +261,7 @@ def build():
         s.tree(x-22,y+13,False,rng)
         s.tree(x+22,y+14,True,rng)
     millworks.populate(s)
+    countryside(s)
     return s
 
 
@@ -258,11 +300,38 @@ def collision_palette(solids):
         boxes = updated
 
 
+def grass_texture():
+    rng = random.Random(7243)
+    size = 128
+    values = []
+    for y in range(size):
+        for x in range(size):
+            shade = (6*math.sin(math.tau*(x+2*y)/size) + 4*math.sin(math.tau*(3*x-y)/size)
+                     + 3*math.cos(math.tau*(5*y-x)/size) + rng.uniform(-7,7))
+            values.append(tuple(round(base+shade) for base in (102,119,67)))
+    for _ in range(2600):
+        x,y=rng.randrange(size),rng.randrange(size)
+        color = rng.choice([(113,134,70),(125,139,82),(138,137,82),(79,96,53),(87,99,61)])
+        for k in range(rng.randrange(2,6)):
+            values[((y+k)%size)*size+(x+k//2)%size]=color
+    while True:
+        yield from (0xff000000 | r<<16 | g<<8 | b for r,g,b in values)
+        if size == 1: break
+        values = [tuple(sum(values[(y+dy)*size+x+dx][c] for dy in (0,1) for dx in (0,1))//4
+                        for c in range(3)) for y in range(0,size,2) for x in range(0,size,2)]
+        size //= 2
+
+
 def write_include(path):
     s=build()
     def point(p): return '{'+','.join(f'{v:.5f}' for v in p)+'}'
     with Path(path).open('w') as f:
         s.ground.write_include(f)
+        f.write('static const unsigned long grass_pixels[] = {\n')
+        pixels=list(grass_texture())
+        for i in range(0,len(pixels),16):
+            f.write(','.join(hex(v) for v in pixels[i:i+16])+',\n')
+        f.write('};\n')
         f.write('static const struct paint paints[] = {\n')
         for name,faces in s.faces.items():
             f.write('{"%s",0x%06x,%d},\n'%(name,COLORS[name],len(faces)))

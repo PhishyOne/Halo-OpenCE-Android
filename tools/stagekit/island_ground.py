@@ -1,4 +1,6 @@
-"""Flat island with local cuts in metres. The render faces and native collision use the same cells."""
+"""Walkable island relief in metres. Rendering and collision share each ground plane."""
+import math
+from bisect import bisect_right
 import struct
 
 HALF = 4000
@@ -16,14 +18,36 @@ CUTS = [
 ]
 
 
+# Surveyed villages and the mill road stay level. Broad slopes between them
+# meet at shared vertices, so there is no step at a cell boundary.
+RIDGES_X = [(-4000, 24), (-3360, 82), (-2670, 0), (-2530, 0), (-2150, 59),
+            (-1470, 0), (-1330, 0), (-1030, 45), (-825, 0), (-690, 0),
+            (-550, 22), (-320, 0), (1420, 0), (1570, 25), (1740, 0),
+            (1860, 0), (2310, 81), (2780, 0), (2920, 0), (3450, 74), (4000, 20)]
+RIDGES_Y = [(-4000, 25), (-3150, 69), (-2030, 0), (-1880, 0), (-1530, 58),
+            (-985, 0), (-860, 0), (-695, 24), (-540, 0), (-405, 0), (-272, 19),
+            (-150, 0), (525, 0), (744, 36), (936, 0), (1065, 0), (1670, 83),
+            (2380, 0), (2520, 0), (3210, 96), (4000, 21)]
+
+
+def ridge(knots, position):
+    index = max(0, min(len(knots)-2, bisect_right(knots, (position, math.inf))-1))
+    (start, a), (end, b) = knots[index:index+2]
+    return a + (b-a) * (position-start) / (end-start)
+
+
+def elevation(x, y):
+    return ridge(RIDGES_X, x) + ridge(RIDGES_Y, y)
+
+
 def signed_index(index):
     return index - (1 << 31)
 
 
 class Ground:
     def __init__(self):
-        self.xs = sorted({-HALF, HALF} | {r[i] for r, _, _ in CUTS for i in (0, 2)})
-        self.ys = sorted({-HALF, HALF} | {r[i] for r, _, _ in CUTS for i in (1, 3)})
+        self.xs = sorted({k for k, _ in RIDGES_X} | {r[i] for r, _, _ in CUTS for i in (0, 2)})
+        self.ys = sorted({k for k, _ in RIDGES_Y} | {r[i] for r, _, _ in CUTS for i in (1, 3)})
         self.cells = {}
         for i,(x0,x1) in enumerate(zip(self.xs, self.xs[1:])):
             for j,(y0,y1) in enumerate(zip(self.ys, self.ys[1:])):
@@ -34,7 +58,8 @@ class Ground:
         x,X = self.xs[i:i+2]
         y,Y = self.ys[j:j+2]
         z, mat = self.cells[i,j]
-        yield 2,z,1,mat,[(x,y,z),(X,y,z),(X,Y,z),(x,Y,z)]
+        floor = [(a,b,z + elevation(a,b)) for a,b in ((x,y),(X,y),(X,Y),(x,Y))]
+        yield 2,z,1,mat,floor
         t = CEILING
         yield 2,t,-1,None,[(x,Y,t),(X,Y,t),(X,y,t),(x,y,t)]
         for di,dj,axis,k,sign in [(-1,0,0,x,1),(1,0,0,X,-1),(0,-1,1,y,1),(0,1,1,Y,-1)]:
@@ -44,6 +69,8 @@ class Ground:
                 continue
             ring = ([(k,y,z),(k,Y,z),(k,Y,top),(k,y,top)] if axis==0 else
                     [(x,k,z),(x,k,top),(X,k,top),(X,k,z)])
+            if not neighbor:
+                ring = [(a,b,c if c == CEILING else c + elevation(a,b)) for a,b,c in ring]
             yield axis,k,sign,('concrete' if mat=='concrete' else 'bank') if neighbor else None,ring[::sign]
 
     def draw(self, scene):
@@ -64,11 +91,24 @@ class Ground:
                 plane_ids[axis,k] = len(planes)
                 planes.append((*[float(i==axis) for i in range(3)],k/UNIT))
             return plane_ids[axis,k]
+        floor_designators = {}
+        def floor_plane(ring):
+            (x,y,z),(X,_,east),(_,Y,north),_ = ring
+            dx,dy = (east-z)/(X-x), (north-east)/(Y-y)
+            if dx == 0 and dy == 0:
+                return plane(2,z)
+            length = math.sqrt(dx*dx + dy*dy + 1)
+            designator = len(planes)
+            planes.append((-dx/length,-dy/length,1/length,(z-dx*x-dy*y)/(UNIT*length)))
+            return designator
         for (i,j) in self.cells:
             leaf_ids[i,j] = signed_index(len(leaves))
             first = len(refs)
-            for axis,k,sign,_,ring in self.faces(i,j):
-                designator = plane(axis,k)
+            for axis,k,sign,mat,ring in self.faces(i,j):
+                if axis == 2 and sign > 0:
+                    designator = floor_designators[i,j] = floor_plane(ring)
+                else:
+                    designator = plane(axis,k)
                 if sign<0: designator=signed_index(designator)
                 surface = len(surfaces)
                 refs.append((designator,signed_index(surface)))
@@ -93,7 +133,7 @@ class Ground:
                     if vertices[a][3]<0: vertices[a][3]=eid
                 for n,(eid,side) in enumerate(sides):
                     edges[eid][2+side]=sides[(n+1)%4][0]
-                surfaces.append((designator,sides[0][0],0,255,-1))
+                surfaces.append((designator,sides[0][0],0,255,1 if mat == "concrete" else 0))
             leaves.append((0,len(refs)-first,first))
 
         # The engine starts at node zero. Outside the four shores or ceiling is
@@ -111,7 +151,7 @@ class Ground:
                 mid=(j+J)//2
                 nodes[n]=(plane(1,self.ys[mid]),split(i,I,j,mid),split(i,I,mid,J))
             else:
-                nodes[n]=(plane(2,self.cells[i,j][0]),-1,leaf_ids[i,j])
+                nodes[n]=(floor_designators[i,j],-1,leaf_ids[i,j])
             return n
         split(0,len(self.xs)-1,0,len(self.ys)-1)
         assert all(e[5]>=0 for e in edges), 'ground boundary has an unpaired face'

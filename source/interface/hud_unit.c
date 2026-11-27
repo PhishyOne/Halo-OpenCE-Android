@@ -89,7 +89,7 @@ symbols in this file:
 #include "network_chat.h" /* port: port/linux/game/network_chat.c */
 
 #ifdef HALO_ANDROID
-#include "battle_royale_flight.h"
+#include "battle_royale_island.h"
 #endif
 
 /* ---------- constants */
@@ -913,13 +913,12 @@ void hud_render_unit_interface(
 				struct unit_hud_interface_definition *hud_definition =
 					unit_hud_interface_definition_get(unit_hud_indices[unit_count]);
 
-				/* The Android island overlay draws the local Spartan's two
-                   vitals together. Vehicle-specific instruments remain native. */
-                boolean draw_vitals = TRUE;
+				/* The island overlay draws the local Spartan's two vitals. */
+				boolean draw_vitals = TRUE;
 #ifdef HALO_ANDROID
-                draw_vitals = unit_count != 0 || !battle_royale_island_map();
+				draw_vitals = unit_count != 0 || !battle_royale_island_active();
 #endif
-                if (draw_vitals && hud_definition->background.interface_bitmap.index != NONE)
+				if (draw_vitals && hud_definition->background.interface_bitmap.index != NONE)
 				{
 					short draw_flags = 0;
 

@@ -30,8 +30,13 @@ static struct {
 	struct br_storm_view storm;
 	long damage_tag;
 	int elapsed, ticks;
-	boolean active, landed, elimination, trace;
+	boolean active, landed, elimination, trace, highlands;
 } island;
+
+boolean battle_royale_island_active(void)
+{
+	return island.active;
+}
 
 void battle_royale_island_reset(void)
 {
@@ -51,6 +56,7 @@ void battle_royale_island_begin(const struct br_drop_route *route, const struct 
 	if ((game_connection() != _game_connection_local && !network_game_is_splitscreen_local()) ||
 		!pool->site_count || !(half_x > 0 && half_y > 0))
 		return;
+	island.highlands = tag_loaded('scnr', "levels\\halo_royale\\east_millworks") != NONE;
 	island.route = *route;
 	island.island.x = (route->upper.x + route->lower.x) * .5f;
 	island.island.y = (route->upper.y + route->lower.y) * .5f;
@@ -118,7 +124,7 @@ static void publish_map(void)
 	struct unit_datum *u = p && p->unit_index != NONE ? unit_try_and_get(p->unit_index) : NULL;
 	struct br_storm_view *s = &island.storm;
 	real_point3d pos;
-	float values[24];
+	float values[25];
 	if (!u || TEST_FLAG(u->object.damage_flags, _object_dead_bit)) {
 		host_royale_map_publish(NULL);
 		return;
@@ -135,6 +141,7 @@ static void publish_map(void)
 	values[18] = island.route.start.x; values[19] = island.route.start.y;
 	values[20] = island.route.end.x; values[21] = island.route.end.y;
 	values[22] = u->object.shield_vitality; values[23] = u->object.body_vitality;
+	values[24] = island.highlands;
 	host_royale_map_publish(values);
 }
 #endif

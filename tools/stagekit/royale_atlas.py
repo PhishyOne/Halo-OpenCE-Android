@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from island_ground import HALF, UNIT
+from island_ground import HALF, UNIT, elevation
 from orchard import OUTPOSTS, build
 
 DEST = Path(__file__).resolve().parents[2] / 'port/android/app/src/main/assets/royale'
@@ -24,6 +24,13 @@ def bake(folder):
         def point(x, y):
             return (round((x - west) * scale), round((north - y) * scale))
 
+        if name == 'island':
+            # Four elevation bands keep the island's ridgelines legible on a phone.
+            for py in range(0,image.height,4):
+                for px in range(0,image.width,4):
+                    height = elevation(west+(px+2)/scale,north-(py+2)/scale)
+                    color = ('#394634','#46513b','#576047','#656b50')[min(3,int(height/36))]
+                    draw.rectangle((px,py,px+3,py+3), fill=color)
         for material, color in [('field', FIELD), ('water', WATER), ('lane', LANE), ('road', ROAD)]:
             for tri in sector.faces[material]:
                 draw.polygon([point(x, y) for x, y, _ in tri], color)
@@ -34,7 +41,7 @@ def bake(folder):
                 draw.ellipse((px-r, py-r, px+r, py+r), TREES)
         for x, y, w, d in sector.buildings:
             draw.rectangle([point(x, y+d), point(x+w, y)], ROOF)
-        image.convert('P', palette=Image.Palette.ADAPTIVE, colors=16).save(folder / (name + '.png'), optimize=True)
+        image.convert('P', palette=Image.Palette.ADAPTIVE, colors=16).save(folder / ('highlands_' + name + '.png'), optimize=True)
         tiles.append([name, west, south, east, north])
     landmarks = [('East Millworks', 485, -35), ('Orchard Crossing', -12, 15),
                  *((name.replace('_', ' ').title(), x, y) for name, x, y, _ in OUTPOSTS),

@@ -1508,7 +1508,7 @@ static void hud_draw_match_timer(
 	{
 		bounds.x0 = render.camera.window_bounds.x0 - render.camera.viewport_bounds.x0;
 		bounds.x1 = bounds.x0 + 255;
-		bounds.y1 = render.camera.window_bounds.y0 - render.camera.viewport_bounds.y0 + 28;
+		bounds.y1 = render.camera.window_bounds.y0 - render.camera.viewport_bounds.y0 + 83;
 	}
 #endif
 	bounds.y0 = bounds.y1 - (font->ascending_height + font->descending_height);

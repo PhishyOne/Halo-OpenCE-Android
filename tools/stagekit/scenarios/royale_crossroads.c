@@ -21,7 +21,9 @@ static long paint_shader(struct paint const *paint)
 	struct bitmap_data *image;
 	struct bitmap_group_sequence *sequence;
 	struct shader *shader;
-	unsigned long *swatch = cache_bsp_allocate(4);
+	boolean grass = !strcmp(paint->name, "meadow");
+    long bytes = grass ? sizeof(grass_pixels) : sizeof(unsigned long);
+    unsigned long *swatch = cache_bsp_allocate(bytes);
 	long texture, handle;
 	sprintf(name, "orchard\\%s", paint->name);
 	texture = cache_tag_new(FOURCC('b','i','t','m'), NONE, NONE, name, sizeof(*bitmap), &data);
@@ -31,18 +33,22 @@ static long paint_shader(struct paint const *paint)
 	sequence->bitmap_count = 1;
 	image = cache_block(&bitmap->bitmaps, 1, sizeof(*image));
 	image->signature = FOURCC('b','i','t','m');
-	image->width = image->height = image->depth = 1;
-	image->format = 11; /* A8R8G8B8, linear one-texel swatch */
+	image->depth = 1;
+    image->width = image->height = grass ? 128 : 1;
+    image->mipmap_count = grass ? 7 : 0;
+	image->format = 11; /* A8R8G8B8, linear texels */
 	image->flags = 1;
 	image->tag_index = texture;
 	image->cache_block_index = NONE;
 	image->pixels_offset = cache_bsp_file_offset(swatch);
-	image->pixels_size = 4;
-	*swatch = 0xff000000 | paint->rgb;
+	image->pixels_size = bytes;
+    if (grass) memcpy(swatch, grass_pixels, bytes);
+    else *swatch = 0xff000000 | paint->rgb;
 	/* shader_environment and its diffuse base map (tag_schema_render.c). */
 	handle = cache_tag_new(FOURCC('s','e','n','v'), FOURCC('s','h','d','r'), NONE, name, 0x344, &data);
 	shader = data;
 	shader->base.type = 3;
+    shader->base.physics.material_type = !strcmp(paint->name, "concrete") ? _material_stone : _material_dirt;
 	cache_reference((struct tag_reference *)((byte *)data + 0x88), texture);
 	return handle;
 }
@@ -61,6 +67,8 @@ static void write_face(struct ce_vertex *v, float const points[3][3])
 	tangent_length = square_root(edge[0]*edge[0]+edge[1]*edge[1]+edge[2]*edge[2]);
 	for (k=0; k<3; ++k) { normal[k] /= length; edge[k] /= tangent_length; }
 	for (i=0; i<3; ++i) {
+        v[i].uv[0] = points[i][0]/4.f;
+        v[i].uv[1] = points[i][1]/4.f;
 		for (k=0; k<3; ++k) {
 			v[i].xyz[k] = points[i][k]/3.048f;
 			v[i].normal[k] = normal[k];
@@ -75,7 +83,9 @@ static void make_mesh(struct structure_bsp *bsp)
 	struct structure_lightmap *light = cache_bsp_block(&bsp->lightmaps, 1, sizeof(*light));
 	struct structure_material *mat = cache_bsp_block(&light->materials, NUMBEROF(paints), sizeof(*mat));
 	struct structure_surface *surfaces = cache_bsp_block(&bsp->surfaces, NUMBEROF(triangles), sizeof(*surfaces));
-	byte *cluster = bsp->clusters.address;
+	struct structure_collision_material *ground_materials = cache_bsp_block(
+        &bsp->collision_materials, 2, sizeof(*ground_materials));
+    byte *cluster = bsp->clusters.address;
 	/* The named block offsets follow structure_visibility_cluster's engine layout. */
 	struct subcluster *sub = cache_bsp_block((struct tag_block *)(cluster+0x34), NUMBEROF(cells), sizeof(*sub));
 	long next_face = 0;
@@ -93,7 +103,13 @@ static void make_mesh(struct structure_bsp *bsp)
 	for (material=0; material<NUMBEROF(paints); ++material, ++mat) {
 		long count = paints[material].count;
 		struct ce_vertex *v = cache_bsp_allocate(count*3*sizeof(*v));
-		cache_reference(&mat->shader, paint_shader(&paints[material]));
+		long shader = paint_shader(&paints[material]);
+        cache_reference(&mat->shader, shader);
+        if (!strcmp(paints[material].name, "meadow") || !strcmp(paints[material].name, "concrete")) {
+            int stone = !strcmp(paints[material].name, "concrete");
+            cache_reference(&ground_materials[stone].shader, shader);
+            ground_materials[stone].runtime_physics_material_type = stone ? _material_stone : _material_dirt;
+        }
 		mat->first_surface_index = face;
 		mat->surface_count = count;
 		mat->breakable_surface_index = NONE;
@@ -188,4 +204,4 @@ static void crossroads_build(struct stage *stage)
 
 struct stagekit_scenario const scenario_royale_crossroads = {
 	"royale_crossroads", "Halo Royale: Orchard Crossing",
-	crossroads_build, ROYALE_HALF_WIDTH, 0x400000 };
+	crossroads_build, ROYALE_HALF_WIDTH, 0x900000 };

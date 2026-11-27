@@ -2,6 +2,7 @@
 #define BATTLE_ROYALE_ISLAND_H
 #include "battle_royale_scatter.h"
 
+boolean battle_royale_island_active(void);
 void battle_royale_island_reset(void);
 void battle_royale_island_begin(const struct br_drop_route *route, const struct br_drop_pool *pool, uint32_t seed);
 void battle_royale_island_landed(void);

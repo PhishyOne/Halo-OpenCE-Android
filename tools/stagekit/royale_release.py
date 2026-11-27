@@ -7,6 +7,7 @@ from pathlib import Path, PureWindowsPath
 
 from reclaimer.hek.defs.sbsp import sbsp_def
 from reclaimer.hek.defs.scnr import scnr_def
+from reclaimer.hek.defs.sky_ import sky__def
 from reclaimer.meta.halo_map import get_map_header, get_tag_index
 from supyr_struct.buffer import get_rawdata
 
@@ -98,7 +99,7 @@ def configure_multiplayer(scenario, sky):
             start.type_0.set_to('all_games')
 
 
-def prepare_geometry(geometry, authored, sky):
+def prepare_geometry(geometry, authored, sky, scenario_path=SCENARIO):
     indexed = cache_index(geometry, 'sp')
     fixed = {STAGE, BSP, EMPTY_MODEL}
     expected = fixed | {name for name in indexed if name.startswith('orchard\\')}
@@ -114,7 +115,7 @@ def prepare_geometry(geometry, authored, sky):
 
     tag = scnr_def.build(filepath=files[STAGE])
     configure_multiplayer(tag.data.tagdata, sky)
-    destination = tag_file(authored, SCENARIO + '.scenario')
+    destination = tag_file(authored, scenario_path + '.scenario')
     destination.parent.mkdir(parents=True, exist_ok=True)
     tag.serialize(filepath=destination, temp=False, backup=False)
 
@@ -125,7 +126,7 @@ def prepare_geometry(geometry, authored, sky):
     for cluster in clusters:
         cluster.sky = 0  # the StageKit fixture has no sky; the playable scenario has one
     bsp.serialize(filepath=files[BSP], temp=False, backup=False)
-    return (expected - {STAGE}) | {SCENARIO + '.scenario'}
+    return (expected - {STAGE}) | {scenario_path + '.scenario'}
 
 
 def private_map(geometry, stock, sky, output):
@@ -140,10 +141,22 @@ def private_map(geometry, stock, sky, output):
     with tempfile.TemporaryDirectory(dir=output.parent) as folder:
         authored = Path(folder) / 'tags'
         authored.mkdir()
-        expected = required | prepare_geometry(geometry, authored, sky)
+        # A distinct cache name allows the Android importer to keep the original island.
+        scenario_path = r'levels\halo_royale\east_millworks' if output.stem == 'east_millworks' else SCENARIO
+        expected = required | prepare_geometry(geometry, authored, sky, scenario_path)
+        # The stock afternoon sky reaches maximum fog after 274 m. The
+        # island is 8 km across and Echo 419 flies at 240 m above the plain.
+        sky_tag = sky__def.build(filepath=tag_file(stock, sky + '.sky'))
+        atmosphere = sky_tag.data.tagdata
+        atmosphere.outdoor_fog_start_distance = 175
+        atmosphere.outdoor_fog_opaque_distance = 1250
+        atmosphere.outdoor_fog_maximum_density = .36
+        sky_output = tag_file(authored, sky + '.sky')
+        sky_output.parent.mkdir(parents=True, exist_ok=True)
+        sky_tag.serialize(filepath=sky_output, temp=False, backup=False)
         built = Path(folder) / 'halo_royale.map'
         subprocess.run(['invader-build', '-g', 'gbx-custom', '-r', 'none', '-t', str(authored),
-                        '-t', str(stock), '-o', str(built), SCENARIO], check=True)
+                        '-t', str(stock), '-o', str(built), scenario_path], check=True)
         absent = sorted(expected - cache_index(built, 'mp'))
         if absent:
             raise ValueError('Compiled map is missing tags: ' + ', '.join(absent))
