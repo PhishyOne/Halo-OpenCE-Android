@@ -701,7 +701,7 @@ public class LauncherActivity extends Activity {
         row.addView(check, new LinearLayout.LayoutParams(0, -2, 1f));
     }
 
-    private void addDisplayCheck(LinearLayout row, String label, File flag) {
+    private void addDisplayCheck(LinearLayout row, String label, File flag, boolean defaultOn) {
         CheckBox check = new CheckBox(this);
         check.setText(label);
         addSetupCheck(row, check);
@@ -709,15 +709,15 @@ public class LauncherActivity extends Activity {
             check.setEnabled(false);
             return;
         }
-        check.setChecked(flag.isFile());
+        check.setChecked(defaultOn != flag.isFile());
         check.setOnClickListener(view -> {
             try {
-                if (check.isChecked()) flag.createNewFile();
+                if (check.isChecked() != defaultOn) flag.createNewFile();
                 else java.nio.file.Files.deleteIfExists(flag.toPath());
-                if (flag.isFile() != check.isChecked())
+                if ((defaultOn != flag.isFile()) != check.isChecked())
                     throw new java.io.IOException("Setting did not change");
             } catch (java.io.IOException error) {
-                check.setChecked(flag.isFile());
+                check.setChecked(defaultOn != flag.isFile());
                 HaloNotice.makeText(this, "Couldn't save " + label,
                     HaloNotice.LENGTH_SHORT).show();
             }
@@ -1304,8 +1304,8 @@ public class LauncherActivity extends Activity {
         toolsPage.addView(displayPanel);
         displayPanel.addView(hudSection("DISPLAY"));
         LinearLayout displayChecks = setupChecks(displayPanel);
-        addDisplayCheck(displayChecks, "Distant players & objects", new File(dataRoot, "map_draw_distance.enabled"));
-        addDisplayCheck(displayChecks, "Show FPS", new File(dataRoot, "launcher_fps.enabled"));
+        addDisplayCheck(displayChecks, "Distant players & objects", new File(dataRoot, "map_draw_distance.stock"), true);
+        addDisplayCheck(displayChecks, "Show FPS", new File(dataRoot, "launcher_fps.enabled"), false);
         displayPanel.addView(lanText("Applies the next time you launch Halo.", 11));
 
         // Seven visible user actions. Preserve validation/rollback in the
