@@ -10,6 +10,8 @@
 #include "structures/structure_bsp_definitions.h"
 #include "units/bipeds.h"
 #include "units/vehicle_definitions.h"
+#include "network_chat.h"
+#include "network_distributed.h"
 #include "battle_royale_flight.h"
 
 char const *config_string(char const *name);
@@ -21,7 +23,7 @@ enum rider_state { EMPTY, ABOARD, FALLING };
 struct rider {
 	long player, biped;
 	enum rider_state state;
-	boolean overflow, was_visible, had_collisions, had_safe_fall, jump_held;
+	boolean overflow, was_visible, had_collisions, had_safe_fall, jump_held, requested;
 };
 
 static struct {
@@ -54,9 +56,7 @@ void battle_royale_flight_reset(void)
 			++ends;
 		}
 	}
-	if (starts != 1 || ends != 1 || !global_structure_bsp ||
-		!point_in_rectangle3d(&flight.entry, &global_structure_bsp->world_bounds) ||
-		!point_in_rectangle3d(&flight.exit, &global_structure_bsp->world_bounds))
+	if (starts != 1 || ends != 1)
 		return;
 	flight.heading.i = flight.exit.x - flight.entry.x;
 	flight.heading.j = flight.exit.y - flight.entry.y;
@@ -75,6 +75,15 @@ static boolean board_roster(void)
 	struct data_iterator it;
 	struct player_datum *player;
 	int count = 0;
+	struct structure_bsp *bsp;
+	if (global_structure_bsp_index_get() == NONE)
+		return FALSE;
+	bsp = global_structure_bsp_get();
+	if (!point_in_rectangle3d(&flight.entry, &bsp->world_bounds) ||
+		!point_in_rectangle3d(&flight.exit, &bsp->world_bounds)) {
+		flight.enabled = FALSE;
+		return FALSE;
+	}
 	data_iterator_new(&it, player_data);
 	while ((player = data_iterator_next(&it))) {
 		if (player->quit_out_of_game)
@@ -122,6 +131,33 @@ static boolean board_roster(void)
 	}
 	platform_log("Echo 419: boarded %d", count);
 	return TRUE;
+}
+
+/* Every passenger uses the existing Jump action over the normal input stream.
+   Keep their look direction, but consume combat/use until they leave the bay. */
+void battle_royale_cabin_controls(long player, struct player_action *action)
+{
+	struct rider *r;
+	boolean jump;
+	if (!flight.started || !flight.enabled)
+		return;
+	r = &flight.riders[DATUM_INDEX_TO_ABSOLUTE_INDEX(player)];
+	if (r->state != ABOARD || r->player != player)
+		return;
+	jump = TEST_FLAG(action->control_flags, _unit_control_jump_bit);
+	if (flight.tick >= OPEN_TICK && jump && !r->jump_held)
+		r->requested = TRUE;
+	r->jump_held = jump;
+	action->control_flags = 0;
+	action->primary_trigger = 0;
+}
+
+static void cabin_notice(char const *message)
+{
+	if (game_connection() == _game_connection_network_server)
+		distributed_send_notice(message);
+	else
+		network_chat_host_notice(message);
 }
 
 static void restore_rider(struct rider *r, struct biped_datum *b)
@@ -185,7 +221,10 @@ void battle_royale_flight_tick(void)
 		if (!board_roster())
 			return;
 		flight.started = TRUE;
+		cabin_notice("Aboard Echo 419. Stand by.");
 	}
+	if (flight.tick == OPEN_TICK)
+		cabin_notice("Drop zone open. Press Jump to leave Echo 419.");
 	t = MIN(flight.tick, EXIT_TICK) / (real)EXIT_TICK;
 	position.x = flight.entry.x + (flight.exit.x-flight.entry.x)*t;
 	position.y = flight.entry.y + (flight.exit.y-flight.entry.y)*t;
@@ -205,7 +244,6 @@ void battle_royale_flight_tick(void)
 		struct rider *r = &flight.riders[slot];
 		struct biped_datum *b;
 		struct player_datum *player;
-		boolean jump;
 		if (r->state == EMPTY)
 			continue;
 		b = biped_try_and_get(r->biped);
@@ -221,8 +259,7 @@ void battle_royale_flight_tick(void)
 			steer(r, b);
 			continue;
 		}
-		jump = TEST_FLAG(b->unit.control_flags, _unit_control_jump_bit);
-		if (flight.tick >= LAST_JUMP || (flight.tick >= OPEN_TICK && jump && !r->jump_held) ||
+		if (flight.tick >= LAST_JUMP || r->requested ||
 			(!ship && !flight.fixture)) {
 			release(r, b, position, slot);
 		} else if (r->overflow) {
@@ -232,7 +269,6 @@ void battle_royale_flight_tick(void)
 			object_set_position(r->biped, &cabin, NULL, NULL);
 			b->object.translational_velocity = *global_zero_vector3d;
 		}
-		r->jump_held = jump;
 	}
 	if (!active && flight.tick >= EXIT_TICK)
 		flight.enabled = FALSE;
