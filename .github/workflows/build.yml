@@ -1,7 +1,7 @@
 name: Build
 on:
   push:
-    branches: [halo/android-build-v83]
+    branches: [halo/android-build-v84]
 permissions:
   contents: read
 concurrency:
@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
-      HALO_ANDROID_VERSION_CODE: '83'
+      HALO_ANDROID_VERSION_CODE: '84'
       HALO_ANDROID_EXPERIMENT_PACKAGE: 'true'
     steps:
       - name: Install the toolchain
@@ -38,7 +38,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          ref: 9ac02293cb6af5b77662f47ee31bfbefc84b0b48
+          ref: 5fd59ee1ac41dd1093feff0f115087627a0d9685
 
       - uses: actions/cache@v4
         with:
@@ -379,7 +379,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 9ac02293cb6af5b77662f47ee31bfbefc84b0b48
+          ref: 5fd59ee1ac41dd1093feff0f115087627a0d9685
 
       - uses: actions/cache@v4
         with:
@@ -419,7 +419,7 @@ jobs:
           pacman -Syu --noconfirm --needed git python python-pytest ninja clang lld gcc lib32-glibc lib32-gcc-libs sdl3 lib32-sdl3
       - uses: actions/checkout@v4
         with:
-          ref: 9ac02293cb6af5b77662f47ee31bfbefc84b0b48
+          ref: 5fd59ee1ac41dd1093feff0f115087627a0d9685
       - name: Build the offline game and run inventory regressions
         run: |
           python configure.py --release --lto=off --pgo=off
