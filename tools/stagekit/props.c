@@ -151,7 +151,7 @@ static long box_collision_model(
 
 	model = data;
 	node = cache_block(&model->nodes, 1, sizeof(*node));
-	strcpy(node->name, "box");
+	strcpy(node->name, "root"); /* matches the render model's only node */
 	region = cache_block(&model->resistance.regions, 1, sizeof(*region));
 	permutation = cache_block(&region->permutations, 1, sizeof(*permutation));
 	strcpy(region->name, "box");
@@ -173,8 +173,9 @@ static long obstacle_definition(char const *name, real_rectangle3d const *bounds
 
 	model_handle = box_collision_model(name, bounds);
 
+	/* The Custom Edition scenery root extends the gameplay object with padding. */
 	scenery_handle = cache_tag_new(FOURCC('s', 'c', 'e', 'n'), FOURCC('o', 'b', 'j', 'e'), NONE, name,
-		sizeof(struct object_definition), &data);
+		0x1FC, &data);
 	scenery = data;
 	scenery->object.type = _object_type_scenery;
 	cache_reference(&scenery->object.model, prop_empty_model());
@@ -211,15 +212,23 @@ void prop_box_batch(struct stage *stage, float const shapes[][3], int shape_coun
     int i, k;
     for (i=0; i<shape_count; ++i) {
         char name[48];
-        real_rectangle3d bounds = {{0, shapes[i][0]/3.048f, 0, shapes[i][1]/3.048f, 0, shapes[i][2]/3.048f}};
+        real_rectangle3d bounds;
+        for (k=0; k<3; ++k) {
+            real half = .5f * shapes[i][k] / 3.048f;
+            bounds.n[2*k] = -half;
+            bounds.n[2*k+1] = half;
+        }
         sprintf(name, "orchard\\solid_%d", i);
         cache_reference(&palette[i].reference, obstacle_definition(name, &bounds));
     }
     for (i=0; i<box_count; ++i) {
         placements[i].object.name_index = NONE;
         placements[i].object.palette_entry_index = boxes[i].shape;
+        /* A bridge corner can be buried in the bank. Register its collision
+           at midspan, keeping all six world-space faces in the same place. */
         for (k=0; k<3; ++k)
-            placements[i].object.position.n[k] = boxes[i].position[k]/3.048f;
+            placements[i].object.position.n[k] =
+                (boxes[i].position[k] + .5f * shapes[boxes[i].shape][k])/3.048f;
     }
 }
 
