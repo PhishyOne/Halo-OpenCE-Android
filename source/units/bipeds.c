@@ -274,6 +274,7 @@ symbols in this file:
 #include "render/render_debug.h"
 #include "scenario/scenario.h"
 #include "structures/structure_bsp_definitions.h"
+#include "battle_royale_flight.h" /* port: port/linux/game/battle_royale_flight.c */
 #include "network_coop.h" /* port: port/linux/game/network_coop.c */
 
 /* port: port/linux/game/network_objects.c's (a client deletes the host's
@@ -2413,17 +2414,21 @@ static void biped_update_physics(
 		real_vector2d acceleration;
 		real_vector2d direction;
 		real_vector2d velocity_change;
+		real acceleration_maximum = physics->airborne_acceleration_maximum;
 
 		desired_velocity.i = physics->movement_desired.i * physics->forward.i -
 			physics->forward.j * physics->movement_desired.j;
 		desired_velocity.j = physics->movement_desired.j * physics->forward.i +
 			physics->movement_desired.i * physics->forward.j;
 		scale_vector2d(&desired_velocity, 1.f - physics->movement_penalty, &desired_velocity);
+		/* port: use the assigned drop target during a Halo Royale bot's first descent. */
+		if (battle_royale_guided_velocity(physics->biped_index, &desired_velocity))
+			acceleration_maximum = .0264f;
 		acceleration.i = desired_velocity.i - physics->velocity.i;
 		acceleration.j = desired_velocity.j - physics->velocity.j;
 		direction = acceleration;
-		if (normalize2d(&direction) > physics->airborne_acceleration_maximum)
-			scale_vector2d(&direction, physics->airborne_acceleration_maximum, &velocity_change);
+		if (normalize2d(&direction) > acceleration_maximum)
+			scale_vector2d(&direction, acceleration_maximum, &velocity_change);
 		else
 			velocity_change = acceleration;
 		physics->new_velocity.i = velocity_change.i + physics->velocity.i;
