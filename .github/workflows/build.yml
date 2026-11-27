@@ -38,7 +38,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          ref: f33702385f85080340d71e71d2c168d278e27b16
+          ref: 41b887e2341f9ac604f61e8308f684b4594c5282
 
       - uses: actions/cache@v4
         with:
@@ -367,7 +367,6 @@ jobs:
           retention-days: 3
 
   web:
-    if: ${{ false }}
     # Emscripten (emsdk, the version below, cached) builds the web port's
     # site (port/web/README.md); the tests check its graph, the page's
     # importer and service worker, its sockets, that it starts in a
@@ -380,7 +379,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: f33702385f85080340d71e71d2c168d278e27b16
+          ref: 41b887e2341f9ac604f61e8308f684b4594c5282
 
       - uses: actions/cache@v4
         with:
@@ -410,7 +409,6 @@ jobs:
           python3 tools/ci_build.py web release
 
   offline-engine:
-    if: ${{ false }}
     runs-on: ubuntu-24.04
     container: archlinux:latest
     timeout-minutes: 25
@@ -421,7 +419,7 @@ jobs:
           pacman -Syu --noconfirm --needed git python python-pytest ninja clang lld gcc lib32-glibc lib32-gcc-libs sdl3 lib32-sdl3
       - uses: actions/checkout@v4
         with:
-          ref: f33702385f85080340d71e71d2c168d278e27b16
+          ref: 41b887e2341f9ac604f61e8308f684b4594c5282
       - name: Build the offline game and run inventory regressions
         run: |
           python configure.py --release --lto=off --pgo=off
