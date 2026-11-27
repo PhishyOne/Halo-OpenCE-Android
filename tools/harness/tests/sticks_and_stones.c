@@ -15,6 +15,7 @@ typedef float real;
 #define TEST_FLAG(f,b) (((f)&FLAG(b))!=0)
 #define csmemset memset
 #define ustrncpy wcsncpy
+#include "../../../port/linux/game/vip.h"
 #include "declarations.inc"
 
 static struct game_variant variant;
