@@ -5,6 +5,7 @@
 #include "game/game.h"
 #include "game/game_engine.h"
 #include "game/game_globals.h"
+#include "networking/network_game_globals.h"
 #include "rasterizer/rasterizer.h"
 #include "game/players.h"
 #include "objects/objects.h"
@@ -46,7 +47,9 @@ void battle_royale_island_begin(const struct br_drop_route *route, const struct 
 	float half_x = (route->upper.x - route->lower.x) * .5f;
 	float half_y = (route->upper.y - route->lower.y) * .5f;
 	int i, candidates = 0;
-	if (game_connection() != _game_connection_local || !pool->site_count || !(half_x > 0 && half_y > 0))
+	/* Offline Match creates a split-screen server with remote connections disabled. */
+	if ((game_connection() != _game_connection_local && !network_game_is_splitscreen_local()) ||
+		!pool->site_count || !(half_x > 0 && half_y > 0))
 		return;
 	island.route = *route;
 	island.island.x = (route->upper.x + route->lower.x) * .5f;
