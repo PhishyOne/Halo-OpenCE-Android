@@ -1,14 +1,10 @@
 package com.halo.decomp;
 
 import android.app.Activity;
-import android.content.ClipData;
 import android.content.DialogInterface;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.view.DragEvent;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -89,23 +85,23 @@ final class MatchWorkshopUi {
     }
     private String mapName(String id){return WorkshopMapCatalog.label(maps,id);}
     private WorkshopMapCatalog.MapItem findMap(String id){for(WorkshopMapCatalog.MapItem m:maps)if(m.id.equals(id))return m;return null;}
-    private Bitmap thumbnail(String id,int bound){
-        WorkshopMapCatalog.MapItem m=findMap(id);if(m==null||m.preview==null)return null;
-        try{
-            BitmapFactory.Options o=new BitmapFactory.Options();o.inJustDecodeBounds=true;
-            BitmapFactory.decodeFile(m.preview.getPath(),o);
-            if(o.outWidth<1||o.outHeight<1||o.outWidth>2048||o.outHeight>2048)return null;
-            o.inJustDecodeBounds=false;o.inSampleSize=1;
-            while(Math.max(o.outWidth,o.outHeight)/o.inSampleSize>bound*2)o.inSampleSize*=2;
-            return BitmapFactory.decodeFile(m.preview.getPath(),o);
-        }catch(RuntimeException unavailable){return null;}
-    }
     private View picture(String id,int width,int height){
-        Bitmap b=thumbnail(id,Math.max(width,height));
-        View v;
-        if(b!=null){ImageView image=new ImageView(activity);image.setImageBitmap(b);image.setScaleType(ImageView.ScaleType.CENTER_CROP);image.setContentDescription(mapName(id)+" map preview");v=image;}
-        else {TextView missing=text(findMap(id)==null?"MISSING MAP":"NO PREVIEW",10,HaloTheme.MUTED,true);missing.setGravity(Gravity.CENTER);missing.setBackgroundColor(0xff172b40);v=missing;}
-        v.setLayoutParams(new LinearLayout.LayoutParams(dp(width),dp(height)));return v;
+        WorkshopMapCatalog.MapItem map=findMap(id);
+        FrameLayout frame=new FrameLayout(activity);
+        frame.setBackgroundColor(0xff172b40);
+        TextView label=text(map==null?"MISSING MAP":"NO PREVIEW",10,HaloTheme.MUTED,true);
+        label.setGravity(Gravity.CENTER);
+        frame.addView(label,new FrameLayout.LayoutParams(-1,-1));
+        if(map!=null){
+            ImageView image=new ImageView(activity);
+            image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            image.setVisibility(View.INVISIBLE);
+            frame.addView(image,new FrameLayout.LayoutParams(-1,-1));
+            frame.setContentDescription(map.name+" map preview");
+            WorkshopPictures.show(image,map);
+        }
+        frame.setLayoutParams(new LinearLayout.LayoutParams(dp(width),dp(height)));
+        return frame;
     }
     private void carousel(LinearLayout p,String current,Consumer<String> select){
         if(maps.isEmpty()){label(p,"No installed multiplayer maps. Use Tools / Check My Maps.");return;}
@@ -228,6 +224,7 @@ final class MatchWorkshopUi {
                 value.setOnClickListener(v->editRule(rule,rules,()->value.setText(rule.label+": "+
                     (rules.containsKey(rule.key)?rule.display(rules.get(rule.key)):"Default"))));
                 rows.addView(value);
+                rows.addView(text(rule.description,11,HaloTheme.MUTED,false));
             }
             body.addView(group);
         }
@@ -250,7 +247,7 @@ final class MatchWorkshopUi {
         }
         EditText field=input(values.containsKey(rule.key)?Integer.toString(values.get(rule.key)):"",true);
         field.setHint("Default");
-        HaloDialog d=new HaloDialog.Builder(activity).setTitle(rule.label).setMessage("Allowed range: "+rule.min+"–"+rule.max+". Blank inherits the preset.")
+        HaloDialog d=new HaloDialog.Builder(activity).setTitle(rule.label).setMessage(rule.description+"\n\nAllowed range: "+rule.min+"–"+rule.max+". Blank inherits the preset.")
             .setView(field).setNegativeButton("CANCEL",null).setPositiveButton("APPLY",null).show();
         d.getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener(v->{
             try{String raw=field.getText().toString().trim();if(raw.isEmpty())values.remove(rule.key);
@@ -316,31 +313,18 @@ final class MatchWorkshopUi {
         EditText name=input(draft.name,false);watch(name,v->draft.name=v);body.addView(name);
         pair(body,check("Shuffle",draft.shuffle,b->draft.shuffle=b),check("Loop",draft.loop,b->draft.loop=b));
         label(body,"Drag the dotted handle to reorder. Tap a match to edit.");
-        for(int i=0;i<draft.entries.size();i++){
-            final int index=i;
-            MatchWorkshop.Entry entry=draft.entries.get(i);
-            Button handle=button("⠿",()->choose("REORDER MATCH",new String[]{"Move up","Move down"},-1,v->{int to=index+(v==0?-1:1);if(to>=0&&to<draft.entries.size()){draft.entries.add(to,draft.entries.remove(index));renderPlaylist(draft);}}));
+        PlaylistCards cards=new PlaylistCards(activity,(from,to)->draft.entries.add(to,draft.entries.remove(from)));
+        for(MatchWorkshop.Entry entry:draft.entries){
+            Button handle=button("⠿",()->{});
+            View card=entryRow(entry,handle);
+            card.setBackground(HaloTheme.surface(0xff20384b,0xff102332,HaloTheme.BORDER,3,activity.getResources().getDisplayMetrics().density));
             handle.setContentDescription("Reorder "+mapName(entry.map));
-            handle.setOnLongClickListener(v->v.startDragAndDrop(ClipData.newPlainText("Halo playlist","match"),new View.DragShadowBuilder(v),Integer.valueOf(index),0));
-            final float[] touch={0};
-            handle.setOnTouchListener((v,event)->{
-                if(event.getActionMasked()==MotionEvent.ACTION_DOWN)touch[0]=event.getY();
-                if(event.getActionMasked()==MotionEvent.ACTION_MOVE&&Math.abs(event.getY()-touch[0])>dp(8))
-                    return v.startDragAndDrop(ClipData.newPlainText("Halo playlist","match"),new View.DragShadowBuilder(v),Integer.valueOf(index),0);
-                return false;
-            });
-            View r=entryRow(entry,handle);
-            r.setOnClickListener(v->editEntry(draft,index,entry));
-            r.setOnDragListener((v,event)->{
-                if(!(event.getLocalState() instanceof Integer))return false;
-                if(event.getAction()==DragEvent.ACTION_DROP){
-                    int from=(Integer)event.getLocalState();if(from<0||from>=draft.entries.size())return false;
-                    draft.entries.add(index,draft.entries.remove(from));renderPlaylist(draft);return true;
-                }
-                return true;
-            });
-            body.addView(r);
+            handle.setOnClickListener(v->choose("REORDER MATCH",new String[]{"Move up","Move down"},-1,
+                direction->cards.moveCard(card,cards.indexOfChild(card)+(direction==0?-1:1))));
+            card.setOnClickListener(v->editEntry(draft,cards.indexOfChild(card),entry));
+            cards.addCard(card,handle);
         }
+        body.addView(cards);
         action(body,"+ ADD MATCH",()->{
             if(draft.entries.size()>=MatchWorkshop.MAX_ENTRIES){message("Playlist is full");return;}
             editEntry(draft,-1,library.quick);

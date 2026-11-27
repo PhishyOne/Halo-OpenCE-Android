@@ -277,8 +277,11 @@ jobs:
           javac -d "$RUNNER_TEMP/halo-test-classes" \
             port/android/app/src/main/java/com/halo/decomp/MatchWorkshop.java \
             port/android/app/src/main/java/com/halo/decomp/LobbyModel.java \
+            port/android/app/src/main/java/com/halo/decomp/LobbyName.java \
             port/android/app/src/main/java/com/halo/decomp/LobbyWire.java \
             tools/lan/MatchWorkshopTest.java tools/lan/LobbyModelTest.java tools/lan/LobbyStartTest.java tools/lan/LobbyPlaylistTest.java
+          javac -d "$RUNNER_TEMP/halo-test-classes" port/android/app/src/main/java/com/halo/decomp/StockMapPictures.java port/android/app/src/main/java/com/halo/decomp/CeMapOverview.java tools/lan/MapPicturesTest.java
+          java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.MapPicturesTest
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.MatchWorkshopTest
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LobbyModelTest
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LobbyStartTest
@@ -311,6 +314,7 @@ jobs:
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LanUpdateProtocolTest
           javac -cp "$RUNNER_TEMP/halo-test-classes" -d "$RUNNER_TEMP/halo-test-classes" \
             port/android/app/src/main/java/com/halo/decomp/LanDiscoveryProtocol.java \
+            port/android/app/src/main/java/com/halo/decomp/LobbyName.java \
             tools/lan/LanDiscoveryProtocolTest.java
           java -cp "$RUNNER_TEMP/halo-test-classes" com.halo.decomp.LanDiscoveryProtocolTest
           # Persistent local career journal, deduplication, XP and achievements.

@@ -45,6 +45,11 @@ def build(folder):
             continue
         else:
             flags.append(word)
+    import sys
+    sys.path.insert(0, str(STAGEKIT))
+    from orchard import write_include
+    write_include(folder / "orchard_mesh.inc")
+    flags.extend(["-I", str(folder)])
     sources = sorted(STAGEKIT.glob("*.c")) + sorted((STAGEKIT / "scenarios").glob("*.c")) + \
         sorted((ROOT / "port/linux/game").glob("tag_schema_*.c"))
     program = folder / "stagekit"

@@ -23,11 +23,11 @@ final class LanDiscoveryServer {
     private volatile boolean closed;
     private volatile DatagramSocket listener;
 
-    static LanDiscoveryServer start() { return start(LanDiscoveryProtocol.PORT); }
-    static LanDiscoveryServer start(int port) {
-        if(port!=LanDiscoveryProtocol.PORT&&port!=LanLobbyTransport.PORT)throw new IllegalArgumentException("Invalid discovery port");
+    static LanDiscoveryServer start() { return start(LanDiscoveryProtocol.PORT,null); }
+    static LanDiscoveryServer startLobby(String name) { return start(LanLobbyTransport.PORT,LobbyName.checked(name)); }
+    private static LanDiscoveryServer start(int port,String lobbyName) {
         LanDiscoveryServer server = new LanDiscoveryServer();
-        Thread thread = new Thread(() -> server.serve(port), "Halo-LAN-host-discovery");
+        Thread thread = new Thread(() -> server.serve(port,lobbyName), "Halo-LAN-host-discovery");
         thread.setDaemon(true);
         thread.start();
         return server;
@@ -39,7 +39,7 @@ final class LanDiscoveryServer {
         if (current != null) current.close();
     }
 
-    private void serve(int port) {
+    private void serve(int port,String lobbyName) {
         try (DatagramSocket socket = new DatagramSocket(null)) {
             socket.setReuseAddress(true);
             socket.bind(new InetSocketAddress(port));
@@ -63,7 +63,7 @@ final class LanDiscoveryServer {
                     continue;
                 Inet4Address local = replyInterface(peer.getAddress());
                 if (local == null) continue;
-                byte[] response = LanDiscoveryProtocol.reply(nonce);
+                byte[] response = lobbyName==null?LanDiscoveryProtocol.reply(nonce):LanDiscoveryProtocol.lobbyReply(nonce,lobbyName);
                 // Bind the reply to the eligible private local interface, not
                 // a carrier address. Do not reflect arbitrary payload bytes.
                 try (DatagramSocket outgoing = new DatagramSocket(

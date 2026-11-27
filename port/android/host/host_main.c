@@ -359,6 +359,15 @@ static void *game_main(void *launch_options)
             environment_set(&environment, "HALO_RATING_PRIVATE_ROOT", private_files);
     }
 	environment_set(&environment, "HALO_SAVE_ROOT", save_root);
+	if (!host_title_capture_mode)
+	{
+		snprintf(path, sizeof(path), "%s/map_draw_distance.stock", data_root);
+		if (access(path, F_OK) != 0)
+			environment_set(&environment, "HALO_MAP_DRAW_DISTANCE", "1");
+		snprintf(path, sizeof(path), "%s/launcher_fps.enabled", data_root);
+		if (access(path, F_OK) == 0)
+			environment_set(&environment, "HALO_SHOW_FPS", "1");
+	}
 	if (host_title_capture_mode)
 	{
 		environment_set(&environment, "HALO_LAUNCHER_TITLE_CAPTURE", "1");

@@ -58,7 +58,7 @@ final class LanLobbyTransport {
             }
             if(ips.isEmpty()){close();throw new IOException("Connect Wi-Fi or enable your hotspot before creating a lobby.");}
             address=String.join(" / ",ips);
-            discovery=LanDiscoveryServer.start(PORT);
+            discovery=LanDiscoveryServer.startLobby(model.lobbyName);
             return address;
         }
         String address(){return address;}

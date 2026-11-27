@@ -19,8 +19,10 @@ extern struct stagekit_scenario const scenario_elevator;
 
 extern struct stagekit_scenario const scenario_royale_footprint;
 
+extern struct stagekit_scenario const scenario_royale_crossroads;
+
 static struct stagekit_scenario const *const scenarios[] = { &scenario_walk, &scenario_obstacle, &scenario_elevator,
-	&scenario_royale_footprint };
+	&scenario_royale_footprint, &scenario_royale_crossroads };
 
 /* ---------- public code */
 

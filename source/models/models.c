@@ -117,14 +117,7 @@ enum
 	NUMBER_OF_RASTERIZER_GEOMETRY_FLAGS
 };
 
-enum
-{
-	_render_model_immediate_bit = 0,
-	_render_model_shadow_bit,
-	_render_model_no_planar_fog_bit,
-	_render_model_first_person_bit,
-	NUMBER_OF_RENDER_MODEL_FLAGS
-};
+/* port: shared render-model flags live in models.h. */
 
 enum
 {
@@ -996,8 +989,9 @@ void render_model(
 	/* port: the model measured as display.model_detail says
 	(halo_model_detail_scale, port/linux/src/d3d8_gl.c): stock, in the lines
 	of the 480-line screen */
-	if (level_of_detail_pixels*halo_model_detail_scale(FALSE)>=model->detail_cutoff_pixels[0] ||
-		TEST_FLAG(flags, _render_model_shadow_bit))
+	/* port: a visible world object can keep its lowest exterior geometry. */
+	if (model_detail_visible(level_of_detail_pixels*halo_model_detail_scale(FALSE), model->detail_cutoff_pixels[0],
+		TEST_FLAG(flags, _render_model_distant_object_bit), TEST_FLAG(flags, _render_model_shadow_bit)))
 	{
 		real_matrix4x3 relative_node_matrices[MAXIMUM_NODES_PER_MODEL];
 		struct rasterizer_model_begin_parameters model_parameters;
@@ -1072,6 +1066,10 @@ void render_model(
 			geometry_detail_level_index>=0 && geometry_detail_level_index<NUMBER_OF_DETAIL_LEVELS_PER_MODEL);
 		/* port: stock, unless display.model_detail chose the level */
 		detail_rules = model_detail_rules(model, centroid, radius);
+		/* port: some map authors leave the least detailed slot empty. */
+		if (TEST_FLAG(flags, _render_model_distant_object_bit) &&
+			geometry_detail_level_index == 0 && rasterizer_debug_options.debug_model_lod == NONE)
+			detail_rules = _model_detail_rules_distant;
 
 		if (!TEST_FLAG(flags, _render_model_shadow_bit))
 		{

@@ -89,6 +89,9 @@ symbols in this file:
 #include "structures/structures.h"
 /* port: static transparent part links for the newly loaded model tags. */
 #include "models/models.h"
+#ifdef HALO_ANDROID
+#include "map_draw_distance.h" /* port: per-BSP draw distance */
+#endif
 #include "structure_culling.h" /* port: port/linux/game/structure_culling.c */
 
 /* ---------- constants */
@@ -473,6 +476,10 @@ static void render_player_frame(
 		&camera->position,
 		&render.fog);
 	structure_get_planar_fog((short)render.cluster_index, &render.fog);
+#ifdef HALO_ANDROID
+	/* port: size both world frusta before the engine applies local fog. */
+	map_draw_apply(structure_map_draw_distance, &camera->z_far, &window->rasterizer_camera.z_far);
+#endif
 
 	if (render.fog.atmospheric_maximum_distance != 0.0f &&
 		render.visible_sky_index == NONE &&

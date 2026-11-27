@@ -62,13 +62,13 @@ final class MatchWorkshop {
      * Missing override means inherit the native preset. Native binding is a
      * separate milestone; this is a checked editable draft schema. */
     static final class Rule {
-        final String key, group, label;
+        final String key, group, label, description;
         final Family family;
         final int min,max;
         final int[] choices;
         final String[] labels;
-        Rule(String key,String group,String label,Family family,int min,int max,int[] choices,String[] labels) {
-            this.key=key;this.group=group;this.label=label;this.family=family;
+        Rule(String key,String group,String label,String description,Family family,int min,int max,int[] choices,String[] labels) {
+            this.key=key;this.group=group;this.label=label;this.description=description;this.family=family;
             this.min=min;this.max=max;this.choices=choices;this.labels=labels;
         }
         boolean accepts(int v) {
@@ -88,86 +88,93 @@ final class MatchWorkshop {
             return Integer.toString(v);
         }
     }
-    private static Rule range(String key,String group,String label,Family f,int min,int max) {
-        return new Rule(key,group,label,f,min,max,null,null);
+    private static Rule range(String key,String group,String label,String description,Family f,int min,int max) {
+        return new Rule(key,group,label,description,f,min,max,null,null);
     }
-    private static Rule choice(String key,String group,String label,Family f,int[] values,String... labels) {
-        return new Rule(key,group,label,f,0,0,values,labels.length==values.length?labels:null);
+    private static Rule choice(String key,String group,String label,String description,Family f,int[] values,String... labels) {
+        return new Rule(key,group,label,description,f,0,0,values,labels.length==values.length?labels:null);
     }
-    private static Rule toggle(String key,String group,String label,Family f) {
-        return choice(key,group,label,f,new int[]{0,1},"Off","On");
+    private static Rule toggle(String key,String group,String label,String description,Family f) {
+        return choice(key,group,label,description,f,new int[]{0,1},"Off","On");
     }
-    private static Rule enumeration(String key,String group,String label,Family f,String... labels) {
+    // Halo stores these flags as a prohibition, including in existing saved presets.
+    private static Rule enabledWhenClear(String key,String group,String label,String description,Family f) {
+        return choice(key,group,label,description,f,new int[]{1,0},"Off","On");
+    }
+    private static Rule enumeration(String key,String group,String label,String description,Family f,String... labels) {
         int[] values=new int[labels.length];for(int i=0;i<values.length;i++)values[i]=i;
-        return choice(key,group,label,f,values,labels);
+        return choice(key,group,label,description,f,values,labels);
     }
     static final List<Rule> RULES;
     static {
         ArrayList<Rule> r=new ArrayList<>();
-        r.add(toggle("teams","Match","Team play",null));
-        r.add(range("score_to_win","Match","Score to win",null,1,500));
-        r.add(range("time_limit","Match","Time limit (minutes; 0 unlimited)",null,0,120));
-        r.add(range("lives","Match","Lives (0 unlimited)",null,0,50));
-        r.add(toggle("odd_man_out","Match","Odd man out",null));
-        r.add(range("gravity_percent","Match","Gravity (%)",null,25,200));
-        r.add(range("damage_percent","Match","Damage (%)",null,25,400));
-        r.add(range("respawn_time","Respawn","Respawn delay (seconds)",null,0,60));
-        r.add(range("respawn_time_growth","Respawn","Respawn growth (seconds)",null,0,60));
-        r.add(range("suicide_penalty","Respawn","Suicide penalty (seconds)",null,0,60));
-        r.add(range("health","Players","Health (%)",null,25,400));
-        r.add(toggle("no_shields","Players","No shields",null));
-        r.add(toggle("invisible","Players","Always invisible",null));
-        r.add(toggle("hardcore","Players","Hardcore",null));
-        r.add(toggle("radar","Indicators","Motion sensor",null));
-        r.add(enumeration("radar_players","Indicators","Players on radar",null,"All","Friends","None"));
-        r.add(toggle("friend_indicators","Indicators","Friendly indicators",null));
-        r.add(choice("goal_radar","Indicators","Objective indicator",null,new int[]{0,1,2},"Native option 0","Native option 1","Native option 2"));
-        r.add(toggle("generic_equipment","Weapons","Generic starting equipment",null));
-        r.add(range("weapon_set","Weapons","Weapon set (native option)",null,0,13));
-        r.add(toggle("infinite_grenades","Weapons","Infinite grenades",null));
-        r.add(toggle("no_map_weapons","Weapons","No map weapons",null));
-        r.add(enumeration("loadout","Weapons","Starting loadout",null,"Weapon set","Custom"));
+        r.add(toggle("teams","Match","Team play","Players share a score with their teammates. Turn off for free-for-all.",null));
+        r.add(range("score_to_win","Match","Score to win","Ends the match when a player or team reaches this score.",null,1,500));
+        r.add(range("time_limit","Match","Time limit (minutes)","Ends the match after this many minutes. Set to 0 for unlimited time.",null,0,120));
+        r.add(range("lives","Match","Lives per player","How many lives each player starts with. Set to 0 for unlimited lives.",null,0,50));
+        r.add(toggle("odd_man_out","Match","Odd man out","One eliminated player waits until another player dies before respawning.",null));
+        r.add(range("gravity_percent","Match","Gravity (%)","100% is normal gravity. Lower values let players jump higher and fall more slowly.",null,25,200));
+        r.add(range("damage_percent","Match","Damage (%)","Scales damage dealt in the match. 100% uses normal damage.",null,25,400));
+        r.add(range("respawn_time","Respawn","Respawn delay (seconds)","Base wait before a player can rejoin after dying.",null,0,60));
+        r.add(range("respawn_time_growth","Respawn","Respawn growth (seconds)","Each death adds this much to the next respawn delay. Kills work the delay back down.",null,0,60));
+        r.add(range("suicide_penalty","Respawn","Suicide penalty (seconds)","Extra respawn time after a player causes their own death.",null,0,60));
+        r.add(range("health","Players","Health (%)","Sets player health as a percentage of normal health.",null,25,400));
+        r.add(enabledWhenClear("no_shields","Players","Shields","Turn on to give players energy shields over their health.",null));
+        r.add(toggle("invisible","Players","Always invisible","Give players active camouflage throughout the match.",null));
+        r.add(toggle("hardcore","Players","Hardcore","Disables the motion sensor and aim assist. Enemy kills restore health and shields.",null));
+        r.add(toggle("radar","Indicators","Motion sensor","Show the motion sensor on the HUD.",null));
+        r.add(enumeration("radar_players","Indicators","Players on radar","Choose which players appear on an active motion sensor.",null,"All","Friends","None"));
+        r.add(toggle("friend_indicators","Indicators","Friendly indicators","Show an indicator over friendly players.",null));
+        r.add(enumeration("goal_radar","Indicators","Objective indicator","Choose how players locate the objective on their HUD.",null,"Motion tracker","Navigation marker","Hidden"));
+        r.add(toggle("generic_equipment","Weapons","Generic starting equipment","Use standard starting gear in place of the map’s starting equipment.",null));
+        r.add(enumeration("weapon_set","Weapons","Weapon set","Choose the weapon pool Halo uses on this map.",null,"Normal","Pistols","Assault rifles","Plasma weapons","Snipers","Snipers excluded","Rocket launchers","Shotguns","Short range","Human","Grenades excluded","Covenant","Classic","Heavy"));
+        r.add(toggle("infinite_grenades","Weapons","Infinite grenades","Players can keep throwing grenades without running out.",null));
+        r.add(enabledWhenClear("no_map_weapons","Weapons","Map weapon pickups","Turn on to spawn the map’s weapon pickups.",null));
+        r.add(enumeration("loadout","Weapons","Starting loadout","Use the weapon set’s starting gear or choose two weapons yourself.",null,"Weapon set","Custom"));
         String[] weapons={"None","Random","Assault rifle","Pistol","Shotgun","Sniper rifle","Rocket launcher","Plasma pistol","Plasma rifle","Needler"};
-        r.add(enumeration("primary_weapon","Weapons","Primary weapon",null,weapons));
-        r.add(enumeration("secondary_weapon","Weapons","Secondary weapon",null,weapons));
-        r.add(enumeration("friendly_fire","Teams","Friendly fire",null,"On","Off","Shields only","Explosives only"));
-        r.add(range("friendly_fire_penalty","Teams","Teamkill penalty (seconds)",null,0,60));
-        r.add(toggle("auto_team_balance","Teams","Native auto balance",null));
-        r.add(toggle("force_team_spawns","Teams","Force team spawns",null));
-        r.add(range("vehicle_respawn_time","Vehicles","Respawn (seconds; 0 never)",null,0,300));
+        r.add(enumeration("primary_weapon","Weapons","Primary weapon","First weapon given at spawn with a custom loadout.",null,weapons));
+        r.add(enumeration("secondary_weapon","Weapons","Secondary weapon","Second weapon given at spawn with a custom loadout.",null,weapons));
+        r.add(enumeration("friendly_fire","Teams","Friendly fire","Choose which kinds of damage teammates can deal to each other.",null,"On","Off","Shields only","Explosives only"));
+        r.add(range("friendly_fire_penalty","Teams","Teamkill penalty (seconds)","Extra respawn time charged to a player for killing a teammate.",null,0,60));
+        r.add(toggle("auto_team_balance","Teams","Automatic team balance","Let Halo balance team sizes.",null));
+        r.add(toggle("force_team_spawns","Teams","Force team spawns","Restrict players to starting locations assigned to their team.",null));
+        r.add(range("vehicle_respawn_time","Vehicles","Vehicle respawn (seconds)","Time before a vehicle returns to its spawn. Set to 0 to disable vehicle respawns.",null,0,300));
         for(String side:new String[]{"red","blue"}) {
-            r.add(choice(side+"_vehicle_set","Vehicles",side+" vehicle selection",null,new int[]{254,255},"Map placed (PC)","Custom counts"));
+            r.add(choice(side+"_vehicle_set","Vehicles",side+" vehicle selection","Use this team’s map placements or set its vehicle counts below.",null,new int[]{254,255},"Map placed (PC)","Custom counts"));
             for(String v:new String[]{"warthogs","ghosts","scorpions","rocket_warthogs","banshees","gun_turrets"})
-                r.add(range(side+"_"+v,"Vehicles",side+" "+v.replace('_',' '),null,0,4));
+                r.add(range(side+"_"+v,"Vehicles",side+" "+v.replace('_',' '),"Requested number for the "+side+" team when using custom counts. Requires compatible map spawns.",null,0,4));
         }
-        r.add(toggle("assault","CTF","Assault",Family.CTF));
-        r.add(toggle("reset_on_capture","CTF","Reset on capture",Family.CTF));
-        r.add(toggle("flag_must_reset","CTF","Flag must reset",Family.CTF));
-        r.add(toggle("flag_at_home_to_score","CTF","Flag at home to score",Family.CTF));
-        r.add(range("single_flag_time","CTF","Single flag time (seconds)",Family.CTF,0,600));
-        r.add(toggle("kills_score","CTF","Kills also score",Family.CTF));
-        r.add(range("points_per_capture","CTF","Points per capture",Family.CTF,5,100));
-        r.add(toggle("no_death_bonus","Slayer","No death bonus",Family.SLAYER));
-        r.add(toggle("no_kill_penalty","Slayer","No kill penalty",Family.SLAYER));
-        r.add(toggle("kill_in_order","Slayer","Kill in order",Family.SLAYER));
-        r.add(toggle("moving_hill","King","Moving hill",Family.KING));
-        r.add(choice("multi_hill","King","Simultaneous hills",Family.KING,new int[]{0,2,3,4,5},"One","Two","Three","Four","Five"));
-        r.add(toggle("random_start","Oddball","Random start",Family.ODDBALL));
-        r.add(toggle("ball_spawn_delay","Oddball","Ball spawn delay",Family.ODDBALL));
-        r.add(range("ball_spawn_count","Oddball","Ball count",Family.ODDBALL,1,16));
-        for(String key:new String[]{"speed_with_ball","trait_with_ball","trait_without_ball","ball_type"})
-            r.add(range(key,"Oddball",key.replace('_',' ')+" (native option)",Family.ODDBALL,0,key.startsWith("trait")?3:2));
-        r.add(range("race_type","Race","Race type (native option)",Family.RACE,0,2));
-        r.add(range("team_scoring","Race","Team scoring (native option)",Family.RACE,0,2));
-        r.add(range("infection_initial_zombies","Infection","Initial zombies",Family.INFECTION,1,16));
-        r.add(range("infection_zombie_speed","Infection","Zombie speed (%)",Family.INFECTION,100,200));
-        r.add(range("infection_skull_damage","Infection","Skull damage (%)",Family.INFECTION,100,250));
-        r.add(range("infection_respawn_time","Infection","Zombie respawn (seconds)",Family.INFECTION,1,30));
-        r.add(range("infection_countdown","Infection","Infection countdown (seconds)",Family.INFECTION,0,30));
-        r.add(toggle("infection_zombie_shields","Infection","Zombie shields",Family.INFECTION));
-        r.add(enumeration("gun_game_order","Gun Game","Weapon order",Family.GUN_GAME,"Strongest first","Weakest first","Random"));
-        r.add(toggle("gun_game_melee_demotes","Gun Game","Melee demotes victim",Family.GUN_GAME));
-        r.add(toggle("killstreak_radio","Rewards","Killstreak announcements",null));
+        r.add(toggle("assault","CTF","Assault","Carry the attacking flag into the enemy base to score.",Family.CTF));
+        r.add(toggle("reset_on_capture","CTF","Reset on capture","Saves the original reset-after-capture setting. This port currently keeps play running after a capture.",Family.CTF));
+        r.add(toggle("flag_must_reset","CTF","Timed flag returns","On makes a dropped friendly flag wait for its return timer. Off lets a teammate return it by touching it.",Family.CTF));
+        r.add(toggle("flag_at_home_to_score","CTF","Flag at home to score","Require your own flag to be at base when you capture the enemy flag.",Family.CTF));
+        r.add(range("single_flag_time","CTF","Single flag time (seconds)","How long each side attacks in one-flag play. Set to 0 for two flags.",Family.CTF,0,600));
+        r.add(toggle("kills_score","CTF","Kills also score","Award points for enemy kills as well as flag captures.",Family.CTF));
+        r.add(range("points_per_capture","CTF","Points per capture","Points a successful flag capture adds when kills also score.",Family.CTF,5,100));
+        r.add(enabledWhenClear("no_death_bonus","Slayer","Death speed bonus","Getting killed increases your movement speed, up to 150% of normal.",Family.SLAYER));
+        r.add(enabledWhenClear("no_kill_penalty","Slayer","Kill speed penalty","Scoring a kill reduces your movement speed, down to 90% of normal.",Family.SLAYER));
+        r.add(toggle("kill_in_order","Slayer","Kill in order","Only kills against your assigned target count toward your score.",Family.SLAYER));
+        r.add(toggle("moving_hill","King","Moving hill","Move the scoring zone between hill locations during the match.",Family.KING));
+        r.add(choice("multi_hill","King","Simultaneous hills","Number of scoring hills active at once, where the map supports them.",Family.KING,new int[]{0,2,3,4,5},"One","Two","Three","Four","Five"));
+        r.add(toggle("random_start","Oddball","Random start","Choose a random Oddball spawn from the map’s ball locations.",Family.ODDBALL));
+        r.add(toggle("ball_spawn_delay","Oddball","Ball spawn delay","Saves the original delay setting. This port currently uses its standard ball spawn timer.",Family.ODDBALL));
+        r.add(range("ball_spawn_count","Oddball","Ball count","Number of balls in play at the same time.",Family.ODDBALL,1,16));
+        r.add(enumeration("speed_with_ball","Oddball","Carrier speed","Movement speed for the player holding the ball.",Family.ODDBALL,"Slow","Normal","Fast"));
+        String[] traits={"None","Invisibility","Extra damage","Damage resistance"};
+        r.add(enumeration("trait_with_ball","Oddball","Carrier trait","Ability granted to the player holding the ball.",Family.ODDBALL,traits));
+        r.add(enumeration("trait_without_ball","Oddball","Non-carrier trait","Ability granted to players who are not holding the ball.",Family.ODDBALL,traits));
+        r.add(enumeration("ball_type","Oddball","Ball type","Choose standard ball possession, Reverse Tag, or Juggernaut rules.",Family.ODDBALL,"Normal","Reverse Tag","Juggernaut"));
+        r.add(enumeration("race_type","Race","Race type","Take checkpoints in order, in any order, or race everyone to the active rally point.",Family.RACE,"In order","Any order","Rally"));
+        r.add(enumeration("team_scoring","Race","Team laps","Count the fewest, the most, or the sum of laps completed by teammates.",Family.RACE,"Lowest lap count","Highest lap count","Total laps"));
+        r.add(range("infection_initial_zombies","Infection","Initial zombies","Number of players chosen as zombies at the start of Infection.",Family.INFECTION,1,16));
+        r.add(range("infection_zombie_speed","Infection","Zombie speed (%)","Zombie movement speed relative to a normal player.",Family.INFECTION,100,200));
+        r.add(range("infection_skull_damage","Infection","Skull damage (%)","Damage dealt by a zombie’s skull compared with its standard hit.",Family.INFECTION,100,250));
+        r.add(range("infection_respawn_time","Infection","Zombie respawn (seconds)","Time a zombie waits to return after dying.",Family.INFECTION,1,30));
+        r.add(range("infection_countdown","Infection","Infection countdown (seconds)","Seconds before the first zombies are chosen.",Family.INFECTION,0,30));
+        r.add(toggle("infection_zombie_shields","Infection","Zombie shields","Give zombies energy shields.",Family.INFECTION));
+        r.add(enumeration("gun_game_order","Gun Game","Weapon order","Choose how the weapon ladder progresses after each qualifying kill.",Family.GUN_GAME,"Strongest first","Weakest first","Random"));
+        r.add(toggle("gun_game_melee_demotes","Gun Game","Melee demotes victim","A melee kill moves the victim back one step on the weapon ladder.",Family.GUN_GAME));
+        r.add(toggle("killstreak_radio","Rewards","Killstreak announcements","Play spoken announcements when a player earns a killstreak reward.",null));
         RULES=Collections.unmodifiableList(r);
     }
     static Rule rule(String key) { for(Rule r:RULES) if(r.key.equals(key)) return r;return null; }

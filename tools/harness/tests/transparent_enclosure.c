@@ -1,4 +1,5 @@
 #include "harness.h"
+#define NUMBEROF(a) (sizeof(a) / sizeof((a)[0]))
 #include <math.h>
 #include <stdint.h>
 typedef unsigned short word;

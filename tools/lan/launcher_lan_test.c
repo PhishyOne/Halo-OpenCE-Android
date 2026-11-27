@@ -99,11 +99,11 @@ int main(int argc,char **argv){
     setenv("HALO_LOBBY_PLAYLIST",playlist?"1":"0",1);
     setenv("HALO_LOBBY_MAP",!strcmp(test,"ce")?"ce:example":!strcmp(test,"path")?"ce:../bad":"bloodgulch",1);
     setenv("HALO_LOBBY_MODE",ffa?"slayer":"ctf",1);
-    setenv("HALO_LOBBY_ROSTER",ffa?"20b0041,2070042":"00b0041,1070042",1);
+    setenv("HALO_LOBBY_ROSTER",ffa?"2110041,2070042":"0110041,1070042",1);
     setenv("HALO_LOBBY_SEAT",guest?"1":"0",1);setenv("HALO_LOBBY_PEER",guest?"192.168.43.1":"",1);
     setenv("HALO_LOBBY_BINDINGS",guest?"":"00000000c0a82b03",1);
     setenv("HALO_LOBBY_BOTS","3",1);setenv("HALO_LOBBY_RED",ffa?"0":"2",1);
-    if(!strcmp(test,"badrows"))setenv("HALO_LOBBY_ROSTER","00b0041,",1);
+    if(!strcmp(test,"badrows"))setenv("HALO_LOBBY_ROSTER","0110041,",1);
     if(!strcmp(test,"badseat"))setenv("HALO_LOBBY_SEAT","16",1);
     if(!strcmp(test,"badmode"))setenv("HALO_LOBBY_RULES","invalid",1);
     if(!strcmp(test,"peer")){setenv("HALO_LOBBY_SEAT","1",1);setenv("HALO_LOBBY_PEER","8.8.8.8",1);}
@@ -113,7 +113,7 @@ int main(int argc,char **argv){
         assert(quit==1&&!client.active&&!starts);return 0;
     }
     assert(client.active&&!quit&&launcher_lan_machine_name(own)&&own[14]==(guest?'1':'0'));
-    assert(profile.player_name[0]==(guest?'B':'A')&&profile.primary_color_index==(guest?7:11));
+    assert(profile.player_name[0]==(guest?'B':'A')&&profile.primary_color_index==(guest?7:17));
     now=1000;launcher_lan_update(1);
     if(guest){
         assert(!server.active&&joined==1&&!starts);launcher_lan_update(1);launcher_lan_update(1);

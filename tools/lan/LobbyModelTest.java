@@ -33,6 +33,10 @@ public final class LobbyModelTest {
         }
     }
     public static void main(String[] args)throws Exception{
+        String[] oldColors={"White","Black","Red","Blue","Gray","Yellow","Green","Orange","Purple","Cyan","Pink","Brown"};
+        for(int i=0;i<oldColors.length;i++)check(oldColors[i].equals(LobbyModel.COLORS[LobbyModel.legacyColor(i)]),"migrated "+oldColors[i]);
+        check(LobbyModel.COLORS.length==18&&LobbyModel.RGB.length==18&&LobbyModel.COLORS[17].equals("Salmon")&&LobbyModel.RGB[17]==0xfff5999e,"native Salmon");
+
         LobbyModel.Plan plan=LobbyModel.Plan.from(MatchWorkshop.Library.empty());
         LobbyModel model=new LobbyModel("Host",0,plan);
         LobbyModel.Snapshot initial=model.hostSnapshot(0);

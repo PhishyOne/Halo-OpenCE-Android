@@ -29,12 +29,14 @@ enum
 {
 	HEADER_BYTES = 0x800,
 	TAG_INDEX_BYTES = 0x28,
-	MAXIMUM_TAGS = 128,
+	MAXIMUM_TAGS = 256,
 	/* a tag handle's salt: any, the same in every reference */
 	HANDLE_SALT = 0x0E00,
 	/* the room kept at the top of the tag cache for the structure BSP */
-	BSP_BYTES = 0x10000,
+	DEFAULT_BSP_BYTES = 0x10000,
 };
+
+static unsigned long bsp_bytes;
 
 /* ---------- structures */
 
@@ -175,8 +177,9 @@ static void tags_finish(
 /* ---------- public code */
 
 void cache_open(
-	void)
+	unsigned long bsp_reserve)
 {
+	bsp_bytes = bsp_reserve ? bsp_reserve : DEFAULT_BSP_BYTES;
 	tag_cache = mmap((void *)CUSTOM_EDITION_TAG_CACHE_ADDRESS, CUSTOM_EDITION_TAG_CACHE_BYTES,
 		PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
 	if (tag_cache != (unsigned char *)CUSTOM_EDITION_TAG_CACHE_ADDRESS)
@@ -196,7 +199,7 @@ void *cache_allocate(
 	void *result = tag_cache + tags_used;
 
 	tags_used = (tags_used + size + 3) & ~3UL;
-	if (tags_used > CUSTOM_EDITION_TAG_CACHE_BYTES - BSP_BYTES)
+	if (tags_used > CUSTOM_EDITION_TAG_CACHE_BYTES - bsp_bytes)
 	{
 		fprintf(stderr, "stagekit: the tags do not fit\n");
 		exit(1);
@@ -231,10 +234,10 @@ void *cache_block_add(
 void *cache_bsp_allocate(
 	unsigned long size)
 {
-	void *result = tag_cache + CUSTOM_EDITION_TAG_CACHE_BYTES - BSP_BYTES + bsp_used;
+	void *result = tag_cache + CUSTOM_EDITION_TAG_CACHE_BYTES - bsp_bytes + bsp_used;
 
 	bsp_used = (bsp_used + size + 3) & ~3UL;
-	if (bsp_used > BSP_BYTES)
+	if (bsp_used > bsp_bytes)
 	{
 		fprintf(stderr, "stagekit: the structure BSP does not fit\n");
 		exit(1);
@@ -320,7 +323,7 @@ void cache_write(
 	long *tag_count)
 {
 	struct cache_header header = { 0 };
-	unsigned long tag_data_offset = HEADER_BYTES + BSP_BYTES;
+	unsigned long tag_data_offset = HEADER_BYTES + bsp_bytes;
 	FILE *file;
 
 	tags_finish();
@@ -340,7 +343,7 @@ void cache_write(
 	header.footer_signature = FOURCC('f', 'o', 'o', 't');
 	file = fopen(path, "wb");
 	if (!file || fwrite(&header, sizeof(header), 1, file) != 1 ||
-		fwrite(tag_cache + CUSTOM_EDITION_TAG_CACHE_BYTES - BSP_BYTES, BSP_BYTES, 1, file) != 1 ||
+		fwrite(tag_cache + CUSTOM_EDITION_TAG_CACHE_BYTES - bsp_bytes, bsp_bytes, 1, file) != 1 ||
 		fwrite(tag_cache, tags_used, 1, file) != 1 ||
 		fclose(file))
 	{
@@ -355,6 +358,11 @@ void cache_bsp_place(
 	struct scenario_structure_bsp_reference *reference)
 {
 	reference->file_offset = HEADER_BYTES;
-	reference->file_size = BSP_BYTES;
-	reference->base_address = tag_cache + CUSTOM_EDITION_TAG_CACHE_BYTES - BSP_BYTES;
+	reference->file_size = bsp_bytes;
+	reference->base_address = tag_cache + CUSTOM_EDITION_TAG_CACHE_BYTES - bsp_bytes;
+}
+
+unsigned long cache_bsp_file_offset(void const *data)
+{
+	return HEADER_BYTES + ((unsigned char const *)data - (tag_cache + CUSTOM_EDITION_TAG_CACHE_BYTES - bsp_bytes));
 }

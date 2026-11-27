@@ -40,6 +40,7 @@ scenarios place (props.c), and a scenario itself (scenarios/).
 #undef strcpy
 #undef strcmp
 #undef memcpy
+#undef memcmp
 #undef memset
 
 /* ---------- constants */
@@ -59,6 +60,7 @@ scenarios place (props.c), and a scenario itself (scenarios/).
 struct stage
 {
 	struct scenario *scenario;
+	struct structure_bsp *bsp;
 };
 
 struct stagekit_scenario
@@ -68,13 +70,15 @@ struct stagekit_scenario
 	/* places what the scenario adds to the stage (stage.c) */
 	void (*build)(struct stage *stage);
 	real half_width;
+	unsigned long bsp_reserve;
 };
 
 /* ---------- prototypes/CACHE.C */
 
 /* the tag cache at the game's address for a Custom Edition map's tags; the
 structure BSP's room at its top */
-void cache_open(void);
+void cache_open(unsigned long bsp_reserve);
+unsigned long cache_bsp_file_offset(void const *data);
 void *cache_allocate(unsigned long size);
 void *cache_block(struct tag_block *block, long count, unsigned long element_size);
 /* one more element at the block's end, zeroed */
@@ -118,6 +122,8 @@ long prop_empty_model(void);
 /* a scenery box standing at position (bounds in its own space), solid to anything */
 void prop_obstacle(struct stage *stage, char const *name, real_rectangle3d const *bounds,
 	real_point3d const *position);
+
+void prop_place_obstacle(struct stage *stage, short palette, real_point3d const *position);
 
 /* a platform (bounds in its own space) at position that rises rise in seconds
 when its position is set to 1 (device_set_position <name> 1) and comes down

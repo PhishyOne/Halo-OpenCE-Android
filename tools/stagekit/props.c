@@ -173,7 +173,6 @@ void prop_obstacle(
 {
 	struct object_definition *scenery;
 	struct scenario_object_palette_entry *palette;
-	struct scenery_placement *placement;
 	long model_handle, scenery_handle;
 	void *data;
 
@@ -190,8 +189,13 @@ void prop_obstacle(
 
 	palette = cache_block_add(&stage->scenario->scenery_palette, sizeof(*palette));
 	cache_reference(&palette->reference, scenery_handle);
-	placement = cache_block_add(&stage->scenario->scenery, sizeof(*placement));
-	placement->object.palette_entry_index = (short)(stage->scenario->scenery_palette.count - 1);
+	prop_place_obstacle(stage, (short)(stage->scenario->scenery_palette.count - 1), position);
+}
+
+void prop_place_obstacle(struct stage *stage, short palette, real_point3d const *position)
+{
+	struct scenery_placement *placement = cache_block_add(&stage->scenario->scenery, sizeof(*placement));
+	placement->object.palette_entry_index = palette;
 	placement->object.name_index = NONE;
 	placement->object.position = *position;
 }

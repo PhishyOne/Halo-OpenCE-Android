@@ -10,8 +10,18 @@ final class LobbyModel {
     static final int MAX_HUMANS=16, NO_TEAM=-1, RED=0, BLUE=1;
     static final long GUEST_EXPIRY_MS=20000, RETURN_TIMEOUT_MS=60000;
     static final int INTERMISSION_SECONDS=5;
-    static final String[] COLORS={"White","Black","Red","Blue","Gray","Yellow","Green","Orange","Purple","Cyan","Pink","Brown"};
-    static final int[] RGB={0xffeeeeee,0xff303030,0xffd95757,0xff568fdf,0xffa3a3a3,0xffeacb47,0xff55bb6e,0xffde9345,0xffad7dde,0xff58c9d9,0xffdf81b6,0xff94734f};
+    // The original profile color indices and RGB swatches in player_profile.c.
+    static final String[] COLORS={"White","Black","Red","Blue","Gray","Yellow","Green","Pink","Purple",
+        "Cyan","Cobalt","Orange","Teal","Sage","Brown","Tan","Maroon","Salmon"};
+    static final int[] RGB={0xffffffff,0xff000000,0xfffe0000,0xff0201e3,0xff707e71,0xffffff01,
+        0xff00ff01,0xffff56b9,0xffab10f4,0xff01ffff,0xff6493ed,0xffff7f00,0xff1ecc91,0xff006401,
+        0xff603814,0xffc69c6c,0xff9d0b0e,0xfff5999e};
+    static int legacyColor(int old){
+        if(old<0||old>11)return 0;
+        if(old==7)return 11;  // Orange
+        if(old==10)return 7;  // Pink
+        return old==11?14:old; // Brown
+    }
 
     static String name(String raw){
         if(raw==null)throw new IllegalArgumentException("Player name required");
@@ -54,17 +64,15 @@ final class LobbyModel {
         MatchWorkshop.Entry entry(int index){return index<0?null:entries.get(index);}
     }
     static final class Snapshot {
-        final String session,self;final long revision;final Plan plan;final List<Member> members;
+        final String session,self,lobbyName;final long revision;final Plan plan;final List<Member> members;
         final String round, startMessage;
         final int startIndex;
         final boolean released;
         final boolean hostBack;
         final int nextIndex, secondsToNext;
-        Snapshot(String session,String self,long revision,Plan plan,List<Member> members){
-            this(session,self,revision,plan,members,"",-1,false,"",false,-1,-1);
-        }
-        Snapshot(String session,String self,long revision,Plan plan,List<Member> members,
+        Snapshot(String session,String self,String lobbyName,long revision,Plan plan,List<Member> members,
                 String round,int startIndex,boolean released,String message,boolean hostBack,int nextIndex,int secondsToNext){
+            this.lobbyName=LobbyName.checked(lobbyName);
             if(round.isEmpty() ? (startIndex!=-1||released) : (startIndex<0||startIndex>=plan.entries.size()))
                 throw new IllegalArgumentException("Invalid launch phase");
             if(message.length()>180)throw new IllegalArgumentException("Invalid launch status");
@@ -216,11 +224,16 @@ final class LobbyModel {
         Joined(String token,Snapshot snapshot){secret=validId(token);this.snapshot=snapshot;}
     }
     private final String session=token();
+    final String lobbyName;
     private final LinkedHashMap<String,Guest> guests=new LinkedHashMap<>();
     private Member host;private Plan plan;private long revision=1;
     // Rows retain each player's ordinary team while FFA or Humans vs Bots is displayed.
     private int versusSide=RED;
     LobbyModel(String name,int color,Plan plan){
+        this(name+"'s lobby",name,color,plan);
+    }
+    LobbyModel(String lobbyName,String name,int color,Plan plan){
+        this.lobbyName=LobbyName.checked(lobbyName);
         this.plan=Objects.requireNonNull(plan);
         host=new Member(token(),name,color,RED,NO_TEAM,true,false);
     }
@@ -433,7 +446,7 @@ final class LobbyModel {
         String message=startMessage;
         if(launch!=null&&!released)message="Checking match on "+waitingFor(prepared);
         if(hostBack)message="Waiting for "+waitingFor(returned)+" to return.";
-        return new Snapshot(session,self,revision,plan,rows,launch==null?"":launch.id,
+        return new Snapshot(session,self,lobbyName,revision,plan,rows,launch==null?"":launch.id,
             launch==null?-1:launch.entryIndex,released,message,hostBack,
             launch==null&&rotation!=null?rotation.peekIndex():-1,secondsToNext);
     }

@@ -203,11 +203,11 @@ void stage_build(
 	char *code;
 	void *data;
 
-	cache_open();
+	cache_open(scenario->bsp_reserve);
 	/* the structure BSP, at the top of the tag cache: its header, then itself */
 	bsp_header = cache_bsp_allocate(sizeof(*bsp_header));
 	bsp = cache_bsp_allocate(sizeof(struct structure_bsp));
-	bsp_header->bsp = bsp;
+	bsp_header->bsp = stage->bsp = bsp;
 	bsp_header->signature = FOURCC('s', 'b', 's', 'p');
 
 	scenario_handle = cache_tag_new(FOURCC('s', 'c', 'n', 'r'), NONE, NONE, "stagekit\\void", sizeof(struct scenario),

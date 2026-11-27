@@ -701,6 +701,29 @@ public class LauncherActivity extends Activity {
         row.addView(check, new LinearLayout.LayoutParams(0, -2, 1f));
     }
 
+    private void addDisplayCheck(LinearLayout row, String label, File flag, boolean defaultOn) {
+        CheckBox check = new CheckBox(this);
+        check.setText(label);
+        addSetupCheck(row, check);
+        if (dataRoot == null) {
+            check.setEnabled(false);
+            return;
+        }
+        check.setChecked(defaultOn != flag.isFile());
+        check.setOnClickListener(view -> {
+            try {
+                if (check.isChecked() != defaultOn) flag.createNewFile();
+                else java.nio.file.Files.deleteIfExists(flag.toPath());
+                if ((defaultOn != flag.isFile()) != check.isChecked())
+                    throw new java.io.IOException("Setting did not change");
+            } catch (java.io.IOException error) {
+                check.setChecked(defaultOn != flag.isFile());
+                HaloNotice.makeText(this, "Couldn't save " + label,
+                    HaloNotice.LENGTH_SHORT).show();
+            }
+        });
+    }
+
     private void setupInput(LinearLayout parent, String label, EditText input) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -1276,6 +1299,14 @@ public class LauncherActivity extends Activity {
         rewardSummary.setContentDescription("3 kills: camo and overshield. 5 kills: refresh and recon. "
             + "10 kills: invisible and invulnerable for 60 seconds. Death or match end cancels protection.");
         killstreakPanel.addView(rewardSummary);
+
+        LinearLayout displayPanel = hudPanel();
+        toolsPage.addView(displayPanel);
+        displayPanel.addView(hudSection("DISPLAY"));
+        LinearLayout displayChecks = setupChecks(displayPanel);
+        addDisplayCheck(displayChecks, "Distant players & objects", new File(dataRoot, "map_draw_distance.stock"), true);
+        addDisplayCheck(displayChecks, "Show FPS", new File(dataRoot, "launcher_fps.enabled"), false);
+        displayPanel.addView(lanText("Applies the next time you launch Halo.", 11));
 
         // Seven visible user actions. Preserve validation/rollback in the
         // underlying import and repair helpers, not in more menu buttons.
