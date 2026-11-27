@@ -194,7 +194,29 @@ def test_landing_clearings_are_open_and_close_to_loot():
             assert min(math.hypot(px-lx, py-ly) for _, (lx, ly, _) in scene.loot) <= 25
             assert all(math.hypot(px-ox, py-oy) > 2*radius for ox, oy in positions)
             positions.append((px, py))
-    assert len(positions) == 256
+    assert len(positions) == 512
+
+
+def check_flown_route(session):
+    import math
+    import re
+    found = re.findall(r'Echo 419: route ([-.\d]+) ([-.\d]+) to ([-.\d]+) ([-.\d]+)', session.log)
+    assert len(found) == 1 and 'using authored fallback' not in session.log
+    ax, ay, bx, by = map(float, found[0])
+    length = math.hypot(bx-ax, by-ay)
+    assert length*3.048 >= 7199.9
+    hx, hy = (bx-ax)/length, (by-ay)/length
+    # Measure the real riding biped's first seconds before it can leave.
+    cabin = [(x,y) for x,y,z in session.places() if z > 77][:3]
+    assert len(cabin) >= 2
+    assert all(abs((y-ay)*hx-(x-ax)*hy) < .1 for x,y in cabin)
+    assert (cabin[1][0]-cabin[0][0])*hx + (cabin[1][1]-cabin[0][1])*hy > 10
+    # The pilot calls Orchard five seconds before the actual closest pass.
+    approach = int(((-ax*hx-ay*hy)/length)*1980+.5)
+    near = abs(ay*hx-ax*hy) < 60 and 240 <= approach < 1800
+    notices = re.findall(r'Orchard Crossing approach at tick (\d+)', session.log)
+    assert [int(tick) for tick in notices] == ([approach-150] if near else [])
+    return found[0]
 
 
 def test_guided_drops_land_near_loot(stagekit, tmp_path):
@@ -219,7 +241,7 @@ def test_guided_drops_land_near_loot(stagekit, tmp_path):
                 data[offset:offset+8] = b'qa_skip_'
         path.write_bytes(data)
         session = runner.play(folder, seconds=70, input='echo419-guide')
-        assert re.findall(r'Orchard Crossing approach at tick (\d+)', session.log) == ['840']
+        check_flown_route(session)
         drops = re.findall(r'dropped seat 0 at tick (\d+)', session.log)
         assert len(drops) == 1 and 90 <= int(drops[0]) < 1800
         selected = re.findall(r'planned clearing 0 spot (\d+) at ([-.\d]+) ([-.\d]+)', session.log)
@@ -246,8 +268,9 @@ def test_complete_map_replays_seeded_drops(stagekit, tmp_path):
         result = re.findall(r'planned clearing (\d+) spot (\d+) at ([-.\d]+) ([-.\d]+)', session.log)
         assert len(result) == 1 and 'guided touchdown at' in session.log
         assert f'drop seed {seed}' in session.log
-        results.append(result[0])
-    assert results[0] == results[2] and results[0][0] != results[1][0]
+        results.append((check_flown_route(session), result[0]))
+    assert results[0] == results[2]
+    assert results[0][0] != results[1][0] and results[0][1] != results[1][1]
 
 
 def test_scatter_over_many_rosters(tmp_path):
@@ -262,6 +285,6 @@ def test_scatter_over_many_rosters(tmp_path):
     subprocess.run([os.environ.get('CC','cc'), '-std=c99', '-Wall', '-Wextra', '-Werror', '-O2',
                     '-ffp-contract=off', '-iquote','port/linux/include','-iquote','port/linux/game',
                     'tools/lan/battle_royale_scatter_test.c', 'port/linux/game/battle_royale_scatter.c',
-                    'port/linux/game/battle_royale_round.c', '-o', str(exe)], cwd=root, check=True)
+                    'port/linux/game/battle_royale_route.c', 'port/linux/game/battle_royale_round.c', '-lm', '-o', str(exe)], cwd=root, check=True)
     sites = ''.join(f'{x/3.048} {y/3.048} 0\n' for _, x, y in orchard.LANDINGS)
     subprocess.run([exe], input=sites, text=True, check=True)

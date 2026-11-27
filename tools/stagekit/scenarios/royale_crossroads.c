@@ -130,7 +130,7 @@ static void crossroads_build(struct stage *stage)
 		}
 		strcpy(flags[i].name, "br_poi_orchard_crossing");
 		flags[i++].position = (real_point3d){{0, 0, 0}};
-		/* The intact campaign Pelican crosses the island diagonally above Orchard Crossing. */
+		/* Flight altitude and fallback endpoints. The host chooses a crossing at boarding. */
 		strcpy(flags[i].name, "echo419_entry");
 		flags[i++].position = (real_point3d){{-3900.f/3.048f, -1400.f/3.048f, 240.f/3.048f}};
 		strcpy(flags[i].name, "echo419_exit");

@@ -29,7 +29,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          ref: f6ce0fdd61b858ebe54bf34271005556944744aa
+          ref: 12b1ef7973add792055691c6ed9c0e593f39df41
 
       - uses: actions/cache@v4
         with:
@@ -72,7 +72,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: f6ce0fdd61b858ebe54bf34271005556944744aa
+          ref: 12b1ef7973add792055691c6ed9c0e593f39df41
 
       - uses: actions/cache@v4
         with:
@@ -112,7 +112,7 @@ jobs:
           pacman -Syu --noconfirm --needed git python python-pytest ninja clang lld gcc lib32-glibc lib32-gcc-libs sdl3 lib32-sdl3
       - uses: actions/checkout@v4
         with:
-          ref: f6ce0fdd61b858ebe54bf34271005556944744aa
+          ref: 12b1ef7973add792055691c6ed9c0e593f39df41
       - name: Build native engine and validator
         run: |
           python configure.py --release --lto=off --pgo=off

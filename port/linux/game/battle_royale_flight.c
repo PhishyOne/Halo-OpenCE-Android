@@ -1,5 +1,4 @@
-/* Echo 419 insertion. The route is authored in the scenario. Only the host
-   moves the craft, releases each original biped and assists its first landing. */
+/* The host chooses Echo 419's crossing, moves the craft and releases each original biped. */
 #include "cseries.h"
 #include "game/game.h"
 #include "game/players.h"
@@ -40,7 +39,7 @@ static struct {
 	struct br_drop_pool drops;
 	uint32_t fixture_seed;
 	boolean has_orchard, guide_fixture;
-	boolean enabled, started, fixture;
+	boolean enabled, started, fixture, route_selected;
 	struct rider riders[HALO_PORT_MAXIMUM_NETWORK_PLAYERS];
 } flight;
 
@@ -98,12 +97,43 @@ void battle_royale_flight_reset(void)
 	flight.enabled = flight.definition != NONE || flight.fixture;
 }
 
+static void select_flight(struct structure_bsp const *bsp)
+{
+	uint32_t seed;
+	flight.route.lower = (struct battle_royale_point){bsp->world_bounds.x0, bsp->world_bounds.y0, bsp->world_bounds.z0};
+	flight.route.upper = (struct battle_royale_point){bsp->world_bounds.x1, bsp->world_bounds.y1, bsp->world_bounds.z1};
+	/* Offline games can reuse the same map seed. Take fresh host-local entropy
+	   once per successful boarding, then isolate the entire manifest's draws. */
+	if (flight.fixture) {
+		seed = flight.fixture_seed;
+	} else {
+		seed = (uint32_t)local_random() << 16;
+		seed |= local_random();
+	}
+	if (!br_choose_route(&flight.route, &flight.drops, seed))
+		platform_log("Echo 419: using authored fallback route");
+	flight.entry = (real_point3d){{flight.route.start.x, flight.route.start.y, flight.route.start.z}};
+	flight.exit = (real_point3d){{flight.route.end.x, flight.route.end.y, flight.route.end.z}};
+	flight.heading.i = flight.route.forward_x;
+	flight.heading.j = flight.route.forward_y;
+	if (flight.has_orchard && point_in_rectangle3d(&flight.orchard, &bsp->world_bounds)) {
+		real across = (flight.orchard.y-flight.entry.y)*flight.heading.i -
+			(flight.orchard.x-flight.entry.x)*flight.heading.j;
+		int pass = br_pass_tick(&flight.route, drop_point(&flight.orchard), 0);
+		if (pass >= BR_DROP_OPEN + POI_LEAD && across > -60.f && across < 60.f)
+			flight.poi_tick = pass - POI_LEAD;
+	}
+	br_drop_shuffle_start(&flight.drops, seed);
+	platform_log("Echo 419: drop seed %u", (unsigned)seed);
+	platform_log("Echo 419: route %.3f %.3f to %.3f %.3f", flight.entry.x, flight.entry.y, flight.exit.x, flight.exit.y);
+	flight.route_selected = TRUE;
+}
+
 static boolean board_roster(void)
 {
 	struct data_iterator it;
 	struct player_datum *player;
 	int count = 0;
-	uint32_t seed;
 	struct structure_bsp *bsp;
 	if (global_structure_bsp_index_get() == NONE)
 		return FALSE;
@@ -112,15 +142,6 @@ static boolean board_roster(void)
 		!point_in_rectangle3d(&flight.exit, &bsp->world_bounds)) {
 		flight.enabled = FALSE;
 		return FALSE;
-	}
-	flight.route.lower = (struct battle_royale_point){bsp->world_bounds.x0, bsp->world_bounds.y0, bsp->world_bounds.z0};
-	flight.route.upper = (struct battle_royale_point){bsp->world_bounds.x1, bsp->world_bounds.y1, bsp->world_bounds.z1};
-	if (flight.has_orchard && point_in_rectangle3d(&flight.orchard, &bsp->world_bounds)) {
-		real across = (flight.orchard.y-flight.entry.y)*flight.heading.i -
-			(flight.orchard.x-flight.entry.x)*flight.heading.j;
-		int pass = br_pass_tick(&flight.route, drop_point(&flight.orchard), 0);
-		if (pass >= BR_DROP_OPEN + POI_LEAD && across > -60.f && across < 60.f)
-			flight.poi_tick = pass - POI_LEAD;
 	}
 	data_iterator_new(&it, player_data);
 	while ((player = data_iterator_next(&it))) {
@@ -132,6 +153,8 @@ static boolean board_roster(void)
 	}
 	if (!count)
 		return FALSE;
+	if (!flight.route_selected)
+		select_flight(bsp);
 	if (flight.definition != NONE) {
 		struct object_placement_data placement;
 		object_placement_data_new(&placement, flight.definition, NONE);
@@ -142,16 +165,6 @@ static boolean board_roster(void)
 			return FALSE;
 		SET_FLAG(object_get(flight.ship)->object.damage_flags, _object_cannot_take_damage_bit, TRUE);
 	}
-	/* Offline games can reuse the same map seed. Take fresh host-local entropy
-	   once per successful boarding, then isolate the entire manifest's draws. */
-	if (flight.fixture) {
-		seed = flight.fixture_seed;
-	} else {
-		seed = (uint32_t)local_random() << 16;
-		seed |= local_random();
-	}
-	br_drop_shuffle_start(&flight.drops, seed);
-	platform_log("Echo 419: drop seed %u", (unsigned)seed);
 	data_iterator_new(&it, player_data);
 	while ((player = data_iterator_next(&it))) {
 		struct rider *r = &flight.riders[DATUM_INDEX_TO_ABSOLUTE_INDEX(it.datum_index)];
@@ -310,10 +323,14 @@ void battle_royale_flight_tick(void)
 	if (!flight.enabled)
 		return;
 	if (!flight.started) {
+		static const char *const sides[] = {"west", "east", "south", "north"};
+		char message[96];
 		if (!board_roster())
 			return;
 		flight.started = TRUE;
-		cabin_notice("Halo Royale. Aboard Echo 419. Stand by.");
+		sprintf(message, "Halo Royale. Echo 419 inbound from the %s, exiting %s.",
+			sides[br_route_edge(&flight.route, flight.route.start)], sides[br_route_edge(&flight.route, flight.route.end)]);
+		cabin_notice(message);
 	}
 	if (flight.tick == BR_DROP_OPEN)
 		cabin_notice("Drop zone open. Press Jump to leave Echo 419.");

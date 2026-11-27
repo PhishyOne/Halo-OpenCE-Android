@@ -20,15 +20,18 @@ LANDINGS = [
 ]
 
 
-# Two isolated farmhouses and two outdoor supply stops along the flight path.
+# Outlying destinations give cross-island flights several approaches to supplies.
 OUTPOSTS = [
     ('west_hayfield', -2600, -920, 'cache'),
     ('south_farm', -1400, -475, 'house'),
     ('east_farm', 1350, 460, 'house'),
     ('east_field', 2850, 1000, 'cache'),
+    ('north_meadow', -750, 2450, 'cache'),
+    ('south_grange', 1800, -1950, 'house'),
 ]
 for name, x, y, _ in OUTPOSTS:
-    LANDINGS.extend([(name+'_west', x-8, y-8), (name+'_east', x+8, y-8)])
+    for side,dx,dy in [('west',-8,-8), ('east',8,-8), ('left',-12,2), ('right',12,2)]:
+        LANDINGS.append((name+'_'+side,x+dx,y+dy))
 
 
 class Sector:
@@ -206,8 +209,8 @@ def build():
             s.box('timber',x-2,y+2,0,2,1,.65)
             s.box('field',x+2,y+4,0,1.8,1.2,1)
             s.loot.append(('br_fixed_'+name,(x-1.5,y+2.5,.69)))
-        s.tree(x-17,y+9,False,rng)
-        s.tree(x+19,y+12,True,rng)
+        s.tree(x-22,y+13,False,rng)
+        s.tree(x+22,y+14,True,rng)
     return s
 
 
