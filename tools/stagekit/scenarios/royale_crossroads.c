@@ -3,6 +3,7 @@
 #include "../stagekit.h"
 #include "shaders/shader_definitions.h"
 
+struct cell { float bounds[6]; long count; };
 struct paint { char const *name; unsigned long rgb; long count; };
 #include "orchard_mesh.inc"
 
@@ -69,11 +70,17 @@ static void make_mesh(struct structure_bsp *bsp)
 	struct structure_surface *surfaces = cache_bsp_block(&bsp->surfaces, NUMBEROF(triangles), sizeof(*surfaces));
 	byte *cluster = bsp->clusters.address;
 	/* The named block offsets follow structure_visibility_cluster's engine layout. */
-	struct subcluster *sub = cache_bsp_block((struct tag_block *)(cluster+0x34), 1, sizeof(*sub));
-	long *ids = cache_bsp_block(&sub->surfaces, NUMBEROF(triangles), sizeof(long));
+	struct subcluster *sub = cache_bsp_block((struct tag_block *)(cluster+0x34), NUMBEROF(cells), sizeof(*sub));
+	long next_face = 0;
 	long *groups = cache_bsp_block((struct tag_block *)(cluster+0x44), NUMBEROF(triangles)+3*NUMBEROF(paints), sizeof(long));
 	long material, face=0, i;
-	sub->bounds = bsp->world_bounds;
+	for (i=0; i<NUMBEROF(cells); ++i) {
+		long j;
+		long *ids = cache_bsp_block(&sub[i].surfaces,cells[i].count,sizeof(long));
+		for (j=0; j<6; ++j) sub[i].bounds.n[j] = cells[i].bounds[j]/3.048f;
+		memcpy(ids,cell_faces+next_face,cells[i].count*sizeof(long));
+		next_face += cells[i].count;
+	}
 	light->bitmap_index = NONE;
 	bsp->default_lighting.ambient_color.red = bsp->default_lighting.ambient_color.green = bsp->default_lighting.ambient_color.blue = 1;
 	for (material=0; material<NUMBEROF(paints); ++material, ++mat) {
@@ -92,7 +99,7 @@ static void make_mesh(struct structure_bsp *bsp)
 			int k;
 			write_face(v+i*3, triangles[face]);
 			for (k=0; k<3; ++k) surfaces[face].vertex_indices[k] = i*3+k;
-			ids[face] = *groups++ = face;
+			*groups++ = face;
 		}
 	}
 }

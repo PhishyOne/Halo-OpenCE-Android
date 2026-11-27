@@ -139,6 +139,22 @@ def write_include(path):
         f.write('};\nstatic const float triangles[][3][3] = {\n')
         for faces in s.faces.values():
             for tri in faces: f.write('{'+','.join(map(point,tri))+'},\n')
+        triangles=[tri for faces in s.faces.values() for tri in faces]
+        # The renderer accepts 128 surface references per subcluster. Keep nearby
+        # triangles together so a view of the orchard can skip the barn's groups.
+        cells=defaultdict(list)
+        for index,tri in enumerate(triangles):
+            center=[sum(p[k] for p in tri)/3 for k in (0,1)]
+            cells[tuple(math.floor(v/24) for v in center)].append(index)
+        batches=[ids[i:i+128] for ids in cells.values() for i in range(0,len(ids),128)]
+        f.write('};\nstatic const struct cell cells[] = {\n')
+        for batch in batches:
+            points=[p for idx in batch for p in triangles[idx]]
+            bounds=[v for axis in range(3) for v in
+                    (min(p[axis] for p in points), max(p[axis] for p in points))]
+            f.write('{'+point(bounds)+','+str(len(batch))+'},\n')
+        f.write('};\nstatic const long cell_faces[] = {\n')
+        for batch in batches: f.write(','.join(map(str,batch))+',\n')
         f.write('};\nstatic const float solids[][6] = {\n')
         for box in s.solids: f.write(point(box)+',\n')
         f.write('};\n')
