@@ -37,8 +37,11 @@ def test_bridge_crossing(stagekit, tmp_path, x, yaw, other):
 
 @pytest.mark.parametrize('x,yaw,other', [(590,0,682),(686,math.pi,594)])
 def test_both_shelter_entrances(stagekit, tmp_path, x, yaw, other):
-    session, points = play_from(stagekit, tmp_path, (x,58,.3), yaw, 48)
-    assert min(p[2] for p in points) == pytest.approx(-1.45, abs=.1)
+    # At walking speed both exits are reached inside 16 seconds. Continuing
+    # west for 48 seconds also reaches the millrace, outside the shelter.
+    session, points = play_from(stagekit, tmp_path, (x,58,.3), yaw, 16)
+    gallery = [z for px,py,z in points if 610 < px < 664 and abs(py-58) < .1]
+    assert gallery and all(z == pytest.approx(-1.45, abs=.1) for z in gallery)
     assert (points[-1][0]-other)*math.cos(yaw) >= 0
     assert points[-1][2] > -.1 and ' underwater' not in ''.join(session.logged())
 
