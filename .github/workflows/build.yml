@@ -38,7 +38,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          ref: 4a44f9bf81984b9e5be098366ceaf8434608422c
+          ref: 2fb9674522db9f596464a4dd5f3a92cfd0fbc982
 
       - uses: actions/cache@v4
         with:
@@ -379,7 +379,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 4a44f9bf81984b9e5be098366ceaf8434608422c
+          ref: 2fb9674522db9f596464a4dd5f3a92cfd0fbc982
 
       - uses: actions/cache@v4
         with:
@@ -419,7 +419,7 @@ jobs:
           pacman -Syu --noconfirm --needed git python python-pytest ninja clang lld gcc lib32-glibc lib32-gcc-libs sdl3 lib32-sdl3
       - uses: actions/checkout@v4
         with:
-          ref: 4a44f9bf81984b9e5be098366ceaf8434608422c
+          ref: 2fb9674522db9f596464a4dd5f3a92cfd0fbc982
       - name: Build the offline game and run inventory regressions
         run: |
           python configure.py --release --lto=off --pgo=off
