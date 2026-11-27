@@ -32,7 +32,8 @@ final class RoyaleMinimap {
     private final AssetManager assets;
     private boolean loaded, expanded;
     private float unit = 3.048f, centerX, centerY, scale;
-    private float viewWidth, viewHeight;
+    static final float COMPACT_SIZE = 116;
+    private float viewWidth, viewHeight, statusLeft, statusTop;
     private Bitmap[] tiles = new Bitmap[0];
     private float[][] bounds = new float[0][];
     private String[] names = new String[0];
@@ -50,14 +51,16 @@ final class RoyaleMinimap {
     boolean contains(float x, float y) { return panel.contains(x, y); }
     void toggle() { expanded = !expanded; }
 
-    void layout(float width, float height, float insetLeft, float insetTop) {
+    void layout(float width, float height, float insetLeft, float insetTop, float insetRight) {
         viewWidth = width;
         viewHeight = height;
-        float size = expanded ? Math.min(height * .67f, width * .65f) : 116;
-        float left = expanded ? (width - size) / 2 : Math.max(16, insetLeft + 6);
-        float top = expanded ? (height - size - 53) / 2 : Math.max(74, insetTop + 18);
+        statusLeft = Math.max(16, insetLeft + 6);
+        statusTop = Math.max(height * .24f, insetTop + 12);
+        float size = expanded ? Math.min(height * .67f, width * .65f) : COMPACT_SIZE;
+        float left = expanded ? (width - size) / 2 : width - Math.max(16, insetRight + 6) - size;
+        float top = expanded ? (height - size - 53) / 2 : Math.max(12, insetTop + 6);
         map.set(left, top, left + size, top + size);
-        panel.set(left - 3, top - 3, left + size + 3, map.bottom + (expanded ? 51 : 31));
+        panel.set(left - 3, top - 3, left + size + 3, map.bottom + (expanded ? 28 : 3));
     }
 
     private void load() {
@@ -223,14 +226,18 @@ final class RoyaleMinimap {
         String clock = String.format(Locale.ROOT,"%d:%02d",seconds/60,seconds%60);
         String title = state == EXPLORE ? "East Millworks" : state == INSERTION ? "Echo 419" :
                 state == FINAL ? "Final zone closed" : (state == CLOSE ? "Closing " : "Zone " + (int)data[1] + " in ") + clock;
-        text(c,title,map.left+3,map.bottom+13,12, outside ? 0xffffa075 : NEXT);
         double gap = hasZone ? Math.hypot(data[3]-data[14],data[4]-data[15])-data[16] : 0;
         String guide = flight ? "Flight path" : !hasZone ? "Explore" :
                 outside ? "IN STORM" : gap > 0 ? "Next zone" : "Inside next zone";
         if (!flight && gap > 0) guide += "  " + Math.round(gap*unit) + " m";
-        text(c,guide,map.left+3,map.bottom+26,10,outside ? 0xffffa075 : 0xffbadce2);
+        paint.setTextSize(13);
+        float statusWidth = Math.max(paint.measureText(title), paint.measureText(guide)) + 16;
+        fill(0xda202c30);
+        c.drawRoundRect(statusLeft, statusTop, statusLeft + statusWidth, statusTop + 37, 4, 4, paint);
+        text(c,title,statusLeft+8,statusTop+15,13,outside ? 0xffffa075 : NEXT);
+        text(c,guide,statusLeft+8,statusTop+30,12,outside ? 0xffffa075 : 0xffbadce2);
         if (expanded) {
-            float left = map.left + 3, base = map.bottom+44;
+            float left = map.left + 3, base = map.bottom+18;
             text(c,"▲ You",left,base,12,YOU);
             if (hasZone) {
                 text(c,"─ Current edge",left+55,base,12,CURRENT);

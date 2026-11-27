@@ -39,7 +39,7 @@ static struct {
 	struct br_drop_route route;
 	struct br_drop_pool drops;
 	uint32_t fixture_seed;
-	boolean has_orchard, guide_fixture, populate_pickups;
+	boolean has_orchard, island_map, guide_fixture, populate_pickups;
 	boolean enabled, started, fixture, route_selected;
 	struct rider riders[HALO_PORT_MAXIMUM_NETWORK_PLAYERS];
 } flight;
@@ -48,6 +48,11 @@ static struct battle_royale_point drop_point(real_point3d const *position)
 {
 	struct battle_royale_point point = {position->x, position->y, position->z};
 	return point;
+}
+
+boolean battle_royale_island_map(void)
+{
+	return flight.island_map;
 }
 
 void battle_royale_flight_reset(void)
@@ -59,8 +64,7 @@ void battle_royale_flight_reset(void)
 	battle_royale_island_reset();
 	memset(&flight, 0, sizeof(flight));
 	flight.ship = NONE;
-	if (!map || (game_connection() != _game_connection_local &&
-		game_connection() != _game_connection_network_server))
+	if (!map)
 		return;
 	for (i = 0; i < map->cutscene_flags.count; ++i) {
 		struct scenario_cutscene_flag const *flag = TAG_BLOCK_GET_ELEMENT(
@@ -79,6 +83,10 @@ void battle_royale_flight_reset(void)
 		}
 	}
 	if (starts != 1 || ends != 1)
+		return;
+	/* Every viewport uses the authored island identity. Only the host runs insertion. */
+	flight.island_map = flight.has_orchard && flight.drops.site_count > 0;
+	if (game_connection() != _game_connection_local && game_connection() != _game_connection_network_server)
 		return;
 	flight.populate_pickups = flight.has_orchard;
 	flight.heading.i = flight.exit.x - flight.entry.x;

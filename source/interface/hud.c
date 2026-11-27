@@ -116,6 +116,7 @@ symbols in this file:
 #include "units/unit_definitions.h"
 #include "units/units.h"
 #include "game/game_allegiance.h" /* port: personal enemy recon */
+#include "battle_royale_flight.h" /* port: the Royale island HUD */
 #include "killstreak_recon.h" /* port: port/linux/game/killstreak_recon.c */
 #include "killstreak_orbital.h" /* port: port/linux/game/killstreak_orbital.c */
 #include "commander_tactical.h" /* port: port/linux/game/commander_tactical.c */
@@ -1500,6 +1501,16 @@ static void hud_draw_match_timer(
 	bounds.x1 = render.camera.window_bounds.x1 - render.camera.viewport_bounds.x0 - 5;
 	bounds.x0 = bounds.x1 - 320;
 	bounds.y1 = render.camera.window_bounds.y1 - render.camera.viewport_bounds.y0 - 14;
+
+#ifdef HALO_ANDROID
+	/* port: keep the optional match clock with Royale's upper-left instruments. */
+	if (battle_royale_island_map())
+	{
+		bounds.x0 = render.camera.window_bounds.x0 - render.camera.viewport_bounds.x0;
+		bounds.x1 = bounds.x0 + 255;
+		bounds.y1 = render.camera.window_bounds.y0 - render.camera.viewport_bounds.y0 + 28;
+	}
+#endif
 	bounds.y0 = bounds.y1 - (font->ascending_height + font->descending_height);
 	hud_get_text_color(&color);
 	/* (lifted toward white, and whole: the HUD's own text colour is lost
@@ -1534,7 +1545,8 @@ void hud_draw_screen(
 
 		/* port: only the earning player's live, ordinary viewport presents
 		 * private rewards. Menus, co-op and postgame are also gated inside. */
-		if (!cinematic_in_progress() && hud_scripted_globals->show_hud &&
+		if (!battle_royale_island_map() && /* port: no opponent recon on the island */
+			!cinematic_in_progress() && hud_scripted_globals->show_hud &&
 			perspective != _director_perspective_neutral &&
 			perspective != _director_perspective_scripted && player->unit_index != NONE)
 		{

@@ -386,9 +386,15 @@ public final class TouchControls extends View implements SensorEventListener, In
 
     /** Options: where it was dragged, else at the top right, clear of a cutout */
     private float optionsX() {
-        if (layout.optionsMoved())
-            return layout.optionsX();
-        return logicalWidth - Math.max(42, insetRight / scale + 42);
+        float x = layout.optionsMoved() ? layout.optionsX() : logicalWidth - Math.max(42, insetRight / scale + 42);
+        if (royaleVisible && !editing) {
+            float mapLeft = logicalWidth - Math.max(16, insetRight / scale + 6) - RoyaleMinimap.COMPACT_SIZE;
+            float mapBottom = Math.max(12, insetTop / scale + 6) + RoyaleMinimap.COMPACT_SIZE;
+            float clearance = toolbarRadius(OPTIONS_RADIUS) + 8;
+            if (x > mapLeft - clearance && optionsY() < mapBottom + clearance)
+                return mapLeft - clearance;
+        }
+        return x;
     }
 
     private float optionsY() {
@@ -1366,7 +1372,7 @@ public final class TouchControls extends View implements SensorEventListener, In
         if (royaleVisible && !editing && openDialogs == 0) {
             canvas.save();
             canvas.scale(scale, scale);
-            royale.layout(logicalWidth, logicalHeight, insetLeft / scale, insetTop / scale);
+            royale.layout(logicalWidth, logicalHeight, insetLeft / scale, insetTop / scale, insetRight / scale);
             royale.draw(canvas);
             canvas.restore();
         }

@@ -83,6 +83,7 @@ symbols in this file:
 /* ---------- headers */
 
 #include "cseries/cseries.h"
+#include "battle_royale_flight.h" /* port: the Royale island HUD */
 #include "passenger_camera.h" /* port: port/linux/game/passenger_camera.c */
 #include "cseries/errors.h"
 #include "math/real_math.h"
@@ -1067,6 +1068,15 @@ void hud_calculate_point(
 			placement->offset.y * scale;
 	}
 
+#ifdef HALO_ANDROID
+	/* port: keep the shield and health cluster intact beneath the ammo HUD.
+	   The Royale minimap occupies the opposite corner. */
+	if (corner == _hud_anchor_top_right && battle_royale_island_map())
+	{
+		point.x += 230 - (render.camera.window_bounds.x1 - render.camera.window_bounds.x0);
+		point.y += 48;
+	}
+#endif
 	if (bitmap_data)
 	{
 		switch (corner)

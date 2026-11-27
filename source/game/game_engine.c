@@ -538,6 +538,7 @@ symbols in this file:
 
 #include "battle_royale_round.h" /* port: authored Royale loot already selects its own density */
 #include "cseries.h"
+#include "battle_royale_flight.h" /* port: the Royale island HUD */
 #include "game_modes.h" /* port: port/linux/game/game_modes.c */
 #include "vip.h"
 #include "career_results.h" /* port: immutable host results */
@@ -5490,6 +5491,9 @@ boolean game_engine_draw_object_in_motion_sensor(
 {
 	boolean draw_object = TRUE;
 
+	/* port: Royale has navigation only, including before boarding Echo 419. */
+	if (battle_royale_island_map()) return FALSE;
+
 	if (game_engine)
 		draw_object = TEST_FLAG(global_variant.universal_variant.flags, _game_variant_draw_object_in_motion_sensor_bit);
 	/* port: friends only: the viewer's team's */
@@ -5510,6 +5514,9 @@ boolean game_engine_hud_draw_motion_sensor(
 	long player_index)
 {
 	boolean draw_motion_sensor = TRUE;
+
+	/* port: Royale has navigation only, including before boarding Echo 419. */
+	if (battle_royale_island_map()) return FALSE;
 
 	if (game_engine)
 	{

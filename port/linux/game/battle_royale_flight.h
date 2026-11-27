@@ -1,6 +1,7 @@
 #ifndef BATTLE_ROYALE_FLIGHT_H
 #define BATTLE_ROYALE_FLIGHT_H
 
+boolean battle_royale_island_map(void);
 void battle_royale_flight_reset(void);
 void battle_royale_flight_tick(void);
 union real_vector2d;
