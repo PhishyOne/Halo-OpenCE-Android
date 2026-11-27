@@ -7,6 +7,9 @@ from island_ground import BED, TUNNEL_FLOOR, WATER
 # Tag keys, XY position, facing in degrees. Yards and lay-bys, clear of the travel lanes.
 VEHICLES = [('warthog',82,-14,0), ('warthog',470,-15,0), ('ghost',540,18,180),
             ('warthog',705,14,180), ('ghost',1284,432,24)]
+# Open ground near the pump house, loading yard, shed and shelter entrance.
+LANDINGS = [('mill_pump', 398, 74), ('mill_yard', 456, -32),
+            ('mill_shed', 510, 16), ('shelter_steps', 598, 44)]
 BUILDINGS = [(451,-61,30,23,5.6,'brick','slate','barn'), (501,24,23,16,4.8,'timber','roof','barn'),
              (464,32,9,7,3.5,'plaster','slate','house'), (492,-38,10,8,3.5,'brick','roof','house'),
              (548,-44,8,7,3.5,'plaster','roof','house'), (389,86,8,6,3.3,'brick','slate','utility')]

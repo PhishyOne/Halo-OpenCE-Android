@@ -4,7 +4,7 @@
 #include "battle_royale_round.h"
 
 enum { BR_DROP_OPEN = 90, BR_LAST_JUMP = 1800, BR_ROUTE_TICKS = 1980,
-	BR_MAX_CLEARINGS = 32, BR_CLEARING_SPOTS = 16 };
+	BR_MAX_CLEARINGS = 64, BR_CLEARING_SPOTS = 16 };
 
 struct br_drop_route {
 	struct battle_royale_point start, end, lower, upper;
