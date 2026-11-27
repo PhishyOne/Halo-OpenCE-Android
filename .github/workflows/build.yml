@@ -38,7 +38,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          ref: 0934b0f8be9a88a9dd47768ede7352000d160e63
+          ref: 5c97f00acef02ba197d1ed3e41d5b4f095cf7a76
 
       - uses: actions/cache@v4
         with:
@@ -79,6 +79,11 @@ jobs:
       # the key's, alias halo): every build signed with it installs over the
       # one before, as the app's self-updater (Updater.java) needs. Without
       # them each build is signed with the runner's own debug key.
+      - name: Test native object visibility and culling
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq gcc-multilib python3-pytest
+          /usr/bin/python3 -m pytest -q tools/harness/tests/test_model_detail.py tools/harness/tests/test_structure_culling.py tools/harness/tests/test_transparent_enclosure.py
+
       - name: Signing key
         env:
           KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}

@@ -478,8 +478,7 @@ static void render_player_frame(
 	structure_get_planar_fog((short)render.cluster_index, &render.fog);
 #ifdef HALO_ANDROID
 	/* port: size both world frusta before the engine applies local fog. */
-	map_draw_apply(structure_map_draw_distance, &camera->z_far, &window->rasterizer_camera.z_far,
-		render.visible_sky_index != NONE, &render.fog.atmospheric_maximum_distance);
+	map_draw_apply(structure_map_draw_distance, &camera->z_far, &window->rasterizer_camera.z_far);
 #endif
 
 	if (render.fog.atmospheric_maximum_distance != 0.0f &&

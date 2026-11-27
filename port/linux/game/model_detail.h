@@ -23,7 +23,12 @@ enum
 	_model_detail_rules_outside,
 	/* the same, the camera being inside the model, whose inside it sees */
 	_model_detail_rules_inside,
+	/* first available exterior mesh, starting from the least detailed */
+	_model_detail_rules_distant,
 };
+
+/* Test the projected size without promoting the model to a more costly LOD. */
+boolean model_detail_visible(real pixels, real cutoff, boolean distant_object, boolean shadow);
 
 /* the rules for a model drawn this frame, its bounding sphere in the world */
 short model_detail_rules(struct model const *model, real_point3d const *centroid, real radius);

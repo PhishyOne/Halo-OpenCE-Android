@@ -37,7 +37,8 @@ def generated(control=None):
         ("source/cache/cache_files.h", ["tag_iterator"]),
     ]:
         types += "\n" + "\n".join(structure(read(path), name) for name in names)
-    for member in ["_render_model_immediate_bit", "_render_model_pass_solid", "_model_geometry_part_stripped_bit", "_shader_model_detail_after_reflection_bit"]:
+    types += "\n" + enum_with(read("source/models/models.h"), "_render_model_immediate_bit")
+    for member in ["_render_model_pass_solid", "_model_geometry_part_stripped_bit", "_shader_model_detail_after_reflection_bit"]:
         types += "\n" + enum_with(models, member)
     types += "\n" + enum_with(read("source/models/model_definitions.h"), "MODELS_GROUP_TAG")
     types += "\n" + enum_with(read("port/linux/game/model_detail.h"), "_model_detail_rules_stock")

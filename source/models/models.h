@@ -73,6 +73,17 @@ short model_get_marker_by_name(
 	short maximum_marker_count);
 void model_build_tangent_matrices(
 	struct model *model);
+/* port: world-object pass can retain models below their authored pixel cutoff. */
+enum
+{
+	_render_model_immediate_bit = 0,
+	_render_model_shadow_bit,
+	_render_model_no_planar_fog_bit,
+	_render_model_first_person_bit,
+	_render_model_distant_object_bit,
+	NUMBER_OF_RENDER_MODEL_FLAGS
+};
+
 void render_model(
 	long model_index,
 	real level_of_detail_pixels,

@@ -102,6 +102,9 @@ symbols in this file:
 #include "objects/widgets/widgets.h"
 #include "units/units.h"
 #include "models/models.h"
+#ifdef HALO_ANDROID
+#include "structure_culling.h" /* port: per-map object visibility */
+#endif
 #include "shaders/shader_definitions.h"
 #include "shaders/shaders.h"
 #include "game/players.h"
@@ -132,11 +135,6 @@ enum
 	_render_model_effect_type_modifier,
 };
 
-enum
-{
-	_render_model_shadow_bit = 1,
-	_render_model_no_planar_fog_bit,
-};
 
 enum
 {
@@ -654,7 +652,11 @@ static void render_object_list(
 						&model_effect,
 						object_index,
 						object->object.forced_shader_permutation_index,
-						data->no_planar_fog ? FLAG(_render_model_no_planar_fog_bit) : 0);
+						/* port: retain distant world models in the color pass only. */
+#ifdef HALO_ANDROID
+						(structure_map_draw_distance > 0 ? FLAG(_render_model_distant_object_bit) : 0) |
+#endif
+						(data->no_planar_fog ? FLAG(_render_model_no_planar_fog_bit) : 0));
 
 					if (debug_objects)
 					{

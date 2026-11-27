@@ -135,10 +135,6 @@ real const *overshield_effect_values(long unit_index, real const *values, boolea
 
 /* ---------- constants */
 
-enum
-{
-	_render_model_first_person_bit = 3,
-};
 
 enum
 {

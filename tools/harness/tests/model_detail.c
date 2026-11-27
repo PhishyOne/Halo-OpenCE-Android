@@ -41,6 +41,20 @@ int main(int argc, char **argv)
         CHECK(level_of(&model, &permutation, 4, _model_detail_rules_outside) == NONE, "no outside geometry draws nothing");
         CHECK(level_of(&model, &permutation, 3, _model_detail_rules_stock) == 3, "stock draws the model's level");
     }
+    CASE("distant") {
+        struct model model = {{2, 4, 10, 20, 3000}};
+        struct model_region_permutation permutation = {{NONE, 11, 12, NONE, 14}};
+        CHECK(!model_detail_visible(0.5f, 2, FALSE, FALSE), "stock drops a half-pixel model");
+        CHECK(model_detail_visible(0.5f, 2, TRUE, FALSE), "distant world object draws at its actual size");
+        CHECK(model_detail_visible(2, 2, FALSE, FALSE), "stock threshold is inclusive");
+        CHECK(model_detail_visible(0.5f, 2, FALSE, TRUE), "shadow pass retains stock policy");
+        CHECK(level_of(&model, &permutation, 0, _model_detail_rules_stock) == NONE, "stock empty slot");
+        CHECK(level_of(&model, &permutation, 0, _model_detail_rules_distant) == 1, "cheapest exterior mesh");
+        permutation.geometry_indices[0] = 10;
+        CHECK(level_of(&model, &permutation, 0, _model_detail_rules_distant) == 0, "stock far mesh available");
+        permutation.geometry_indices[0] = permutation.geometry_indices[1] = permutation.geometry_indices[2] = NONE;
+        CHECK(level_of(&model, &permutation, 0, _model_detail_rules_distant) == NONE, "no interior substitute");
+    }
     CASE("bounds") {
         struct model model = {{0, 0, 0, 0, 3000}};
         real_point3d center = {10, 20, 30}, camera = {10, 20, 30};
