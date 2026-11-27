@@ -104,7 +104,7 @@ static void storm_damage_players(void)
 		if (island.trace) {
 			unit = unit_try_and_get(id);
 			platform_log("Halo Royale: storm hit seat %d stage %d at %d vitality %.3f/%.3f",
-				DATUM_INDEX_TO_ABSOLUTE_INDEX(it.datum_index), island.storm.stage, island.elapsed,
+				(int)DATUM_INDEX_TO_ABSOLUTE_INDEX(it.datum_index), island.storm.stage, island.elapsed,
 				unit ? unit->object.body_vitality : 0.f, unit ? unit->object.shield_vitality : 0.f);
 		}
 	}
