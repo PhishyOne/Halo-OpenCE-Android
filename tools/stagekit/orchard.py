@@ -20,6 +20,17 @@ LANDINGS = [
 ]
 
 
+# Two isolated farmhouses and two outdoor supply stops along the flight path.
+OUTPOSTS = [
+    ('west_hayfield', -2600, -920, 'cache'),
+    ('south_farm', -1400, -475, 'house'),
+    ('east_farm', 1350, 460, 'house'),
+    ('east_field', 2850, 1000, 'cache'),
+]
+for name, x, y, _ in OUTPOSTS:
+    LANDINGS.extend([(name+'_west', x-8, y-8), (name+'_east', x+8, y-8)])
+
+
 class Sector:
     def __init__(self):
         self.faces = defaultdict(list)
@@ -185,6 +196,18 @@ def build():
             (17,24),(35,42),(64,58),(85,70),(-54,-34),(-57,-50),(51,-35),(44,-43),
             (-74,10),(70,-10),(-13,30),(26,-54)]):
         s.loot.append((f'br_wild_{i:02d}',(x,y,.08)))
+    for name,x,y,kind in OUTPOSTS:
+        s.slab('field',x-24,y-17,48,37,.02)
+        s.slab('lane',x-2,y-16,4,19,.035)
+        if kind == 'house':
+            s.building(x-5,y+2,10,8,3.5,'plaster','slate')
+            s.furnish(len(s.buildings)+1,x-5,y+2,10,8,3.5,'house')
+        else:
+            s.box('timber',x-2,y+2,0,2,1,.65)
+            s.box('field',x+2,y+4,0,1.8,1.2,1)
+            s.loot.append(('br_fixed_'+name,(x-1.5,y+2.5,.69)))
+        s.tree(x-17,y+9,False,rng)
+        s.tree(x+19,y+12,True,rng)
     return s
 
 

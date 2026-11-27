@@ -156,4 +156,4 @@ static void crossroads_build(struct stage *stage)
 
 struct stagekit_scenario const scenario_royale_crossroads = {
 	"royale_crossroads", "Halo Royale: Orchard Crossing",
-	crossroads_build, ROYALE_HALF_WIDTH, 0x100000 };
+	crossroads_build, ROYALE_HALF_WIDTH, 0x180000 };

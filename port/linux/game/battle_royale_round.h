@@ -48,6 +48,9 @@ struct battle_royale_round
 	int loot_count;
 };
 
+/* Advance one private, nonzero 32-bit random stream. */
+uint32_t battle_royale_random(uint32_t *seed);
+
 /* Nonzero identities in original engine seats. An invalid setup leaves round intact. */
 int battle_royale_begin(struct battle_royale_round *round, const struct battle_royale_zone *zone,
 	const uint32_t identities[HALO_PORT_MAXIMUM_NETWORK_PLAYERS]);
