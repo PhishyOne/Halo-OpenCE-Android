@@ -121,7 +121,7 @@ struct game_options;
 #include "cseries/cseries.h"
 #include "killstreak_rewards.h" /* port: port/linux/game/killstreak_rewards.c */
 #include "game/game.h"
-#include "battle_royale_flight.h"
+#include "battle_royale_flight.h" /* port: port/linux/game/battle_royale_flight.c */
 #include "game_modes.h" /* port: port/linux/game/game_modes.c */
 #include "ai/ai.h"
 #include "bink/bink_playback.h"
@@ -390,6 +390,7 @@ void game_tick(
 	if (!(network_game_distributed_client() && network_coop_active()))
 		profile_scope(game_tick_hs_section, hs_update();)
 	profile_scope(game_tick_recorded_animations_section, recorded_animations_update();)
+	/* port: advance an authored Pelican insertion before normal biped collision */
 	battle_royale_flight_tick();
 	profile_scope(game_tick_objects_section, objects_update();)
 	profile_scope(game_tick_players_after_section, players_update_after_game();)
@@ -712,6 +713,7 @@ void game_initialize_for_new_map(
 	cinematic_initialize_for_new_map();
 	hs_initialize_for_new_map();
 	recorded_animations_initialize_for_new_map();
+	/* port: find this map's insertion route, if present */
 	battle_royale_flight_reset();
 	cheats_initialize_for_new_map();
 

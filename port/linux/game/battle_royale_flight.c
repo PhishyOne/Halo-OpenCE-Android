@@ -7,6 +7,7 @@
 #include "objects/objects.h"
 #include "scenario/scenario.h"
 #include "scenario/scenario_definitions.h"
+#include "structures/structure_bsp_definitions.h"
 #include "units/bipeds.h"
 #include "units/vehicle_definitions.h"
 #include "battle_royale_flight.h"
@@ -39,7 +40,8 @@ void battle_royale_flight_reset(void)
 	long i;
 	memset(&flight, 0, sizeof(flight));
 	flight.ship = NONE;
-	if (!map || game_connection() == _game_connection_network_client)
+	if (!map || (game_connection() != _game_connection_local &&
+		game_connection() != _game_connection_network_server))
 		return;
 	for (i = 0; i < map->cutscene_flags.count; ++i) {
 		struct scenario_cutscene_flag const *flag = TAG_BLOCK_GET_ELEMENT(
@@ -52,7 +54,9 @@ void battle_royale_flight_reset(void)
 			++ends;
 		}
 	}
-	if (starts != 1 || ends != 1)
+	if (starts != 1 || ends != 1 || !global_structure_bsp ||
+		!point_in_rectangle3d(&flight.entry, &global_structure_bsp->world_bounds) ||
+		!point_in_rectangle3d(&flight.exit, &global_structure_bsp->world_bounds))
 		return;
 	flight.heading.i = flight.exit.x - flight.entry.x;
 	flight.heading.j = flight.exit.y - flight.entry.y;
@@ -132,12 +136,12 @@ static void restore_rider(struct rider *r, struct biped_datum *b)
 
 static void release(struct rider *r, struct biped_datum *b, real_point3d position, int slot)
 {
+	real sideways = ((slot % 16) - 7.5f) * .62f;
+	real aft = 5.f + (slot / 16) * .62f;
 	if (b->object.parent_object_index == flight.ship && flight.ship != NONE)
 		unit_exit_seat_end(r->biped);
 	restore_rider(r, b);
 	/* Clear the rear ramp. Spread simultaneous drops across a short formation. */
-	real sideways = ((slot % 16) - 7.5f) * .62f;
-	real aft = 5.f + (slot / 16) * .62f;
 	position.x -= flight.heading.i * aft + flight.heading.j * sideways;
 	position.y -= flight.heading.j * aft - flight.heading.i * sideways;
 	position.z -= 1.5f;
@@ -151,6 +155,7 @@ static void release(struct rider *r, struct biped_datum *b, real_point3d positio
 
 static void steer(struct rider *r, struct biped_datum *b)
 {
+	real_vector3d aim = b->unit.aiming_vector;
 	if (!TEST_FLAG(b->biped.flags, _biped_airborne_bit)) {
 		restore_rider(r, b);
 		platform_log("Echo 419: landed at tick %d", flight.tick);
@@ -158,7 +163,6 @@ static void steer(struct rider *r, struct biped_datum *b)
 	}
 	/* World units per tick. Use the normal biped collision for roofs,
 	   terrain and obstacles; return all subsequent falls to normal rules. */
-	real_vector3d aim = b->unit.aiming_vector;
 	aim.k = 0;
 	if (normalize3d(&aim) > 0) {
 		real forward = b->unit.throttle.i * .22f;

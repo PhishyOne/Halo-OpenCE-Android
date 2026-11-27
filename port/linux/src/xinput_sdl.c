@@ -1037,7 +1037,7 @@ static void test_input_gamepad(XINPUT_GAMEPAD *pad)
 	if (walk_forward)
 	{
 		/* Pulse the regular Jump button so the engine sees rising edges. */
-		if (test_drop_jump && ((int)test_input_seconds() % 2))
+		if (test_drop_jump && test_input_seconds() < 15.0 && ((int)test_input_seconds() % 2))
 			pad->bAnalogButtons[XINPUT_GAMEPAD_A] = 255;
 		pad->sThumbLY = 32000;
 		return;
