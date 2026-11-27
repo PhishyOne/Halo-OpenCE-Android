@@ -7,7 +7,8 @@ from pathlib import Path
 COLORS = dict(meadow=0x748351, field=0xaf995f, furrow=0x978551, verge=0x948771,
               road=0x545857, lane=0xb5a184, plaster=0xc3b8a3, brick=0x945e48,
               roof=0x904d39, slate=0x53616a, timber=0x705545, trim=0xe0d6bc,
-              bark=0x59493a, pine=0x355440, needle=0x44634a, leaf=0x617d45, crown=0x7e904e)
+              bark=0x59493a, pine=0x355440, needle=0x44634a, leaf=0x617d45, crown=0x7e904e,
+              floorboard=0x96795f, plank=0xa4876d, concrete=0x8b8a83)
 
 
 class Sector:
@@ -67,6 +68,13 @@ class Sector:
 
     def furnish(self, number, x, y, w, d, h, kind):
         self.buildings.append((x,y,w,d))
+        # Thin floor finishes sit on the continuous walkable ground plane.
+        if kind == 'house':
+            for row in range(16):
+                self.slab('plank' if row % 3 == 0 else 'floorboard',
+                          x, y+row*d/16, w, d/16, .025)
+        else:
+            self.slab('concrete' if kind == 'utility' else 'lane', x, y, w, d, .025)
         # Each front room opens into a second room. Keep the center aisle clear.
         gap = 3 if kind == 'barn' else 2.35
         side = (w-gap)/2
