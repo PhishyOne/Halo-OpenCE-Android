@@ -8,6 +8,9 @@ def test_crossroads_has_standing_and_movement(play):
     assert len(places) == 90 and session.deaths(0) == 0
     assert max(x for x,y,z in places) - min(x for x,y,z in places) > 1
     assert min(z for x,y,z in places) >= -0.01
+    # The west wall is at 11 metres; the biped stops one radius away.
+    face = 11/3.048 - .25
+    assert abs(places[0][0] - face) < .005 and abs(places[1][0] - face) < .005
 
 
 def test_baked_mesh_matches_authored_sector(stagekit, tmp_path):
