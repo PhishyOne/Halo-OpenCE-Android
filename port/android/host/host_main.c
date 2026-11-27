@@ -75,9 +75,25 @@ void host_abort(const char *reason)
 	abort();
 }
 
+static char **launcher_lan_args;
+
 void host_exit(int code)
 {
 	host_logf(HOST_LOG_INFO, "the game exited (%d)", code);
+    /* Finish the actual activity before tearing down its fixed-address game
+     * process. Android can then deliver the result to the launcher under it. */
+    if (launcher_lan_args) {
+        JNIEnv *env = (JNIEnv *)SDL_GetAndroidJNIEnv();
+        jobject activity = env ? (jobject)SDL_GetAndroidActivity() : NULL;
+        if (activity) {
+            jclass type = (*env)->GetObjectClass(env, activity);
+            jmethodID finish = type ? (*env)->GetMethodID(env, type, "finish", "()V") : NULL;
+            if (finish) (*env)->CallVoidMethod(env, activity, finish);
+            if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+            if (type) (*env)->DeleteLocalRef(env, type);
+            (*env)->DeleteLocalRef(env, activity);
+        }
+    }
 	/* the process ends with the game; Android restarts it from the
 	launcher next time */
 	_exit(code);
@@ -316,7 +332,7 @@ int host_title_capture_mode;
 static const char *launcher_match_map;
 static const char *launcher_match_mode;
 static const char *launcher_match_rules;
-static char **launcher_lan_args;
+
 static int launcher_playlist;
 
 #define MAIN_STACK_SIZE (16 * 1024 * 1024)

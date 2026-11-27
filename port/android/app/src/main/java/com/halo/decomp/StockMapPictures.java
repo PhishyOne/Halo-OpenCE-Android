@@ -17,14 +17,14 @@ final class StockMapPictures {
     private static final byte[] NAME="ui\\shell\\bitmaps\\mp_map_grafix".getBytes(StandardCharsets.US_ASCII);
     interface Sink { void picture(String id,int width,int height,int[] argb) throws IOException; }
 
-    private static int bounded(long value,long limit)throws IOException{
+    static int bounded(long value,long limit)throws IOException{
         if(value<0||value>limit)throw new IOException("Map picture offset or size is out of range");
         return (int)value;
     }
-    private static int tag(ByteBuffer tags,int pointer,int bytes)throws IOException{
+    static int tag(ByteBuffer tags,int pointer,int bytes)throws IOException{
         return bounded(Integer.toUnsignedLong(pointer)-TAG_BASE,tags.capacity()-(long)bytes);
     }
-    private static DataInputStream body(File file,boolean compressed)throws IOException{
+    static DataInputStream body(File file,boolean compressed)throws IOException{
         FileInputStream f=new FileInputStream(file);
         try{
             f.getChannel().position(2048);
@@ -32,34 +32,45 @@ final class StockMapPictures {
             return new DataInputStream(compressed?new InflaterInputStream(buffered):buffered);
         }catch(IOException e){f.close();throw e;}
     }
-    private static void advance(DataInputStream in,int distance)throws IOException{
+    static void advance(DataInputStream in,int distance)throws IOException{
         while(distance>0){
             int skipped=in.skipBytes(distance);
             if(skipped==0){in.readByte();skipped=1;}
             distance-=skipped;
         }
     }
+    static final class XboxMap {
+        final boolean compressed;
+        final int end;
+        final ByteBuffer tags;
+
+        XboxMap(File file) throws IOException {
+            byte[] head = new byte[2048];
+            try (DataInputStream in = new DataInputStream(new FileInputStream(file))) {
+                in.readFully(head);
+                int cmf = in.readUnsignedByte(), flg = in.readUnsignedByte();
+                compressed = (cmf & 15) == 8 && (cmf >>> 4) <= 7 && ((cmf * 256 + flg) % 31) == 0;
+            }
+            ByteBuffer h = little(head);
+            if (h.getInt(0) != 0x68656164 || h.getInt(4) != 5 || h.getInt(2044) != 0x666f6f74)
+                throw new IOException("Expected an Xbox ui.map");
+            end = bounded(h.getInt(8), 256 << 20);
+            int size = bounded(h.getInt(20), 32 << 20);
+            int start = bounded(h.getInt(16), end - (long)size);
+            if (start < 2048 || size < 36) throw new IOException("Missing Xbox map tags");
+            byte[] data = new byte[size];
+            try (DataInputStream in = body(file, compressed)) {
+                advance(in, start - 2048);
+                in.readFully(data);
+            }
+            tags = little(data);
+        }
+    }
+
     static void read(File file,Sink sink)throws IOException{
-        byte[] head=new byte[2048];
-        boolean compressed;
-        try(DataInputStream in=new DataInputStream(new FileInputStream(file))){
-            in.readFully(head);
-            int cmf=in.readUnsignedByte(),flg=in.readUnsignedByte();
-            compressed=(cmf&15)==8&&(cmf>>>4)<=7&&((cmf*256+flg)%31)==0;
-        }
-        ByteBuffer h=little(head);
-        if(h.getInt(0)!=0x68656164||h.getInt(4)!=5||h.getInt(0x7fc)!=0x666f6f74)
-            throw new IOException("Expected an Xbox ui.map");
-        int end=bounded(h.getInt(8),256<<20),size=bounded(h.getInt(20),32<<20);
-        int start=bounded(h.getInt(16),end-(long)size);
-        if(start<2048||size<36)throw new IOException("Missing map picture tags");
-        List<Frame> frames;
-        try(DataInputStream in=body(file,compressed)){
-            advance(in,start-2048);
-            byte[] tags=new byte[size];
-            in.readFully(tags);
-            frames=findFrames(little(tags),end);
-        }
+        XboxMap map = new XboxMap(file);
+        boolean compressed = map.compressed;
+        List<Frame> frames = findFrames(map.tags, map.end);
         Collections.sort(frames,Comparator.comparingInt(f->f.offset));
         try(DataInputStream in=body(file,compressed)){
             int at=2048;

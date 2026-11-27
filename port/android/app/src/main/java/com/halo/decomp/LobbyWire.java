@@ -6,7 +6,7 @@ import java.util.*;
 /** Bounded versioned LAN lobby frames. No host-only commands on the wire,
  * no file operations, and never send another member's secret token. */
 final class LobbyWire {
-    static final int MAGIC=0x484c5035, MAX_FRAME=1024*1024;
+    static final int MAGIC=0x484c5036, MAX_FRAME=1024*1024;
     static final int JOIN=1,POLL=2,UPDATE=3,LEAVE=4,ACK=5,RETURN=6;
     static final class Request {
         final int op;final long knownRevision;final String secret,name;final int color,requestTeam;final boolean ready;

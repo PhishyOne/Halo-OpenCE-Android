@@ -349,6 +349,6 @@ static void launcher_lan_update(boolean menu)
         last_add=now;network_game_client_add_player(client,0);
     }
     if (!launcher_lan.local && network_game_server_port_bots_adjustable(server) &&
-        network_game_server_port_ok_to_countdown(server) && network_game_server_port_countdown_milliseconds(server)<0)
+        network_game_server_port_ok_to_countdown(server) && (network_game_server_port_countdown_milliseconds(server)<0 || network_game_server_port_countdown_paused(server)))
         network_game_server_port_countdown_begin(server,3000);
 }

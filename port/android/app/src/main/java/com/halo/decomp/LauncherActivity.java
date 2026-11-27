@@ -97,7 +97,8 @@ public class LauncherActivity extends Activity {
     private LinearLayout dashboardPanel;
     private LanBoardUi socialUi;
     private LauncherLobbyUi lobbyUi;
-    private boolean lobbyGameStarted;
+    private boolean lobbyGameStarted, lobbyActivityReturned, preparingGame;
+    private static final int PLAY_LOBBY_MATCH = 15;
     private Runnable openSocial;
     private LanMapRepair lanMapRepair;
     private LanBoardServer lanBoardServer;
@@ -312,23 +313,40 @@ public class LauncherActivity extends Activity {
     }
 
     private void launchWithoutConsent(Intent intent) {
-        // Persist the one player identity before handing off to :game.
-        // A first launch must not race two random-ID initializations.
-        try {
-            GroupRatingLedger.recoverAbandonedHost(getFilesDir(), LanBoardIdentity.id(this),
-                gameProcessStatus() == 0);
-            LanBoardIdentity.prepareForGame(this);
-        } catch (java.io.IOException | RuntimeException unavailable) {
-            android.util.Log.w("HaloLanBoard", "Group rating preparation unavailable", unavailable);
-        }
-        // Transfer the peer listener to :game; do not hold both copies
-        // open on one device or rely on a cloud service.
-        stopBoardSharing();
-        startActivity(intent);
-        if (intent.getBooleanExtra(HaloActivity.LOBBY_MATCH, false))
-            lobbyGameStarted = true;
-        else
-            finish();
+        if (preparingGame) return;
+        preparingGame = true;
+        // Career locks, preference commits and fsync can all stall on phone storage.
+        new Thread(() -> {
+            try {
+                GroupRatingLedger.recoverAbandonedHost(getFilesDir(), LanBoardIdentity.id(this),
+                    gameProcessStatus() == 0);
+                LanBoardIdentity.prepareForGame(this);
+            } catch (java.io.IOException | RuntimeException unavailable) {
+                android.util.Log.w("HaloLanBoard", "Group rating preparation unavailable", unavailable);
+            }
+            runOnUiThread(() -> {
+                preparingGame = false;
+                if (isDestroyed() || isFinishing()) return;
+                boolean lobby = intent.getBooleanExtra(HaloActivity.LOBBY_MATCH, false);
+                if (lobby && (lobbyUi == null || !lobbyUi.hasSession())) return;
+                stopBoardSharing();
+                try {
+                    if (lobby) {
+                        lobbyActivityReturned = false;
+                        lobbyGameStarted = true;
+                        startActivityForResult(intent, PLAY_LOBBY_MATCH);
+                    } else {
+                        startActivity(intent);
+                        finish();
+                    }
+                } catch (RuntimeException failed) {
+                    lobbyGameStarted = false;
+                    if (lobby && lobbyUi != null) lobbyUi.returned();
+                    refreshBoardSharing();
+                    HaloNotice.makeText(this, "Could not open Halo: " + failed.getMessage(), HaloNotice.LENGTH_LONG).show();
+                }
+            });
+        }, "Halo-match-preparation").start();
     }
 
     /** Explicit SAF export works for both the finished reel and full
@@ -813,7 +831,7 @@ public class LauncherActivity extends Activity {
             new int[] { HaloTheme.BACKGROUND_TOP, HaloTheme.BACKGROUND_CENTER,
                 HaloTheme.BACKGROUND_BOTTOM }));
         if (titleBackdropAvailable) {
-            titleBackdrop = new LauncherBackdrop(this, getFilesDir(), message -> updateTitleStatus());
+            titleBackdrop = new LauncherBackdrop(this, getFilesDir(), dataRoot, message -> updateTitleStatus());
             stage.addView(titleBackdrop, new android.widget.FrameLayout.LayoutParams(-1, -1));
             root.setBackgroundColor(0x30091320);
         }
@@ -2346,7 +2364,7 @@ public class LauncherActivity extends Activity {
     }
 
     private void resumeLobbyAfterGame() {
-        if (!launcherResumed || !lobbyGameStarted || lobbyUi == null) return;
+        if (!launcherResumed || !lobbyGameStarted || !lobbyActivityReturned || lobbyUi == null) return;
         if (gameProcessStatus() == 0) {
             lobbyGameStarted = false;
             // The native game can exit its process before Activity.onDestroy runs.
@@ -2444,6 +2462,11 @@ public class LauncherActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == PLAY_LOBBY_MATCH) {
+            lobbyActivityReturned = true;
+            resumeLobbyAfterGame();
+            return;
+        }
         if (requestCode == PICK_REEL_CONSENT) {
             Intent game = pendingVideoLaunch;
             pendingVideoLaunch = null;

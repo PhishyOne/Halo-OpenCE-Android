@@ -228,9 +228,13 @@ int main(void) {
     CHECK(state.phase==VIP_ACTIVE&&state.vip_slot==1);
     CHECK(units[0].unit.weapon_object_indices[0]!=NONE&&units[1].unit.weapon_object_indices[0]==NONE);
     engine.player_killed_player(player_ids[0],0,player_ids[1],0);
-    CHECK(state.phase==VIP_FINISHED&&state.score[0]==2&&state.score[1]==0&&game_over==1);
+    CHECK(state.phase==VIP_INTERMISSION&&state.score[0]==2&&!game_over);
+    advance(470);new_lives();advance(471);advance(561);
+    CHECK(state.phase==VIP_ACTIVE&&state.escort_team==0);
+    units[state.vip_slot].object.position=flags[1].position;advance(562);
+    CHECK(state.phase==VIP_FINISHED&&state.score[0]==3&&state.score[1]==0&&game_over==1);
     CHECK(engine.did_player_win(player_ids[0])==TRUE&&engine.did_player_win(player_ids[1])==FALSE);
-    CHECK(engine.get_player_score(player_ids[0],_get_score_team)==2);
+    CHECK(engine.get_player_score(player_ids[0],_get_score_team)==3);
     CHECK(vip_write_network_state((byte*)&later,sizeof(later))==44);
     CHECK(vip_state_valid(&later,0,first.revision,128));
     /* Client cannot score locally, accepts only the host's valid state. */
@@ -265,6 +269,24 @@ int main(void) {
     CHECK(vip_round_outcome(0,1,1,VIP_ROUND_TICKS)==VIP_LOST);
     CHECK(vip_round_outcome(1,1,1,VIP_ROUND_TICKS)==VIP_EXTRACTED);
     CHECK(vip_round_outcome(1,0,1,1)==VIP_NONE);
+    /* Every possible five-round winner sequence, including blue sweeps. */
+    for(int mask=0;mask<32;mask++){
+        struct distributed_vip_state series={0};
+        series.vip_slot=-1;
+        for(int round=0;round<VIP_ROUNDS;round++){
+            int winner=(mask>>round)&1;
+            CHECK(series.round_index==round&&series.escort_team==(round&1));
+            CHECK(vip_start_round(&series,round,0,1));
+            CHECK(vip_end_round(&series,round,winner==series.escort_team?VIP_EXTRACTED:VIP_LOST));
+            CHECK(vip_state_valid(&series,0,0,128));
+            if(series.score[winner]==3){
+                CHECK(series.phase==VIP_FINISHED&&!vip_next_round(&series,round));
+                break;
+            }
+            CHECK(vip_next_round(&series,round)&&vip_state_valid(&series,0,0,128));
+        }
+        CHECK(series.phase==VIP_FINISHED);
+    }
     printf("PASS VIP native engine: %d checks\n",checks);
     return 0;
 }

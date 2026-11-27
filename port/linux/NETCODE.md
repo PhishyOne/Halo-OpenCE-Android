@@ -1303,3 +1303,7 @@ health and trait multipliers. Maps without overrides use stock values.
 All players need protocol 58, including for Classic LAN games. The Android
 pregame lobby uses HLP4 so peers agree on the active playlist entry's
 roster and the new rule keys before entering Halo.
+
+## VIP Escort series (version 59)
+
+Teams alternate escort duty until one wins three rounds. The 44-byte payload now admits round indices 0–4 and scores up to three. Earlier clients reject those states, so all gameplay peers need the updated build.

@@ -79,7 +79,8 @@ Raise it with any change to what the machines send each other. */
 /* v30: host-ground drivers use relayed player_action steering inputs. */
 /* v57: distinct host-authoritative VIP round state; older clients cannot interpret it. */
 /* v58: synced gravity and damage use two former reserved words in variant options. */
-#define HALO_PORT_NETWORK_VERSION 58
+/* v59: earlier VIP clients reject rounds three through five. */
+#define HALO_PORT_NETWORK_VERSION 59
 /* ... the advertisement's reserved bytes: the version (a little-endian word),
 then flags, then the game's kind (an OpenCE gametype's mode, and Hardcore:
 port/linux/game/game_modes.h's game_modes_kind), for the server browser */

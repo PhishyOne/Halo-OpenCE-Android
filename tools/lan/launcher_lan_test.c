@@ -76,6 +76,7 @@ static unsigned long network_game_server_machine_address(long m){return m==8?0xc
 static void network_game_client_add_player(struct network_game_client *c,int n){(void)c;(void)n;added++;}
 static boolean launcher_lan_countdown_allowed(struct network_game *g);
 static int network_game_server_port_ok_to_countdown(struct network_game_server *s){(void)s;return launcher_lan_countdown_allowed(&world);}
+static int network_game_server_port_countdown_paused(struct network_game_server *s){(void)s;return held;}
 static int network_game_server_port_countdown_milliseconds(struct network_game_server *s){(void)s;return countdown;}
 static void network_game_server_port_countdown_begin(struct network_game_server *s,long ms){assert(s==&server&&ms==3000);starts++;countdown=ms;held=0;}
 #include "launcher_lan_match.h"
@@ -142,6 +143,7 @@ int main(int argc,char **argv){
     }
     world.machines[8].name[0]='f';assert(!launcher_lan_countdown_allowed(&world));launcher_lan_tag(world.machines[8].name,1);
     world.variant_options.value++;assert(!launcher_lan_countdown_allowed(&world));world.variant_options.value--;
+    countdown=6000; /* Stock pregame can leave an active but paused timer. */
     launcher_lan_update(1);launcher_lan_update(1);assert(starts==1&&countdown==3000&&!held);
     playing=1;launcher_lan_update(0);now=200000;launcher_lan_update(0);assert(!quit);
     if(playlist){

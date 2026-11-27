@@ -370,9 +370,9 @@ void vip_format_title(long index,wchar_t *title)
     } else if(state.phase==VIP_INTERMISSION)
         usnprintf(title,80,L"Round complete  |  Red %d - Blue %d  |  Switching",state.score[0],state.score[1]);
     else if(state.phase==VIP_WAITING)
-        usnprintf(title,80,L"VIP round %d/2  |  Preparing teams",state.round_index+1);
+        usnprintf(title,80,L"VIP round %d/%d  |  Preparing teams",state.round_index+1,VIP_ROUNDS);
     else
-        usnprintf(title,80,L"VIP %d/2  |  %s  |  %ld:%02ld  |  R%d B%d",state.round_index+1,
+        usnprintf(title,80,L"VIP %d/%d  |  %s  |  %ld:%02ld  |  R%d B%d",state.round_index+1,VIP_ROUNDS,
             vip_player_is_vip(index)?L"YOU ARE VIP":p&&p->team_index==state.escort_team?L"ESCORT VIP":L"STOP VIP",
             ticks/1800,(ticks/30)%60,state.score[0],state.score[1]);
     title[79]=0;

@@ -9,11 +9,12 @@ import android.media.MediaPlayer;
 import android.os.SystemClock;
 import android.view.View;
 import java.io.File;
+import java.io.IOException;
 
 /** Replay the locally generated, authentic title render behind the native
  * Android launcher. Only a small decoder and music player run here. */
 final class LauncherBackdrop extends View {
-    private final File directory;
+    private final File directory, uiMap;
     private final File root;
     private final java.util.function.Consumer<String> status;
     private final Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
@@ -26,9 +27,10 @@ final class LauncherBackdrop extends View {
     private boolean active, prepared, focused;
     private final AudioManager audio;
 
-    LauncherBackdrop(Context context, File root, java.util.function.Consumer<String> status) {
+    LauncherBackdrop(Context context, File root, File dataRoot, java.util.function.Consumer<String> status) {
         super(context);
         this.root = root;
+        uiMap = new File(dataRoot, "maps/ui.map");
         this.status = status;
         directory = TitleBackdropFiles.directory(root);
         audio = (AudioManager)context.getSystemService(Context.AUDIO_SERVICE);
@@ -43,6 +45,20 @@ final class LauncherBackdrop extends View {
         decoder = new Thread(() -> decode(token), "Halo-title-loop");
         decoder.start();
         if (audio == null) return;
+        new Thread(() -> {
+            File track;
+            try {
+                track = TitleMusic.prepare(root, uiMap);
+            } catch (IOException | RuntimeException failure) {
+                android.util.Log.w("HaloTitle", "Could not read complete title music", failure);
+                track = new File(directory, "audio.wav");
+            }
+            final File selected = track;
+            post(() -> { if (active && token == generation) playMusic(token, selected); });
+        }, "Halo-title-music").start();
+    }
+
+    private void playMusic(int token, File track) {
         try {
             AudioAttributes attributes = new AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_GAME)
@@ -62,7 +78,7 @@ final class LauncherBackdrop extends View {
             player.setAudioAttributes(attributes);
             // The media service must receive an open descriptor; the file is
             // private to this app and not readable by unrelated processes.
-            try (java.io.FileInputStream input = new java.io.FileInputStream(new File(directory, "audio.wav"))) {
+            try (java.io.FileInputStream input = new java.io.FileInputStream(track)) {
                 player.setDataSource(input.getFD());
             }
             player.setLooping(true);

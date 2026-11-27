@@ -27,7 +27,8 @@ final class LauncherLobbyUi implements AutoCloseable {
     private String returnRound="";
     private boolean returnCompleted;
     private String[] launchArgs;
-    private boolean inGame;
+    private boolean inGame, checkingHost;
+    private String checkingRound="";
     private final SharedPreferences prefs;
     private final Handler ui=new Handler(Looper.getMainLooper());
     private final ExecutorService work=Executors.newSingleThreadExecutor(r->{
@@ -171,7 +172,8 @@ final class LauncherLobbyUi implements AutoCloseable {
                 opened=new LanLobbyTransport.Host(model);opened.open();
                 LobbyModel.Snapshot s=model.hostSnapshot(LanLobbyTransport.now());
                 final LanLobbyTransport.Host result=opened;
-                ui.post(()->{if(closed||g!=generation){result.close();return;}host=result;snapshot=s;prefs.edit().putString("last_lobby_name",s.lobbyName).apply();busy=false;connectionLost=false;lastContact=LanLobbyTransport.now();showSession();schedule();});
+                List<WorkshopMapCatalog.MapItem> maps=WorkshopMapCatalog.installed(dataRoot);
+                ui.post(()->{if(closed||g!=generation){result.close();return;}host=result;sessionMaps=maps;snapshot=s;prefs.edit().putString("last_lobby_name",s.lobbyName).apply();busy=false;connectionLost=false;lastContact=LanLobbyTransport.now();showSession();schedule();});
             }catch(IOException|RuntimeException error){
                 if(opened!=null)opened.close();failedOpen(g,"Couldn't create lobby: "+error.getMessage());
             }
@@ -187,9 +189,10 @@ final class LauncherLobbyUi implements AutoCloseable {
                 opened=new LanLobbyTransport.Client(ip);
                 LobbyModel.Snapshot s=opened.join(name,color);
                 final LanLobbyTransport.Client result=opened;
+                List<WorkshopMapCatalog.MapItem> maps=WorkshopMapCatalog.installed(dataRoot);
                 ui.post(()->{
                     if(closed||g!=generation){result.close();return;}
-                    guest=result;snapshot=s;busy=false;connectionLost=false;lastContact=LanLobbyTransport.now();
+                    guest=result;sessionMaps=maps;snapshot=s;busy=false;connectionLost=false;lastContact=LanLobbyTransport.now();
                     prefs.edit().putString("last_host",ip).apply();showSession();schedule();
                 });
             }catch(IOException|RuntimeException error){if(opened!=null)opened.close();failedOpen(g,"Couldn't join lobby: "+error.getMessage());}
@@ -201,7 +204,6 @@ final class LauncherLobbyUi implements AutoCloseable {
     private void showSession(){
         body.removeAllViews();openFinder=false;hostEditor=null;
         boolean hosting=host!=null;
-        sessionMaps=WorkshopMapCatalog.installed(dataRoot);
         body.addView(text(snapshot.lobbyName+"  /  "+(hosting?"HOST":"PLAYER"),14,HaloTheme.FOCUS_TEXT,true));
         status=text("",11,HaloTheme.MUTED,false);body.addView(status);
         summary=panel();roster=panel();
@@ -343,19 +345,33 @@ final class LauncherLobbyUi implements AutoCloseable {
             .setPositiveButton("START ANYWAY",(d,w)->confirmStart(review,true)).show();
     }
     private void confirmStart(LobbyModel.StartReview review,boolean override){
-        if(host==null||closed)return;
-        try{
-            if(!review.blocker.isEmpty())throw new IOException(review.blocker);
-            if(!canOpen.getAsBoolean())throw new IOException("Finish the current game or file operation first.");
-            host.nativeInterface();
-            NativeLobbyMatch.checkMap(dataRoot,review.entry.map);
-            NativeMatchRules.encode(review.entry.preset);
-            applySnapshot(host.model.beginStart(review,override,LanLobbyTransport.now()));
-        }catch(LobbyModel.StartNotReady warning){showStartWarning(warning.review);}
-        catch(IOException|IllegalArgumentException|IllegalStateException failed){
-            if(snapshot.secondsToNext>=0)pauseStart(failed.getMessage());
-            else msg(failed.getMessage());
-        }
+        if(host==null||closed||checkingHost)return;
+        if(!review.blocker.isEmpty()){startFailed(review.blocker);return;}
+        if(!canOpen.getAsBoolean()){startFailed("Finish the current game or file operation first.");return;}
+        final int g=generation;
+        checkingHost=true;
+        work.execute(()->{
+            try{
+                NativeLobbyMatch.checkMap(dataRoot,review.entry.map);
+                NativeMatchRules.encode(review.entry.preset);
+            }catch(IOException|RuntimeException failure){
+                ui.post(()->{if(closed||g!=generation)return;checkingHost=false;startFailed(failure.getMessage());});
+                return;
+            }
+            ui.post(()->{
+                if(closed||g!=generation)return;
+                checkingHost=false;
+                try{
+                    host.nativeInterface();
+                    applySnapshot(host.model.beginStart(review,override,LanLobbyTransport.now()));
+                }catch(LobbyModel.StartNotReady warning){showStartWarning(warning.review);}
+                catch(IllegalArgumentException|IllegalStateException failed){startFailed(failed.getMessage());}
+            });
+        });
+    }
+    private void startFailed(String message){
+        if(snapshot.secondsToNext>=0)pauseStart(message);
+        else msg(message);
     }
     private void pauseStart(String reason){
         long now=LanLobbyTransport.now();
@@ -433,15 +449,25 @@ final class LauncherLobbyUi implements AutoCloseable {
             return;
         }
         if(inGame||next.hostBack||next.round.equals(launchedRound))return;
-        if(!next.round.equals(preparedRound)){
-            preparedRound=next.round;launchArgs=null;localFailure="";
-            try{
-                if(!canOpen.getAsBoolean())throw new IOException("Finish the current game or file operation first.");
-                if(host==null)NativeLobbyMatch.checkMap(dataRoot,next.plan.entries.get(next.startIndex).map);
-                launchArgs=NativeLobbyMatch.arguments(next,guest==null?host.nativeInterface():guest.localAddress,guest==null?"":guest.address,
-                    host==null?Collections.emptyList():host.model.nativePeers());
-            }catch(IOException|IllegalArgumentException|IllegalStateException failure){localFailure=failure.getMessage();}
+        if(guest!=null&&!next.round.equals(preparedRound)){
+            if(next.round.equals(checkingRound))return;
+            checkingRound=next.round;
+            final int g=generation;
+            work.execute(()->{
+                String problem="";
+                try{NativeLobbyMatch.checkMap(dataRoot,next.plan.entries.get(next.startIndex).map);}
+                catch(IOException|RuntimeException failure){problem=String.valueOf(failure.getMessage());}
+                final String error=problem;
+                ui.post(()->{
+                    if(closed||g!=generation||snapshot==null||!snapshot.round.equals(next.round))return;
+                    checkingRound="";
+                    prepareLaunch(snapshot,error);
+                    applySnapshot(snapshot);
+                });
+            });
+            return;
         }
+        if(!next.round.equals(preparedRound))prepareLaunch(next,"");
         if(next.released&&launchArgs!=null){
             launchedRound=next.round;inGame=true;ui.removeCallbacks(tick);
             try{launcher.start(launchArgs,host!=null);}
@@ -452,6 +478,15 @@ final class LauncherLobbyUi implements AutoCloseable {
             host.model.resetStart(localFailure,LanLobbyTransport.now());
             applySnapshot(host.model.hostSnapshot(LanLobbyTransport.now()));
         }
+    }
+    private void prepareLaunch(LobbyModel.Snapshot next,String error){
+        preparedRound=next.round;launchArgs=null;localFailure=error;
+        if(!error.isEmpty())return;
+        try{
+            if(!canOpen.getAsBoolean())throw new IllegalStateException("Finish the current game or file operation first.");
+            launchArgs=NativeLobbyMatch.arguments(next,guest==null?host.nativeInterface():guest.localAddress,guest==null?"":guest.address,
+                host==null?Collections.emptyList():host.model.nativePeers());
+        }catch(IllegalArgumentException|IllegalStateException failure){localFailure=failure.getMessage();}
     }
     void returned(){
         if(!inGame||snapshot==null)return;
@@ -510,7 +545,7 @@ final class LauncherLobbyUi implements AutoCloseable {
      * doesn't leave. Leaving foreground closes this first-phase lobby. */
     void suspend(){openFinder=false;if(!inGame&&(snapshot!=null||busy))leave(false,"Lobby closed when launcher left foreground.");}
     private void leave(boolean notify,String message){
-        generation++;openFinder=false;discovered=Collections.emptyMap();ui.removeCallbacks(tick);busy=false;connectionLost=false;inGame=false;launchArgs=null;preparedRound=launchedRound=localFailure=returnRound="";
+        generation++;checkingHost=false;checkingRound="";openFinder=false;discovered=Collections.emptyMap();ui.removeCallbacks(tick);busy=false;connectionLost=false;inGame=false;launchArgs=null;preparedRound=launchedRound=localFailure=returnRound="";
         if(host!=null){host.close();host=null;}
         LanLobbyTransport.Client old=guest;guest=null;
         if(old!=null){

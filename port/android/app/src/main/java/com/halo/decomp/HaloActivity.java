@@ -33,6 +33,11 @@ import org.libsdl.app.SDLActivity;
 public class HaloActivity extends SDLActivity {
     static final String TITLE_CAPTURE = "com.halo.decomp.TITLE_CAPTURE";
     static final String TITLE_RESULT = "com.halo.decomp.TITLE_RESULT";
+    private final android.content.ServiceConnection lobbyConnection = new android.content.ServiceConnection() {
+        public void onServiceConnected(android.content.ComponentName name, android.os.IBinder binder) { }
+        public void onServiceDisconnected(android.content.ComponentName name) { }
+    };
+    private boolean lobbyBound;
     private boolean titleCaptureMode, titleReturning, titleForeground;
     private TitleBackdropCapture titleCapture;
     native int finishTitleAudio(boolean keep);
@@ -100,6 +105,8 @@ public class HaloActivity extends SDLActivity {
             showTitlePreparation();
             return;
         }
+        if (getIntent().getBooleanExtra(LOBBY_MATCH, false))
+            lobbyBound = bindService(new Intent(this, LobbySessionService.class), lobbyConnection, BIND_AUTO_CREATE);
         if (savedInstanceState != null)
             pendingLayoutExport = savedInstanceState.getString("pending-layout-export");
         if (mLayout != null) {
@@ -179,7 +186,7 @@ public class HaloActivity extends SDLActivity {
             try { startActivity(launcher); } catch (RuntimeException ignored) { }
         // This :game process contains only the read-only title preview, never
         // a match. End it so the ordinary launcher can start a fresh game.
-        finishAndRemoveTask();
+        finish();
         android.os.Process.killProcess(android.os.Process.myPid());
     }
 
@@ -517,6 +524,10 @@ public class HaloActivity extends SDLActivity {
             if (!titleReturning && titleCapture != null) titleCapture.cancel();
             super.onDestroy();
             return;
+        }
+        if (lobbyBound) {
+            unbindService(lobbyConnection);
+            lobbyBound = false;
         }
         publishVideoVisibility(false);
         // Finalize the opt-in screen recording when gameplay closes.

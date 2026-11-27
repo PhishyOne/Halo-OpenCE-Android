@@ -96,7 +96,7 @@ class LanApkUpdateTests(unittest.TestCase):
         launcher = LAUNCHER.read_text()
         report = (JAVA / "HaloDiagnostics.java").read_text()
         manifest = MANIFEST.read_text()
-        self.assertIn('android:launchMode="singleInstance"', manifest)
+        self.assertIn('android:launchMode="singleTop"', manifest)
         for fragment in (
             'public void onNewIntent(Intent intent)',
             'super.onNewIntent(intent);',
@@ -154,7 +154,7 @@ class LanApkUpdateTests(unittest.TestCase):
         self.assertNotIn("new URL(", source)
         self.assertNotIn("setInstanceFollowRedirects(true)", source)
         self.assertNotIn("usesCleartextTraffic", MANIFEST.read_text())
-        self.assertIn("HALO_PORT_NETWORK_VERSION 58",
+        self.assertIn("HALO_PORT_NETWORK_VERSION 59",
             (ROOT / "port/linux/include/halo_port_limits.h").read_text())
         for token in (
             "_distributed_message_commander_settings = 96",

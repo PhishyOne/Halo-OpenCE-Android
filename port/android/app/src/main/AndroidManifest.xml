@@ -79,7 +79,7 @@
             android:process=":game"
             android:exported="false"
             android:alwaysRetainTaskState="true"
-            android:launchMode="singleInstance"
+            android:launchMode="singleTop"
             android:screenOrientation="sensorLandscape"
             android:resizeableActivity="false"
             android:preferMinimalPostProcessing="true"
@@ -88,6 +88,8 @@
                 android:name="android.app.category"
                 android:value="game" />
         </activity>
+
+        <service android:name=".LobbySessionService" android:exported="false" />
 
         <service android:name=".NetworkSessionService" android:process=":game"
             android:exported="false" android:stopWithTask="true"

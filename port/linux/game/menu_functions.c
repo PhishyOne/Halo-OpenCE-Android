@@ -3551,7 +3551,7 @@ static void gametype_rules_text(long profile_index, wchar_t *text, short size)
 		usnprintf(text, size - 1, L"%s\r\nFree for all\r\nA kill with each weapon", kind);
 		break;
 	case _game_mode_vip:
-		usnprintf(text, size - 1, L"VIP ESCORT\r\nUnarmed VIP / overshield\r\nTwo alternating rounds");
+		usnprintf(text, size - 1, L"VIP ESCORT\r\nUnarmed VIP / overshield\r\nFirst to 3 / alternating escorts");
 		break;
 	default:
 		usnprintf(text, size - 1, L"%s\r\n%s\r\nScore to win: %ld", kind ? kind : engine_names[engine],
