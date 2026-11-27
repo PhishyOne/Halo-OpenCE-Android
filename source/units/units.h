@@ -730,6 +730,9 @@ long unit_get_current_equipment(
 	long unit_index);
 void unit_delete_current_equipment(
 	long unit_index);
+/* port: clear the equipped weapon and every spare (units.c) */
+void unit_delete_inventory_weapons(
+	long unit_index);
 void unit_delete_all_weapons(
 	long unit_index);
 boolean unit_add_equipment_to_inventory(

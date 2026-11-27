@@ -38,7 +38,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          ref: 07d73b762e51db06ada9b84561742db74f687bb4
+          ref: e23ed99b3a98398f1657187fed3ed2ec54818749
 
       - uses: actions/cache@v4
         with:
@@ -377,7 +377,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 07d73b762e51db06ada9b84561742db74f687bb4
+          ref: e23ed99b3a98398f1657187fed3ed2ec54818749
 
       - uses: actions/cache@v4
         with:
@@ -405,3 +405,33 @@ jobs:
         run: |
           source ~/emsdk/emsdk_env.sh
           python3 tools/ci_build.py web release
+
+  offline-engine:
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    timeout-minutes: 25
+    steps:
+      - name: Install the 32-bit native toolchain
+        run: |
+          printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
+          pacman -Syu --noconfirm --needed git python python-pytest ninja clang lld gcc lib32-glibc lib32-gcc-libs sdl3 lib32-sdl3
+      - uses: actions/checkout@v4
+        with:
+          ref: e23ed99b3a98398f1657187fed3ed2ec54818749
+      - name: Build the offline game and run inventory regressions
+        run: |
+          python configure.py --release --lto=off --pgo=off
+          ninja -j4 linux > /tmp/offline-build.log 2>&1 || { tail -100 /tmp/offline-build.log; exit 1; }
+          python -m pytest -q tools/harness/tests/test_game_modes.py tools/harness/tests/test_gun_game_weapon_empty.py tools/test_battle_royale_round.py tools/test_v73_direct_match.py
+      - name: Package the native binary for the private map test
+        run: |
+          mkdir -p offline-test/lib
+          cp build/linux/halo offline-test/halo
+          strip offline-test/halo
+          ldd build/linux/halo | awk '{for(i=1;i<=NF;i++) if ($i ~ /^\//) print $i}' | sort -u | while read -r library; do cp -L "$library" offline-test/lib/; done
+          tar -C offline-test -czf offline-engine.tgz halo lib
+      - uses: actions/upload-artifact@v4
+        with:
+          name: offline-engine
+          path: offline-engine.tgz
+          retention-days: 3
