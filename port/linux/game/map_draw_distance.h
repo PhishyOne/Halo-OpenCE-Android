@@ -15,16 +15,12 @@ static inline real map_draw_diagonal(const real_rectangle3d *box)
 	return square_root(squared);
 }
 
-/* Local fog volumes (including underwater) retain their authored range. */
-static inline void map_draw_apply(real distance, real *visibility_far, real *projection_far,
-	boolean outdoors, real *atmosphere_end)
+static inline void map_draw_apply(real distance, real *visibility_far, real *projection_far)
 {
 	if (distance > 0)
 	{
 		if (*visibility_far < distance) *visibility_far = distance;
 		if (*projection_far < distance) *projection_far = distance;
-		if (outdoors && *atmosphere_end > 0 && *atmosphere_end < distance)
-			*atmosphere_end = distance;
 	}
 }
 #endif

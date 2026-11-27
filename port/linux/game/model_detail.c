@@ -34,6 +34,11 @@ enum
 
 /* ---------- public code */
 
+boolean model_detail_visible(real pixels, real cutoff, boolean distant_object, boolean shadow)
+{
+	return pixels >= cutoff || distant_object || shadow;
+}
+
 short model_detail_rules(struct model const *model, real_point3d const *centroid, real radius)
 {
 	if (halo_model_detail_stock() || rasterizer_debug_options.debug_model_lod!=NONE)
@@ -73,6 +78,16 @@ boolean model_detail_camera_inside(struct model const *model, real_point3d const
 short model_detail_geometry_index(struct model const *model,
 	struct model_region_permutation const *permutation, short level, short rules)
 {
+	if (rules==_model_detail_rules_distant)
+	{
+		for (level = 0; level < (short)NUMBEROF(permutation->geometry_indices); ++level)
+		{
+			if (model->detail_cutoff_pixels[level] <= MODEL_DETAIL_INTERIOR_CUTOFF_PIXELS &&
+				permutation->geometry_indices[level] != NONE)
+				return permutation->geometry_indices[level];
+		}
+		return NONE;
+	}
 	if (rules==_model_detail_rules_stock)
 	{
 		return permutation->geometry_indices[level];

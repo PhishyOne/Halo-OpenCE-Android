@@ -719,8 +719,8 @@ public class LauncherActivity extends Activity {
                     throw new java.io.IOException("Setting did not change");
             } catch (java.io.IOException error) {
                 check.setChecked(flag.isFile());
-                android.widget.Toast.makeText(this, "Couldn't save " + label,
-                    android.widget.Toast.LENGTH_SHORT).show();
+                HaloNotice.makeText(this, "Couldn't save " + label,
+                    HaloNotice.LENGTH_SHORT).show();
             }
         });
     }
@@ -1305,7 +1305,7 @@ public class LauncherActivity extends Activity {
         toolsPage.addView(displayPanel);
         displayPanel.addView(hudSection("DISPLAY"));
         LinearLayout displayChecks = setupChecks(displayPanel);
-        addDisplayCheck(displayChecks, "Edge-to-edge draw distance", "map_draw_distance.enabled");
+        addDisplayCheck(displayChecks, "Distant players & objects", "map_draw_distance.enabled");
         addDisplayCheck(displayChecks, "Show FPS", "launcher_fps.enabled");
         displayPanel.addView(lanText("Applies the next time you launch Halo.", 11));
 

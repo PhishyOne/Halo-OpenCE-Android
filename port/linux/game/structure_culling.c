@@ -986,6 +986,7 @@ boolean structure_culling_traverse(struct structure_bsp *structure)
 	short axis;
 	real distances[MAXIMUM_RENDERED_CLUSTERS];
 	real_plane3d planes[6];
+	real gpu_far = rasterizer_globals.far_clip_distance;
 	struct profile_section *section;
 
 	/* split screen deliberately keeps only the last window's call */
@@ -1001,6 +1002,9 @@ boolean structure_culling_traverse(struct structure_bsp *structure)
 	section = structure_culling.from_subclusters ? &render_structure_visibility_subcluster_traversal :
 		&render_structure_visibility_surface_traversal;
 	profile_enter((*section));
+#ifdef HALO_ANDROID
+	gpu_far = MAX(gpu_far, structure_map_draw_distance);
+#endif
 	/* the GPU far plane, not the fog-clamped frustum bounds; positive is outside */
 	scale_vector3d(&render.camera.forward, 1.0f / square_root(magnitude_squared3d(&render.camera.forward)),
 		&planes[_structure_culling_frustum_plane_far].n);
@@ -1008,11 +1012,7 @@ boolean structure_culling_traverse(struct structure_bsp *structure)
 		planes[_structure_culling_frustum_plane_far].n.i * render.camera.position.x +
 		planes[_structure_culling_frustum_plane_far].n.j * render.camera.position.y +
 		planes[_structure_culling_frustum_plane_far].n.k * render.camera.position.z +
-#ifdef HALO_ANDROID
-		MAX(structure_map_draw_distance, rasterizer_globals.far_clip_distance);
-#else
-		rasterizer_globals.far_clip_distance;
-#endif
+		gpu_far;
 	/* mirror projections are oblique: this perpendicular plane is not their GPU far clip */
 	if (render.camera.z_near == 0.0f)
 	{
