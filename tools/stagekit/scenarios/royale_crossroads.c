@@ -118,11 +118,16 @@ static void crossroads_build(struct stage *stage)
 	make_mesh(stage->bsp);
 	{
 		struct scenario_cutscene_flag *flags = cache_block(&stage->scenario->cutscene_flags,
-			NUMBEROF(loot_sites), sizeof(*flags));
+			NUMBEROF(loot_sites)+2, sizeof(*flags));
 		for (i=0; i<NUMBEROF(loot_sites); ++i) {
 			strcpy(flags[i].name, loot_sites[i].name);
 			for (j=0; j<3; ++j) flags[i].position.n[j] = loot_sites[i].position[j]/3.048f;
 		}
+		/* The intact campaign Pelican crosses the island diagonally above Orchard Crossing. */
+		strcpy(flags[i].name, "echo419_entry");
+		flags[i++].position = (real_point3d){{-3900.f/3.048f, -1400.f/3.048f, 240.f/3.048f}};
+		strcpy(flags[i].name, "echo419_exit");
+		flags[i].position = (real_point3d){{3900.f/3.048f, 1400.f/3.048f, 240.f/3.048f}};
 	}
 	for (i=0; i<NUMBEROF(solids); ++i) {
 		const float *b = solids[i];

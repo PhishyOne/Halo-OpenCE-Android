@@ -143,3 +143,28 @@ def test_walk_through_each_front_and_inner_door(stagekit, tmp_path):
         back_wall=y+d-.35-.25*unit
         assert max(positions) >= back_wall-.12, (i, positions)
         assert max(positions) <= back_wall+.12 and session.deaths(0)==0
+
+
+def test_echo419_manual_and_last_drop(stagekit, tmp_path):
+    import re
+    import runner
+    results = {}
+    for action in ('jump', 'wait'):
+        folder = tmp_path/action
+        runner.generate(stagekit, 'royale_crossroads', folder)
+        session = runner.play(folder, seconds=82, input='echo419-'+action)
+        assert 'Echo 419: boarded 1' in session.log
+        drops = re.findall(r'Echo 419: dropped seat 0 at tick (\d+)', session.log)
+        landings = re.findall(r'Echo 419: landed at tick (\d+)', session.log)
+        assert len(drops) == len(landings) == 1, (action, drops, landings)
+        drop, landed = int(drops[0]), int(landings[0])
+        assert 90 <= drop <= 1800 and drop + 60 < landed < drop + 450
+        places = session.places()
+        assert max(z for x, y, z in places) > 75
+        assert any(15 < z < 65 for x, y, z in places)
+        assert abs(places[-1][2]) < .05 and session.deaths(0) == 0
+        # The regular move stick must influence the airborne biped after release.
+        falling = [(x,y) for x,y,z in places if 5 < z < 74]
+        assert max(x for x,y in falling)-min(x for x,y in falling) > 1
+        results[action] = drop
+    assert results['jump'] < 300 and results['wait'] == 1800, results

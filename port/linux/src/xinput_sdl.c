@@ -977,6 +977,7 @@ static void test_input_gamepad(XINPUT_GAMEPAD *pad)
 	static int checked;
 	static int seed = -1;
 	static int walk_forward;
+	static int test_drop_jump;
 	static int looking;
 	double t;
 	int index;
@@ -1013,6 +1014,11 @@ static void test_input_gamepad(XINPUT_GAMEPAD *pad)
 		}
 		else if (!strncmp(setting, "bot:", 4))
 			seed = atoi(setting + 4);
+		else if (!strcmp(setting, "echo419-jump") || !strcmp(setting, "echo419-wait"))
+		{
+			walk_forward = 1;
+			test_drop_jump = !strcmp(setting, "echo419-jump");
+		}
 		else if (!strcmp(setting, "walk-forward"))
 			walk_forward = 1;
 		else if (!strcmp(setting, "bot"))
@@ -1030,6 +1036,9 @@ static void test_input_gamepad(XINPUT_GAMEPAD *pad)
 	}
 	if (walk_forward)
 	{
+		/* Pulse the regular Jump button so the engine sees rising edges. */
+		if (test_drop_jump && ((int)test_input_seconds() % 2))
+			pad->bAnalogButtons[XINPUT_GAMEPAD_A] = 255;
 		pad->sThumbLY = 32000;
 		return;
 	}
