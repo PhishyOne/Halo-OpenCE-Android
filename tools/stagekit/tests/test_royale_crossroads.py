@@ -168,3 +168,62 @@ def test_echo419_manual_and_last_drop(stagekit, tmp_path):
         assert max(x for x,y in falling)-min(x for x,y in falling) > 1
         results[action] = drop
     assert results['jump'] < 300 and results['wait'] == 1800, results
+
+
+def test_landing_clearings_are_open_and_close_to_loot():
+    import math
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    import orchard
+    scene = orchard.build()
+    # Conservative overhead clearance: even a canopy's bounding box must
+    # miss a full standing capsule at every formation position.
+    overhead = [(min(p[0] for p in tri), max(p[0] for p in tri),
+                 min(p[1] for p in tri), max(p[1] for p in tri))
+                for faces in scene.faces.values() for tri in faces if max(p[2] for p in tri) > .1]
+    radius = .25 * 3.048
+    positions = []
+    for name, x, y in orchard.LANDINGS:
+        for cell in range(16):
+            px = x + (cell % 4 - 1.5) * .75 * 3.048
+            py = y + (cell // 4 - 1.5) * .75 * 3.048
+            assert not any(a-radius <= px <= b+radius and c-radius <= py <= d+radius
+                           for a, b, c, d in overhead), (name, cell)
+            assert min(math.hypot(px-lx, py-ly) for _, (lx, ly, _) in scene.loot) <= 25
+            assert all(math.hypot(px-ox, py-oy) > 2*radius for ox, oy in positions)
+            positions.append((px, py))
+    assert len(positions) == 128
+
+
+def test_guided_drops_land_near_loot(stagekit, tmp_path):
+    import math
+    import re
+    import struct
+    import runner
+    import orchard
+    # The single-player physics fixture uses the host bot's assignment, jump
+    # and steering code. Rotate the authored marker order to land on each site.
+    for name, x, y in orchard.LANDINGS:
+        folder = tmp_path/name
+        path = runner.generate(stagekit, 'royale_crossroads', folder)
+        data = bytearray(path.read_bytes())
+        def marker(label):
+            field = ('br_land_'+label).encode().ljust(32, b'\0')
+            assert data.count(field) == 1
+            return data.index(field)+32
+        first, selected = marker(orchard.LANDINGS[0][0]), marker(name)
+        assert all(abs(a*3.048-b) < .001 for a,b in
+                   zip(struct.unpack_from('<3f', data, selected), (x, y, 0)))
+        data[first:first+12], data[selected:selected+12] = data[selected:selected+12], data[first:first+12]
+        path.write_bytes(data)
+        session = runner.play(folder, seconds=52, input='echo419-guide')
+        assert re.findall(r'Orchard Crossing approach at tick (\d+)', session.log) == ['840']
+        drops = re.findall(r'dropped seat 0 at tick (\d+)', session.log)
+        assert len(drops) == 1 and 930 < int(drops[0]) < 1050
+        landings = re.findall(r'guided touchdown at ([-.\d]+) ([-.\d]+) ([-.\d]+)', session.log)
+        assert len(landings) == 1, (name, session.log[-2000:])
+        px, py, pz = map(float, landings[0])
+        distance = math.hypot(px - (x/3.048 - 1.125), py - (y/3.048 - 1.125))*3.048
+        print(f'{name}: jumped at tick {drops[0]}, landed {distance:.2f} metres from target')
+        assert distance < 3 and abs(pz) < .05 and session.deaths(0) == 0, (name, distance, pz)

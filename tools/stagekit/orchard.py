@@ -11,6 +11,15 @@ COLORS = dict(meadow=0x748351, field=0xaf995f, furrow=0x978551, verge=0x948771,
               floorboard=0x96795f, plank=0xa4876d, concrete=0x8b8a83)
 
 
+# Each clearing accommodates a four-by-four group of landing positions.
+LANDINGS = [
+    ('west_cottage', -39, 1), ('east_cottage', -17, 0),
+    ('south_cottage', -32, -33), ('barnyard', 18, -45),
+    ('pump_house', 37, -29), ('water_tower', 31, -49),
+    ('field_gate', 18, 10), ('orchard_lane', -54, 24),
+]
+
+
 class Sector:
     def __init__(self):
         self.faces = defaultdict(list)
@@ -207,6 +216,8 @@ def write_include(path):
         for batch in batches: f.write(','.join(map(str,batch))+',\n')
         f.write('};\nstatic const float solids[][6] = {\n')
         for box in s.solids: f.write(point(box)+',\n')
-        f.write('};\nstatic const struct loot_site loot_sites[] = {\n')
+        f.write('};\nstatic const struct map_point landing_sites[] = {\n')
+        for name,x,y in LANDINGS: f.write('{"br_land_'+name+'",'+point((x,y,0))+'},\n')
+        f.write('};\nstatic const struct map_point loot_sites[] = {\n')
         for name,pos in s.loot: f.write('{"'+name+'",'+point(pos)+'},\n')
         f.write('};\n')

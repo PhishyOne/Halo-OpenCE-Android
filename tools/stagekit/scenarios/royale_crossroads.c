@@ -3,7 +3,7 @@
 #include "../stagekit.h"
 #include "shaders/shader_definitions.h"
 
-struct loot_site { char const *name; float position[3]; };
+struct map_point { char const *name; float position[3]; };
 struct cell { float bounds[6]; long count; };
 struct paint { char const *name; unsigned long rgb; long count; };
 #include "orchard_mesh.inc"
@@ -118,11 +118,18 @@ static void crossroads_build(struct stage *stage)
 	make_mesh(stage->bsp);
 	{
 		struct scenario_cutscene_flag *flags = cache_block(&stage->scenario->cutscene_flags,
-			NUMBEROF(loot_sites)+2, sizeof(*flags));
+			NUMBEROF(loot_sites)+NUMBEROF(landing_sites)+3, sizeof(*flags));
 		for (i=0; i<NUMBEROF(loot_sites); ++i) {
 			strcpy(flags[i].name, loot_sites[i].name);
 			for (j=0; j<3; ++j) flags[i].position.n[j] = loot_sites[i].position[j]/3.048f;
 		}
+		for (j=0; j<NUMBEROF(landing_sites); ++j, ++i) {
+			int axis;
+			strcpy(flags[i].name, landing_sites[j].name);
+			for (axis=0; axis<3; ++axis) flags[i].position.n[axis] = landing_sites[j].position[axis]/3.048f;
+		}
+		strcpy(flags[i].name, "br_poi_orchard_crossing");
+		flags[i++].position = (real_point3d){{0, 0, 0}};
 		/* The intact campaign Pelican crosses the island diagonally above Orchard Crossing. */
 		strcpy(flags[i].name, "echo419_entry");
 		flags[i++].position = (real_point3d){{-3900.f/3.048f, -1400.f/3.048f, 240.f/3.048f}};
@@ -148,5 +155,5 @@ static void crossroads_build(struct stage *stage)
 }
 
 struct stagekit_scenario const scenario_royale_crossroads = {
-	"royale_crossroads", "Orchard Crossing on the eight-kilometre Battle Royale footprint",
+	"royale_crossroads", "Halo Royale: Orchard Crossing",
 	crossroads_build, ROYALE_HALF_WIDTH, 0x100000 };
