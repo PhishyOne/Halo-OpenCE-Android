@@ -1,9 +1,11 @@
 /* Original rural settlement, baked into the world's render BSP. The collision
    scenery instances share a palette entry for every identical solid shape. */
 #include "../stagekit.h"
+#include "scenario/fog_definitions.h"
 #include "shaders/shader_definitions.h"
 
 struct map_point { char const *name; float position[3]; };
+struct vehicle_site { char const *kind; float position[3]; float yaw; };
 struct cell { float bounds[6]; long count; };
 struct paint { char const *name; unsigned long rgb; long count; };
 #include "orchard_mesh.inc"
@@ -108,17 +110,52 @@ static void make_mesh(struct structure_bsp *bsp)
 	}
 }
 
+static void make_ground(struct structure_bsp *bsp)
+{
+    struct collision_bsp *collision = bsp->collision_bsp.address;
+    struct structure_cluster *cluster = bsp->clusters.address;
+    struct structure_fog_palette_entry *palette = cache_bsp_block(&bsp->fog_palette, 1, sizeof(*palette));
+    struct structure_fog_region *region = cache_bsp_block(&bsp->fog_regions, 1, sizeof(*region));
+    struct structure_fog_plane *water = cache_bsp_block(&bsp->fog_planes, 1, sizeof(*water));
+    struct fog_definition *fog;
+    void *data;
+    long handle = cache_tag_new(FOG_TAG, NONE, NONE, "orchard\\millwater", sizeof(*fog), &data);
+    fog = data;
+    fog->flags = 1;
+    fog->background_sound_index = NONE;
+    cache_no_reference(&fog->sound_environment, FOURCC('s','n','d','e'));
+    cache_reference(&palette->fog, handle);
+    region->weather_palette_index = NONE;
+    water->runtime_material_type = _material_water;
+    water->plane.n.k = 1;
+    water->plane.d = ORCHARD_WATER_LEVEL;
+    cluster->fog_reference = (short)0x8000;
+    bsp->world_bounds.z0 = bsp->vehicle_floor = ORCHARD_BED_LEVEL;
+    memset(collision, 0, sizeof(*collision));
+#define COPY_GROUND(block, rows) memcpy(cache_bsp_block(&collision->block, NUMBEROF(rows), sizeof(rows[0])), rows, sizeof(rows))
+    COPY_GROUND(bsp3d.planes, ground_planes);
+    COPY_GROUND(bsp3d.nodes, ground_nodes);
+    COPY_GROUND(leaves, ground_leaves);
+    COPY_GROUND(bsp2d_references, ground_refs);
+    COPY_GROUND(surfaces, ground_surfaces);
+    COPY_GROUND(edges, ground_edges);
+    COPY_GROUND(vertices, ground_vertices);
+#undef COPY_GROUND
+    /* All leaf cells share the same visible cluster. */
+    cache_bsp_block(&bsp->leaves, NUMBEROF(ground_leaves), sizeof(struct structure_leaf));
+}
+
 static void crossroads_build(struct stage *stage)
 {
-	short palette[NUMBEROF(solids)];
 	long i, j;
 	/* Beside the barn's west wall, looking east towards it. */
 	real_point3d start = {{ 11.f/3.048f - 1.25f, -33.f/3.048f, 0 }};
 	player_start(stage, &start);
+	make_ground(stage->bsp);
 	make_mesh(stage->bsp);
 	{
 		struct scenario_cutscene_flag *flags = cache_block(&stage->scenario->cutscene_flags,
-			NUMBEROF(loot_sites)+NUMBEROF(landing_sites)+3, sizeof(*flags));
+			NUMBEROF(loot_sites)+NUMBEROF(landing_sites)+NUMBEROF(vehicle_sites)+3, sizeof(*flags));
 		for (i=0; i<NUMBEROF(loot_sites); ++i) {
 			strcpy(flags[i].name, loot_sites[i].name);
 			for (j=0; j<3; ++j) flags[i].position.n[j] = loot_sites[i].position[j]/3.048f;
@@ -128,6 +165,12 @@ static void crossroads_build(struct stage *stage)
 			strcpy(flags[i].name, landing_sites[j].name);
 			for (axis=0; axis<3; ++axis) flags[i].position.n[axis] = landing_sites[j].position[axis]/3.048f;
 		}
+        for (j=0; j<NUMBEROF(vehicle_sites); ++j, ++i) {
+            int axis;
+            sprintf(flags[i].name, "br_vehicle_%s_%ld", vehicle_sites[j].kind, j);
+            for (axis=0; axis<3; ++axis) flags[i].position.n[axis] = vehicle_sites[j].position[axis]/3.048f;
+            flags[i].facing.yaw = vehicle_sites[j].yaw;
+        }
 		strcpy(flags[i].name, "br_poi_orchard_crossing");
 		flags[i++].position = (real_point3d){{0, 0, 0}};
 		/* Flight altitude and fallback endpoints. The host chooses a crossing at boarding. */
@@ -136,24 +179,9 @@ static void crossroads_build(struct stage *stage)
 		strcpy(flags[i].name, "echo419_exit");
 		flags[i].position = (real_point3d){{3900.f/3.048f, 1400.f/3.048f, 240.f/3.048f}};
 	}
-	for (i=0; i<NUMBEROF(solids); ++i) {
-		const float *b = solids[i];
-		real_point3d pos = {{ b[0]/3.048f,b[1]/3.048f,b[2]/3.048f }};
-		for (j=0; j<i; ++j)
-			if (!memcmp(solids[j]+3,b+3,3*sizeof(float))) break;
-		if (j==i) {
-			char name[48];
-			real_rectangle3d box = {{ 0,b[3]/3.048f,0,b[4]/3.048f,0,b[5]/3.048f }};
-			sprintf(name,"orchard\\solid_%ld",i);
-			palette[i] = (short)stage->scenario->scenery_palette.count;
-			prop_obstacle(stage,name,&box,&pos);
-		} else {
-			palette[i] = palette[j];
-			prop_place_obstacle(stage,palette[i],&pos);
-		}
-	}
+    prop_box_batch(stage, solid_shapes, NUMBEROF(solid_shapes), placed_boxes, NUMBEROF(placed_boxes));
 }
 
 struct stagekit_scenario const scenario_royale_crossroads = {
 	"royale_crossroads", "Halo Royale: Orchard Crossing",
-	crossroads_build, ROYALE_HALF_WIDTH, 0x180000 };
+	crossroads_build, ROYALE_HALF_WIDTH, 0x400000 };

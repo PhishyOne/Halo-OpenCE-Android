@@ -123,6 +123,10 @@ long prop_empty_model(void);
 void prop_obstacle(struct stage *stage, char const *name, real_rectangle3d const *bounds,
 	real_point3d const *position);
 
+struct stage_box { float position[3]; short shape; };
+void prop_box_batch(struct stage *stage, float const shapes[][3], int shape_count,
+    struct stage_box const *boxes, int box_count);
+
 void prop_place_obstacle(struct stage *stage, short palette, real_point3d const *position);
 
 /* a platform (bounds in its own space) at position that rises rise in seconds

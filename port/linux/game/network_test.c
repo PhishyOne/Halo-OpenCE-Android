@@ -379,6 +379,8 @@ static void network_test_log_players(
 				object->object.shield_vitality, placed != object ? " riding" : "",
 				TEST_FLAG(unit->unit.flags, _unit_active_camouflaged_bit) ? " camo" : "",
 				unit->unit.grenade_counts[0], unit->unit.grenade_counts[1]);
+			if (scenario_location_underwater(&placed->object.location, &placed->object.position, NULL))
+				network_test_append(line, (int)sizeof(line), &length, " underwater");
 			/* where it aims (yaw and pitch, degrees), its animation state and
 			how hard it is moving */
 			network_test_append(line, (int)sizeof(line), &length, " a%.0f/%.0f f%.0f l%.0f/%.0f as%d/%d st%d thr%.2f",

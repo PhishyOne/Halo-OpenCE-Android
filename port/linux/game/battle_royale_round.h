@@ -70,6 +70,7 @@ int battle_royale_place_marked_loot(struct battle_royale_round *round,
 	const uint32_t *weapons, int weapon_count, int indoor_per_building, int random_outdoors, uint32_t seed);
 
 struct scenario;
+void battle_royale_populate_pickups(const struct scenario *map);
 int battle_royale_seed_scenario_loot(struct battle_royale_round *round, const struct scenario *scenario,
 	const uint32_t *weapons, int weapon_count, uint32_t seed);
 

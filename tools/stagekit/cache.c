@@ -29,7 +29,7 @@ enum
 {
 	HEADER_BYTES = 0x800,
 	TAG_INDEX_BYTES = 0x28,
-	MAXIMUM_TAGS = 256,
+	MAXIMUM_TAGS = 512,
 	/* a tag handle's salt: any, the same in every reference */
 	HANDLE_SALT = 0x0E00,
 	/* the room kept at the top of the tag cache for the structure BSP */

@@ -38,7 +38,7 @@ static struct {
 	struct br_drop_route route;
 	struct br_drop_pool drops;
 	uint32_t fixture_seed;
-	boolean has_orchard, guide_fixture;
+	boolean has_orchard, guide_fixture, populate_pickups;
 	boolean enabled, started, fixture, route_selected;
 	struct rider riders[HALO_PORT_MAXIMUM_NETWORK_PLAYERS];
 } flight;
@@ -78,6 +78,7 @@ void battle_royale_flight_reset(void)
 	}
 	if (starts != 1 || ends != 1)
 		return;
+	flight.populate_pickups = flight.has_orchard;
 	flight.heading.i = flight.exit.x - flight.entry.x;
 	flight.heading.j = flight.exit.y - flight.entry.y;
 	if (!(normalize3d(&flight.heading) > 0))
@@ -320,6 +321,10 @@ void battle_royale_flight_tick(void)
 	real_point3d position;
 	real t;
 	int slot, active = 0;
+	if (flight.populate_pickups && global_structure_bsp_index_get() != NONE) {
+		flight.populate_pickups = FALSE;
+		battle_royale_populate_pickups(global_scenario_try_and_get());
+	}
 	if (!flight.enabled)
 		return;
 	if (!flight.started) {
