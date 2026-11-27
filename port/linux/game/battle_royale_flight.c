@@ -176,6 +176,12 @@ static boolean board_roster(void)
 		r->player = it.datum_index;
 		r->biped = player->unit_index;
 		b = biped_get(r->biped);
+		/* The multiplayer preset has equipped every entrant before boarding.
+		   Clear it once. Weapons picked up after the drop remain in inventory. */
+		if (flight.has_orchard && flight.definition != NONE) {
+			unit_delete_inventory_weapons(r->biped);
+			csmemset(b->unit.grenade_counts, 0, sizeof(b->unit.grenade_counts));
+		}
 		r->had_safe_fall = TEST_FLAG(b->unit.flags, _unit_no_falling_damage_bit);
 		r->was_visible = !TEST_FLAG(b->object.flags, _object_invisible_bit);
 		r->had_collisions = !TEST_FLAG(b->object.flags, _object_no_collisions_bit);

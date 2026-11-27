@@ -1858,6 +1858,38 @@ void unit_delete_current_equipment(
 	return;
 }
 
+/* port: every weapon of a unit gone, the one in its hand too (which
+unit_delete_all_weapons keeps) */
+void unit_delete_inventory_weapons(
+	long unit_index)
+{
+	struct unit_datum *unit = unit_get(unit_index);
+	short slot;
+	short other;
+
+	for (slot = 0; slot < MAXIMUM_WEAPONS_PER_UNIT; slot++)
+	{
+		long weapon_index = unit->unit.weapon_object_indices[slot];
+
+		if (weapon_index == NONE)
+			continue;
+		/* (each deleted once, should two slots hold it) */
+		for (other = slot; other < MAXIMUM_WEAPONS_PER_UNIT; other++)
+		{
+			if (unit->unit.weapon_object_indices[other] == weapon_index)
+			{
+				unit->unit.weapon_object_indices[other] = NONE;
+				if (unit->unit.current_weapon_index == other)
+					unit->unit.current_weapon_index = NONE;
+				if (unit->unit.desired_weapon_index == other)
+					unit->unit.desired_weapon_index = NONE;
+			}
+		}
+		if (object_try_and_get(weapon_index))
+			object_delete(weapon_index);
+	}
+}
+
 void unit_delete_all_weapons(
 	long unit_index)
 {

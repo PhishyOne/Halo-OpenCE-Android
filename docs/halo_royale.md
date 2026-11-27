@@ -20,6 +20,12 @@ The east road leaves Orchard Crossing, crosses a 34 m bridge over the millrace, 
 
 Across the island, 36 clearings give the host 576 possible bot landing spots. The host places 57 pickups among 96 marked positions each round. The multiplayer scenario has three Warthogs, two Ghosts and one unplaced campaign Pelican which the host creates when the flight starts.
 
+## Play East Millworks offline on Android
+
+In Tools, choose **Import Maps** and select `Halo-Royale-East-Millworks.zip`. Open **Offline Match → Bot Match**, select **Halo Royale (East Millworks)** as the map and choose **Elimination** for a one-life free-for-all. Choose **Slayer** to explore with respawns. Three bots make a small first match. Tap **Play**, then press **Jump** when Echo 419 announces the open drop zone. The end of the flight releases anyone still aboard.
+
+The first insertion starts players and bots empty-handed. Find supplies on the ground. The shrinking circle still needs to be connected to live matches.
+
 ## Build the multiplayer map
 
 Generate a `royale_crossroads` cache with StageKit. Compile it with Invader's `invader-extract` and `invader-build` on PATH, Python with `reclaimer==2.11.2`, and a private Custom Edition tag set containing the campaign Pelican. The English Custom Edition release r220 of `halopc-restored` supplies the tested stock tags. The map embeds the resources it uses.
