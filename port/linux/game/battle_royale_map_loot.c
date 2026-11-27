@@ -1,7 +1,7 @@
 /* Read only the map's loot flags. Other named points remain available to scripts. */
 #include "cseries.h"
 #include "math/real_math.h"
-#include "objects/objects.h"
+#include "items/items.h"
 #include "scenario/scenario.h"
 #include "scenario/scenario_definitions.h"
 #include "battle_royale_round.h"
@@ -60,9 +60,15 @@ void battle_royale_populate_pickups(struct scenario const *map)
     for (i=0; i<selection.loot_count; ++i) {
         struct battle_royale_pickup const *pickup = &selection.loot[i];
         struct object_placement_data placement;
+        long object_index;
         object_placement_data_new(&placement, (long)pickup->weapon, NONE);
         placement.position = (real_point3d){{pickup->position.x, pickup->position.y, pickup->position.z+.035f}};
-        if (object_new(&placement) != NONE) ++spawned;
+        object_index = object_new(&placement);
+        if (object_index != NONE) {
+            struct item_datum *item = item_get(object_index);
+            SET_FLAG(item->item.flags, _item_unclaimed_royale_loot_bit, TRUE);
+            ++spawned;
+        }
     }
     placing_royale_loot = 0;
     platform_log("Halo Royale: spawned %d of %d native pickups", spawned, selection.loot_count);

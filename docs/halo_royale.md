@@ -24,7 +24,7 @@ Across the island, 36 clearings give the host 576 possible bot landing spots. Th
 
 In Tools, choose **Import Maps** and select `Halo-Royale-East-Millworks.zip`. Open **Offline Match → Bot Match**, select **Halo Royale (East Millworks)** as the map and choose **Elimination** for a one-life free-for-all. Choose **Slayer** to explore with respawns. Three bots make a small first match. Tap **Play**, then press **Jump** when Echo 419 announces the open drop zone. The end of the flight releases anyone still aboard.
 
-The first insertion starts players and bots empty-handed. Find supplies on the ground. The shrinking circle still needs to be connected to live matches.
+Players and bots board empty-handed. Supplies placed before the flight stay on the island until claimed. Dropped gear follows the usual cleanup rules. In Elimination the five shrinking circles start after insertion. The upper-right map shows your position, the current circle and the next safe area. Tap it to open the island map. Watch the upper-left timer and the blue haze when outside the circle. Slayer keeps the island open for exploration.
 
 ## Build the multiplayer map
 

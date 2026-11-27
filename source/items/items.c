@@ -195,6 +195,12 @@ void item_in_unit_inventory(
 	{
 		struct unit_datum *unit = unit_get(owner_unit_index);
 
+		/* port: a claimed Royale item follows ordinary dropped-item cleanup. */
+		if (TEST_FLAG(item->item.flags, _item_unclaimed_royale_loot_bit))
+		{
+			SET_FLAG(item->item.flags, _item_unclaimed_royale_loot_bit, FALSE);
+			item->item.last_owned_time = game_time_get();
+		}
 		item->item.flags |= FLAG(_item_attached_to_unit_bit);
 		if (unit->unit.player_index != NONE)
 		{

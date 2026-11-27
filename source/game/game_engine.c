@@ -3770,7 +3770,9 @@ static void game_engine_update_purge(
 		{
 			struct item_datum *item = item_get(item_iterator.index);
 
-			if (item->item.last_owned_time < cutoff_time &&
+			/* port: the island places its supplies once, before the flight. */
+			if (!TEST_FLAG(item->item.flags, _item_unclaimed_royale_loot_bit) &&
+				item->item.last_owned_time < cutoff_time &&
 				!TEST_FLAG(item->item.flags, _item_attached_to_unit_bit))
 			{
 				long item_index = item_iterator.index;

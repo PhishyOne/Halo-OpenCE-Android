@@ -23,6 +23,7 @@ enum
 	_item_on_object_bit,
 	_item_does_not_accelerate_bit,
 	_item_part_of_respawn_system_bit,
+	_item_unclaimed_royale_loot_bit, /* port: keep authored island supplies until first pickup */
 	NUMBER_OF_ITEM_DATUM_FLAGS,
 };
 
