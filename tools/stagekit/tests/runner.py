@@ -1,6 +1,7 @@
 """StageKit's tests' tools (README.md): build the generator, write a scenario's map, validate it, and play it.
 """
 
+import errno
 import os
 import re
 import shlex
@@ -164,8 +165,16 @@ def launch(machine, input, address, broadcast, test, init="", **environment):
                        HOME=str(machine), HALO_NETWORK_TEST=test, HALO_NET_ADDRESS=address,
                        HALO_NET_BROADCAST=broadcast, **environment)
     with open(machine / "game.log", "w") as log:
-        return subprocess.Popen([str(machine / "halo")], cwd=machine, env=environment, stdout=log,
-                                stderr=subprocess.STDOUT)
+        # A freshly staged executable can briefly return ETXTBSY on CI filesystems.
+        deadline = time.monotonic() + 2
+        while True:
+            try:
+                return subprocess.Popen([str(machine / "halo")], cwd=machine, env=environment,
+                                        stdout=log, stderr=subprocess.STDOUT)
+            except OSError as exc:
+                if exc.errno != errno.ETXTBSY or time.monotonic() >= deadline:
+                    raise
+                time.sleep(.05)
 
 
 # the first tick every player has a unit, from which a scenario's seconds (and cues) count (network_test.c)
