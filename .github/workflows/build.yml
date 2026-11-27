@@ -38,7 +38,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          ref: 932dcb82c6957667ab426f637454e10358d146a3
+          ref: 8fc02161ec76eed113c90672f505e4e727729503
 
       - uses: actions/cache@v4
         with:
