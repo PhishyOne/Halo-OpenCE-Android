@@ -2213,6 +2213,38 @@ public class LauncherActivity extends Activity {
         });
     }
 
+    // Android lets an app inspect its own exit history. Record only time, role and
+    // reason in the existing user-requested export, never raw system traces.
+    private void appendProcessExits(OutputStream output) throws java.io.IOException {
+        if (android.os.Build.VERSION.SDK_INT < 30) return;
+        ActivityManager manager = getSystemService(ActivityManager.class);
+        if (manager == null) return;
+        StringBuilder text = new StringBuilder("\nRecent Halo process exits (Android):\n");
+        try {
+            for (android.app.ApplicationExitInfo entry : manager.getHistoricalProcessExitReasons(getPackageName(), 0, 10)) {
+                String name = entry.getProcessName();
+                String role = getPackageName().equals(name) ? "launcher" :
+                    (getPackageName() + ":game").equals(name) ? "game" : null;
+                if (role == null) continue;
+                int reason = entry.getReason();
+                String label;
+                switch (reason) {
+                    case android.app.ApplicationExitInfo.REASON_ANR: label = "unresponsive (ANR)"; break;
+                    case android.app.ApplicationExitInfo.REASON_LOW_MEMORY: label = "low memory"; break;
+                    case android.app.ApplicationExitInfo.REASON_CRASH: label = "Java crash"; break;
+                    case android.app.ApplicationExitInfo.REASON_CRASH_NATIVE: label = "native crash"; break;
+                    case android.app.ApplicationExitInfo.REASON_EXIT_SELF: label = "process exit"; break;
+                    default: label = "reason " + reason;
+                }
+                text.append(java.time.Instant.ofEpochMilli(entry.getTimestamp())).append(' ')
+                    .append(role).append(' ').append(label).append('\n');
+            }
+        } catch (RuntimeException unavailable) {
+            text.append("Exit history unavailable.\n");
+        }
+        output.write(text.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
     private void saveDiagnostics(Uri destination) {
         new Thread(() -> {
             String result;
@@ -2221,6 +2253,7 @@ public class LauncherActivity extends Activity {
                 if (output == null)
                     throw new java.io.IOException("Android could not write the report.");
                 HaloDiagnostics.write(dataRoot, output);
+                appendProcessExits(output);
                 result = "Diagnostic report saved. Review it before sharing.";
             } catch (Exception error) {
                 result = "Couldn't save report: " + error.getMessage();
