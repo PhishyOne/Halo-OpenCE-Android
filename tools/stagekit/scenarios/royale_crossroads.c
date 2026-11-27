@@ -19,12 +19,16 @@ static long paint_shader(struct paint const *paint)
 	void *data;
 	struct bitmap_group *bitmap;
 	struct bitmap_data *image;
+	struct bitmap_group_sequence *sequence;
 	struct shader *shader;
 	unsigned long *swatch = cache_bsp_allocate(4);
 	long texture, handle;
 	sprintf(name, "orchard\\%s", paint->name);
 	texture = cache_tag_new(FOURCC('b','i','t','m'), NONE, NONE, name, sizeof(*bitmap), &data);
 	bitmap = data;
+	sequence = cache_block(&bitmap->sequences, 1, sizeof(*sequence));
+	sequence->first_bitmap_index = 0;
+	sequence->bitmap_count = 1;
 	image = cache_block(&bitmap->bitmaps, 1, sizeof(*image));
 	image->signature = FOURCC('b','i','t','m');
 	image->width = image->height = image->depth = 1;

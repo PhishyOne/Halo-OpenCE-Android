@@ -13,3 +13,23 @@ The host samples separated landing areas, varies the line between them, and exte
 Players can read the flight path and decide whether to risk a busy settlement or take a quieter start. Give bots the same range of possible destinations. Nearby bots can contest the same clearing and building. Some places should be empty in any given small match.
 
 Author clearings near indoor or outdoor supplies. Larger destinations can offer more clearings and attract more traffic. The host randomly selects reachable landing spots without replacement, varies the exit timing and leaves room between bodies.
+
+## East Millworks
+
+The east road leaves Orchard Crossing, crosses a 34 m bridge over the millrace, and passes six furnished mill buildings before continuing to East Farm. A side path joins both stairways of a buried shelter. Supplies are placed inside the mill, in the shelter storeroom and around loading piles. Nine woodlots break up the open ground. The water level and afternoon sky stay fixed.
+
+Across the island, 36 clearings give the host 576 possible bot landing spots. The host places 57 pickups among 96 marked positions each round. The multiplayer scenario has three Warthogs, two Ghosts and one unplaced campaign Pelican which the host creates when the flight starts.
+
+## Build the multiplayer map
+
+Generate a `royale_crossroads` cache with StageKit. Compile it with Invader's `invader-extract` and `invader-build` on PATH, Python with `reclaimer==2.11.2`, and a private Custom Edition tag set containing the campaign Pelican. The English Custom Edition release r220 of `halopc-restored` supplies the tested stock tags. The map embeds the resources it uses.
+
+```sh
+stagekit royale_crossroads ./millworks-stage.map
+python3 tools/stagekit/royale_release.py \
+  --geometry ./millworks-stage.map --tags /path/to/hek/tags \
+  --sky 'sky\clear afternoon\clear afternoon' \
+  --output ./custom_maps/halo_royale.map
+```
+
+The builder validates the source tag table, preserves the authored collision and placement markers, and checks that the compiled multiplayer cache contains the required stock and authored tags before replacing the destination. The source repository contains the island and builder. Keep the compiled map and retail tags local.
