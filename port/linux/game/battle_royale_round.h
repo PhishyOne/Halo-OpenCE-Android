@@ -59,6 +59,17 @@ int battle_royale_place_loot(struct battle_royale_round *round,
 	const struct battle_royale_point *sites, int site_count,
 	const uint32_t *weapons, int weapon_count, int count, uint32_t seed);
 
+/* World-unit spawn markers from a scenario. br_in_NN_* belongs to building NN,
+   br_fixed_* is a landmark, and br_wild_* is a possible outdoor spawn. */
+struct battle_royale_loot_marker { char name[32]; struct battle_royale_point point; };
+int battle_royale_place_marked_loot(struct battle_royale_round *round,
+	const struct battle_royale_loot_marker *markers, int marker_count,
+	const uint32_t *weapons, int weapon_count, int indoor_per_building, int random_outdoors, uint32_t seed);
+
+struct scenario;
+int battle_royale_seed_scenario_loot(struct battle_royale_round *round, const struct scenario *scenario,
+	const uint32_t *weapons, int weapon_count, uint32_t seed);
+
 /* The caller supplies the host's current unit position in world units.
    The same nearest-item query can guide a bot. A claim succeeds once. */
 int battle_royale_nearest_loot(const struct battle_royale_round *round, int seat, uint32_t identity,

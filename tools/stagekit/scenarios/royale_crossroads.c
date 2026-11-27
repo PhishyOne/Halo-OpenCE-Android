@@ -3,6 +3,7 @@
 #include "../stagekit.h"
 #include "shaders/shader_definitions.h"
 
+struct loot_site { char const *name; float position[3]; };
 struct cell { float bounds[6]; long count; };
 struct paint { char const *name; unsigned long rgb; long count; };
 #include "orchard_mesh.inc"
@@ -115,6 +116,14 @@ static void crossroads_build(struct stage *stage)
 	real_point3d start = {{ 11.f/3.048f - 1.25f, -33.f/3.048f, 0 }};
 	player_start(stage, &start);
 	make_mesh(stage->bsp);
+	{
+		struct scenario_cutscene_flag *flags = cache_block(&stage->scenario->cutscene_flags,
+			NUMBEROF(loot_sites), sizeof(*flags));
+		for (i=0; i<NUMBEROF(loot_sites); ++i) {
+			strcpy(flags[i].name, loot_sites[i].name);
+			for (j=0; j<3; ++j) flags[i].position.n[j] = loot_sites[i].position[j]/3.048f;
+		}
+	}
 	for (i=0; i<NUMBEROF(solids); ++i) {
 		const float *b = solids[i];
 		real_point3d pos = {{ b[0]/3.048f,b[1]/3.048f,b[2]/3.048f }};

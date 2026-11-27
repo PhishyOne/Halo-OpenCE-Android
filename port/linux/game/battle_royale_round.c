@@ -104,6 +104,52 @@ int battle_royale_place_loot(struct battle_royale_round *round,
 	return 1;
 }
 
+int battle_royale_place_marked_loot(struct battle_royale_round *round,
+	const struct battle_royale_loot_marker *markers, int marker_count,
+	const uint32_t *weapons, int weapon_count, int indoor_per_building, int random_outdoors, uint32_t seed)
+{
+	struct battle_royale_point chosen[BR_MAX_LOOT];
+	int building_counts[100] = {0};
+	int order[BR_MAX_LOOT], category[BR_MAX_LOOT];
+	int i, j, count = 0, wild = 0;
+	if (!markers || marker_count < 1 || marker_count > BR_MAX_LOOT ||
+		indoor_per_building < 1 || indoor_per_building > marker_count ||
+		random_outdoors < 0 || random_outdoors > marker_count) return 0;
+	for (i=0; i<marker_count; ++i) {
+		const char *name = markers[i].name;
+		struct battle_royale_point p = markers[i].point;
+		if (!memchr(name, 0, sizeof(markers[i].name)) || !valid_point(p)) return 0;
+		for (j=0; j<i; ++j) {
+			struct battle_royale_point q = markers[j].point;
+			if (!strcmp(name,markers[j].name) || (p.x==q.x && p.y==q.y && p.z==q.z)) return 0;
+		}
+		if (!strncmp(name,"br_fixed_",9) && name[9]) category[i] = -1;
+		else if (!strncmp(name,"br_wild_",8) && name[8]) category[i] = 0;
+		else if (!strncmp(name,"br_in_",6) && name[6]>='0' && name[6]<='9' &&
+			name[7]>='0' && name[7]<='9' && name[8]=='_' && name[9]) {
+			category[i] = (name[6]-'0')*10 + name[7]-'0';
+			if (!category[i]) return 0;
+		} else return 0;
+		order[i] = i;
+	}
+	if (!seed) seed = UINT32_C(0x9e3779b9);
+	for (i=0; i<marker_count; ++i) {
+		int next = i + loot_random(&seed) % (uint32_t)(marker_count-i);
+		int index = order[next], group = category[index];
+		order[next] = order[i];
+		if (group == 0) {
+			if (wild >= random_outdoors) continue;
+			++wild;
+		} else if (group > 0) {
+			if (building_counts[group] >= indoor_per_building) continue;
+			++building_counts[group];
+		}
+		chosen[count++] = markers[index].point;
+	}
+	if (wild != random_outdoors) return 0;
+	return battle_royale_place_loot(round,chosen,count,weapons,weapon_count,count,seed);
+}
+
 static int can_take(const struct battle_royale_round *round, int seat, uint32_t identity)
 {
 	return round->phase == BR_PLAYING && battle_royale_alive(round, seat, identity) &&
