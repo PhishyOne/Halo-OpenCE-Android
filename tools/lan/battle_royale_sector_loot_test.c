@@ -14,22 +14,22 @@ int main(void)
 	int n=0, seed, i, j;
 	while (n<BR_MAX_LOOT && scanf("%31s %f %f %f",markers[n].name,&markers[n].point.x,
 		&markers[n].point.y,&markers[n].point.z)==4) ++n;
-	assert(n==39);
+	assert(n==49);
 	for (seed=0; seed<256; ++seed) {
-		int rooms[5]={0}, fixed=0, wild=0;
+		int rooms[7]={0}, fixed=0, wild=0;
 		assert(battle_royale_begin(&round,&zone,ids));
 		assert(battle_royale_place_marked_loot(&round,markers,n,weapons,2,3,4,seed));
-		assert(round.loot_count==22);
+		assert(round.loot_count==30);
 		for (i=0; i<round.loot_count; ++i) {
 			for (j=0;j<n;++j) if (memcmp(&markers[j].point,&round.loot[i].position,sizeof(markers[j].point))==0) break;
 			assert(j<n);
 			if (!strncmp(markers[j].name,"br_in_",6)) {
-				int b=markers[j].name[7]-'1'; assert(b>=0 && b<5); ++rooms[b];
+				int b=markers[j].name[7]-'1'; assert(b>=0 && b<7); ++rooms[b];
 			} else if (!strncmp(markers[j].name,"br_fixed_",9)) ++fixed;
 			else { ++wild; ++wild_seen[j]; }
 		}
-		for (i=0;i<5;++i) assert(rooms[i]==3);
-		assert(fixed==3 && wild==4);
+		for (i=0;i<7;++i) assert(rooms[i]==3);
+		assert(fixed==5 && wild==4);
 		/* A real claim through the normal host inventory API removes the pickup. */
 		assert(battle_royale_take_loot(&round,0,11,round.loot[0].position,0)!=0);
 	}

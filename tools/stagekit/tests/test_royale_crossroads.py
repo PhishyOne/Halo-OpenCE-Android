@@ -182,7 +182,8 @@ def test_landing_clearings_are_open_and_close_to_loot():
     overhead = [(min(p[0] for p in tri), max(p[0] for p in tri),
                  min(p[1] for p in tri), max(p[1] for p in tri))
                 for faces in scene.faces.values() for tri in faces if max(p[2] for p in tri) > .1]
-    radius = .25 * 3.048
+    # Enclose the entire random offset in each axis as well as the biped.
+    radius = (.25 + .06) * 3.048
     positions = []
     for name, x, y in orchard.LANDINGS:
         for cell in range(16):
@@ -193,7 +194,7 @@ def test_landing_clearings_are_open_and_close_to_loot():
             assert min(math.hypot(px-lx, py-ly) for _, (lx, ly, _) in scene.loot) <= 25
             assert all(math.hypot(px-ox, py-oy) > 2*radius for ox, oy in positions)
             positions.append((px, py))
-    assert len(positions) == 128
+    assert len(positions) == 256
 
 
 def test_guided_drops_land_near_loot(stagekit, tmp_path):
@@ -202,28 +203,65 @@ def test_guided_drops_land_near_loot(stagekit, tmp_path):
     import struct
     import runner
     import orchard
-    # The single-player physics fixture uses the host bot's assignment, jump
-    # and steering code. Rotate the authored marker order to land on each site.
+    # Leave just one named clearing at a time, forcing normal host assignment
+    # to exercise it. The stem of each flag is eight bytes in both versions.
     for name, x, y in orchard.LANDINGS:
         folder = tmp_path/name
         path = runner.generate(stagekit, 'royale_crossroads', folder)
         data = bytearray(path.read_bytes())
-        def marker(label):
-            field = ('br_land_'+label).encode().ljust(32, b'\0')
+        for other, ox, oy in orchard.LANDINGS:
+            field = ('br_land_'+other).encode().ljust(32, b'\0')
             assert data.count(field) == 1
-            return data.index(field)+32
-        first, selected = marker(orchard.LANDINGS[0][0]), marker(name)
-        assert all(abs(a*3.048-b) < .001 for a,b in
-                   zip(struct.unpack_from('<3f', data, selected), (x, y, 0)))
-        data[first:first+12], data[selected:selected+12] = data[selected:selected+12], data[first:first+12]
+            offset = data.index(field)
+            assert all(abs(a*3.048-b) < .001 for a,b in
+                       zip(struct.unpack_from('<3f', data, offset+32), (ox, oy, 0)))
+            if other != name:
+                data[offset:offset+8] = b'qa_skip_'
         path.write_bytes(data)
-        session = runner.play(folder, seconds=52, input='echo419-guide')
+        session = runner.play(folder, seconds=70, input='echo419-guide')
         assert re.findall(r'Orchard Crossing approach at tick (\d+)', session.log) == ['840']
         drops = re.findall(r'dropped seat 0 at tick (\d+)', session.log)
-        assert len(drops) == 1 and 930 < int(drops[0]) < 1050
+        assert len(drops) == 1 and 90 <= int(drops[0]) < 1800
+        selected = re.findall(r'planned clearing 0 spot (\d+) at ([-.\d]+) ([-.\d]+)', session.log)
+        assert len(selected) == 1
+        cell, tx, ty = int(selected[0][0]), float(selected[0][1]), float(selected[0][2])
+        assert abs(tx-(x/3.048+(cell%4-1.5)*.75)) < .061
+        assert abs(ty-(y/3.048+(cell//4-1.5)*.75)) < .061
         landings = re.findall(r'guided touchdown at ([-.\d]+) ([-.\d]+) ([-.\d]+)', session.log)
         assert len(landings) == 1, (name, session.log[-2000:])
         px, py, pz = map(float, landings[0])
-        distance = math.hypot(px - (x/3.048 - 1.125), py - (y/3.048 - 1.125))*3.048
+        distance = math.hypot(px-tx, py-ty)*3.048
         print(f'{name}: jumped at tick {drops[0]}, landed {distance:.2f} metres from target')
         assert distance < 3 and abs(pz) < .05 and session.deaths(0) == 0, (name, distance, pz)
+
+
+def test_complete_map_replays_seeded_drops(stagekit, tmp_path):
+    import re
+    import runner
+    results = []
+    for index, seed in enumerate([27, 419, 27]):
+        folder = tmp_path/str(index)
+        runner.generate(stagekit, 'royale_crossroads', folder)
+        session = runner.play(folder, seconds=70, input=f'echo419-guide:{seed}')
+        result = re.findall(r'planned clearing (\d+) spot (\d+) at ([-.\d]+) ([-.\d]+)', session.log)
+        assert len(result) == 1 and 'guided touchdown at' in session.log
+        assert f'drop seed {seed}' in session.log
+        results.append(result[0])
+    assert results[0] == results[2] and results[0][0] != results[1][0]
+
+
+def test_scatter_over_many_rosters(tmp_path):
+    import os
+    import sys
+    import subprocess
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[3]
+    sys.path.insert(0, str(root/'tools/stagekit'))
+    import orchard
+    exe = tmp_path/'scatter'
+    subprocess.run([os.environ.get('CC','cc'), '-std=c99', '-Wall', '-Wextra', '-Werror', '-O2',
+                    '-ffp-contract=off', '-iquote','port/linux/include','-iquote','port/linux/game',
+                    'tools/lan/battle_royale_scatter_test.c', 'port/linux/game/battle_royale_scatter.c',
+                    'port/linux/game/battle_royale_round.c', '-o', str(exe)], cwd=root, check=True)
+    sites = ''.join(f'{x/3.048} {y/3.048} 0\n' for _, x, y in orchard.LANDINGS)
+    subprocess.run([exe], input=sites, text=True, check=True)

@@ -60,8 +60,8 @@ static int valid_point(struct battle_royale_point point)
 	return finite_coordinate(point.x) && finite_coordinate(point.y) && finite_coordinate(point.z);
 }
 
-/* Local stream: drawing loot never advances Halo's gameplay RNG. */
-static uint32_t loot_random(uint32_t *seed)
+/* Local stream: loot and landings each keep their own seed. */
+uint32_t battle_royale_random(uint32_t *seed)
 {
 	*seed ^= *seed << 13;
 	*seed ^= *seed >> 17;
@@ -95,10 +95,10 @@ int battle_royale_place_loot(struct battle_royale_round *round,
 		seed = UINT32_C(0x9e3779b9);
 	for (i = 0; i < count; ++i)
 	{
-		int next = i + (int)(loot_random(&seed) % (uint32_t)(site_count - i));
+		int next = i + (int)(battle_royale_random(&seed) % (uint32_t)(site_count - i));
 		round->loot[i].position = sites[order[next]];
 		order[next] = order[i];
-		round->loot[i].weapon = weapons[loot_random(&seed) % (uint32_t)weapon_count];
+		round->loot[i].weapon = weapons[battle_royale_random(&seed) % (uint32_t)weapon_count];
 	}
 	round->loot_count = count;
 	return 1;
@@ -134,7 +134,7 @@ int battle_royale_place_marked_loot(struct battle_royale_round *round,
 	}
 	if (!seed) seed = UINT32_C(0x9e3779b9);
 	for (i=0; i<marker_count; ++i) {
-		int next = i + loot_random(&seed) % (uint32_t)(marker_count-i);
+		int next = i + battle_royale_random(&seed) % (uint32_t)(marker_count-i);
 		int index = order[next], group = category[index];
 		order[next] = order[i];
 		if (group == 0) {
