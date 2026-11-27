@@ -1,13 +1,18 @@
 """Orchard Crossing. Geometry and solid boxes in metres, Z up."""
 import math
 import random
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
+
+import millworks
+from island_ground import Ground
 
 COLORS = dict(meadow=0x748351, field=0xaf995f, furrow=0x978551, verge=0x948771,
               road=0x545857, lane=0xb5a184, plaster=0xc3b8a3, brick=0x945e48,
               roof=0x904d39, slate=0x53616a, timber=0x705545, trim=0xe0d6bc,
               bark=0x59493a, pine=0x355440, needle=0x44634a, leaf=0x617d45, crown=0x7e904e,
+              steel=0x606d70, water=0x3e7279, ripple=0x789b97, silt=0x786e55, bank=0x716d4d,
+              grass=0x70804f, stripe=0xc0ae74, drum=0x885e4c,
               floorboard=0x96795f, plank=0xa4876d, concrete=0x8b8a83)
 
 
@@ -40,6 +45,7 @@ class Sector:
         self.solids = []
         self.loot = []
         self.buildings = []
+        self.ground = Ground()
 
     def face(self, mat, *points):
         for i in range(1, len(points)-1):
@@ -147,7 +153,8 @@ class Sector:
 
     def tree(self,x,y,pine,rng):
         h=rng.uniform(8,11) if pine else rng.uniform(5,7)
-        self.box('bark',x-.26,y-.26,0,.52,.52,h*.76)
+        self.box('bark',x-.26,y-.26,0,.52,.52,h*.76,False)
+        self.solids.append((x-.26,y-.26,0,.52,.52,6.0 if pine else 4.0))
         n=7
         for k in range(2):
             radius=(2.45 if pine else 2.65)*(1-.25*k)*rng.uniform(.9,1.1)
@@ -163,7 +170,7 @@ class Sector:
 
 def build():
     s=Sector()
-    s.slab('meadow',-4000,-4000,8000,8000,0)
+    s.ground.draw(s)
     s.slab('verge',-300,-6.0,600,12.0,.018)
     s.slab('road',-300,-4.4,600,8.8,.035)
     s.slab('lane',-5,-105,7,101,.027)
@@ -211,13 +218,50 @@ def build():
             s.loot.append(('br_fixed_'+name,(x-1.5,y+2.5,.69)))
         s.tree(x-22,y+13,False,rng)
         s.tree(x+22,y+14,True,rng)
+    millworks.populate(s)
     return s
+
+
+def collision_palette(solids):
+    """Fit the CE scenario's 100 scenery definitions without changing any box boundary."""
+    boxes = [(*box[:3], *(round(v,5) for v in box[3:])) for box in solids]
+    while True:
+        counts = Counter(box[3:] for box in boxes)
+        if len(counts) <= 100:
+            return list(counts), boxes
+        # Cover one long box with overlapping instances of an existing shorter
+        # shape matching its other two axes. Prefer the fewest extra objects.
+        options = []
+        for large in counts:
+            for small in counts:
+                axes = [i for i in range(3) if small[i] != large[i]]
+                if len(axes) != 1:
+                    continue
+                axis = axes[0]
+                if small[axis] >= large[axis]:
+                    continue
+                n = math.ceil(large[axis]/small[axis]-1e-8)
+                options.append(((n-1)*counts[large], n, large, small, axis))
+        if not options:
+            raise ValueError("Scenery requires more than 100 collision shapes")
+        _, n, large, small, axis = min(options)
+        updated = []
+        for box in boxes:
+            if box[3:] != large:
+                updated.append(box)
+                continue
+            for i in range(n):
+                position = list(box[:3])
+                position[axis] += i*(large[axis]-small[axis])/(n-1)
+                updated.append((*position,*small))
+        boxes = updated
 
 
 def write_include(path):
     s=build()
     def point(p): return '{'+','.join(f'{v:.5f}' for v in p)+'}'
     with Path(path).open('w') as f:
+        s.ground.write_include(f)
         f.write('static const struct paint paints[] = {\n')
         for name,faces in s.faces.items():
             f.write('{"%s",0x%06x,%d},\n'%(name,COLORS[name],len(faces)))
@@ -240,8 +284,14 @@ def write_include(path):
             f.write('{'+point(bounds)+','+str(len(batch))+'},\n')
         f.write('};\nstatic const long cell_faces[] = {\n')
         for batch in batches: f.write(','.join(map(str,batch))+',\n')
-        f.write('};\nstatic const float solids[][6] = {\n')
-        for box in s.solids: f.write(point(box)+',\n')
+        shapes, boxes = collision_palette(s.solids)
+        f.write('};\nstatic const float solid_shapes[][3] = {\n')
+        for shape in shapes: f.write(point(shape)+',\n')
+        f.write('};\nstatic const struct stage_box placed_boxes[] = {\n')
+        for box in boxes: f.write('{'+point(box[:3])+','+str(shapes.index(box[3:]))+'},\n')
+        f.write('};\nstatic const struct vehicle_site vehicle_sites[] = {\n')
+        for kind,x,y,yaw in millworks.VEHICLES:
+            f.write('{"'+kind+'",'+point((x,y,.75))+','+str(math.radians(yaw))+'},\n')
         f.write('};\nstatic const struct map_point landing_sites[] = {\n')
         for name,x,y in LANDINGS: f.write('{"br_land_'+name+'",'+point((x,y,0))+'},\n')
         f.write('};\nstatic const struct map_point loot_sites[] = {\n')

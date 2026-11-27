@@ -165,14 +165,9 @@ static long box_collision_model(
 	return handle;
 }
 
-void prop_obstacle(
-	struct stage *stage,
-	char const *name,
-	real_rectangle3d const *bounds,
-	real_point3d const *position)
+static long obstacle_definition(char const *name, real_rectangle3d const *bounds)
 {
 	struct object_definition *scenery;
-	struct scenario_object_palette_entry *palette;
 	long model_handle, scenery_handle;
 	void *data;
 
@@ -187,8 +182,14 @@ void prop_obstacle(
 	/* (round the box, a little past its farthest corner) */
 	scenery->object.bounding_radius = box_reach(bounds) + 0.1f;
 
-	palette = cache_block_add(&stage->scenario->scenery_palette, sizeof(*palette));
-	cache_reference(&palette->reference, scenery_handle);
+	return scenery_handle;
+}
+
+void prop_obstacle(struct stage *stage, char const *name, real_rectangle3d const *bounds,
+    real_point3d const *position)
+{
+    struct scenario_object_palette_entry *palette = cache_block_add(&stage->scenario->scenery_palette, sizeof(*palette));
+    cache_reference(&palette->reference, obstacle_definition(name, bounds));
 	prop_place_obstacle(stage, (short)(stage->scenario->scenery_palette.count - 1), position);
 }
 
@@ -198,6 +199,28 @@ void prop_place_obstacle(struct stage *stage, short palette, real_point3d const 
 	placement->object.palette_entry_index = palette;
 	placement->object.name_index = NONE;
 	placement->object.position = *position;
+}
+
+/* Allocate both complete scenario blocks once. Positions and dimensions arrive in metres. */
+void prop_box_batch(struct stage *stage, float const shapes[][3], int shape_count,
+    struct stage_box const *boxes, int box_count)
+{
+    struct scenario_object_palette_entry *palette = cache_block(&stage->scenario->scenery_palette,
+        shape_count, sizeof(*palette));
+    struct scenery_placement *placements = cache_block(&stage->scenario->scenery, box_count, sizeof(*placements));
+    int i, k;
+    for (i=0; i<shape_count; ++i) {
+        char name[48];
+        real_rectangle3d bounds = {{0, shapes[i][0]/3.048f, 0, shapes[i][1]/3.048f, 0, shapes[i][2]/3.048f}};
+        sprintf(name, "orchard\\solid_%d", i);
+        cache_reference(&palette[i].reference, obstacle_definition(name, &bounds));
+    }
+    for (i=0; i<box_count; ++i) {
+        placements[i].object.name_index = NONE;
+        placements[i].object.palette_entry_index = boxes[i].shape;
+        for (k=0; k<3; ++k)
+            placements[i].object.position.n[k] = boxes[i].position[k]/3.048f;
+    }
 }
 
 /* the name a scenario's console lines call an object it places by */
