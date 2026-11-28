@@ -1,7 +1,7 @@
 name: Build
 on:
   push:
-    branches: [halo/android-build-v86]
+    branches: [halo/android-build-v87]
 permissions:
   contents: read
 concurrency:
@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
-      HALO_ANDROID_VERSION_CODE: '86'
+      HALO_ANDROID_VERSION_CODE: '87'
       HALO_ANDROID_EXPERIMENT_PACKAGE: 'true'
     steps:
       - name: Install the toolchain
@@ -38,7 +38,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          ref: f96d82984b7c2cd78f77efa8e4b2c2836521d7fa
+          ref: 8e0b7505ad739b5d1bd7370873e7972dadede3ec
 
       - uses: actions/cache@v4
         with:
@@ -347,6 +347,21 @@ jobs:
           python3 -m unittest tools.test_battle_royale_round
 
       # the touch controls' layout and gyroscope maths (the runner's JDK)
+      - name: Compile the Android waypoint render test
+        run: |
+          sdk=$(find "$ANDROID_HOME/platforms" -name android.jar | sort -V | tail -1)
+          d8=$(find "$ANDROID_HOME/build-tools" -name d8 | sort -V | tail -1)
+          work="$RUNNER_TEMP/waypoint-test"
+          mkdir -p "$work/classes"
+          javac -encoding UTF-8 --release 8 -classpath "$sdk" -d "$work/classes" port/android/app/src/main/java/com/halo/decomp/RoyaleMinimap.java tools/tests/RoyaleWaypointTest.java
+          cd "$work/classes"
+          jar cf "$work/test.jar" com/halo/decomp/RoyaleWaypointTest*.class
+          "$d8" --min-api 28 --lib "$sdk" --classpath "$work/classes" --output "$work/probe.jar" "$work/test.jar"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: royale-waypoint-probe
+          path: ${{ runner.temp }}/waypoint-test/probe.jar
+
       - name: Test the touch layout
         run: python3 tools/test_touch_layout.py
 
@@ -379,7 +394,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: f96d82984b7c2cd78f77efa8e4b2c2836521d7fa
+          ref: 8e0b7505ad739b5d1bd7370873e7972dadede3ec
 
       - uses: actions/cache@v4
         with:
@@ -419,7 +434,7 @@ jobs:
           pacman -Syu --noconfirm --needed git python python-pytest ninja clang lld gcc lib32-glibc lib32-gcc-libs sdl3 lib32-sdl3
       - uses: actions/checkout@v4
         with:
-          ref: f96d82984b7c2cd78f77efa8e4b2c2836521d7fa
+          ref: 8e0b7505ad739b5d1bd7370873e7972dadede3ec
       - name: Build the offline game and run inventory regressions
         run: |
           python configure.py --release --lto=off --pgo=off
