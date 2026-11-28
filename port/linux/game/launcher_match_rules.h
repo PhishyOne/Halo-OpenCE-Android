@@ -88,6 +88,10 @@ static boolean launcher_rule_apply_one(const char *key,long n,const char *base,
         if(n < 0 || n > 2) return FALSE;
         o->radar_players=(byte)n; launcher_rule_flag(v, _game_variant_draw_object_in_motion_sensor_bit, n != _radar_players_none); return TRUE;
     }
+    if(!strcmp(key,"hide_enemy_vip")) {
+        if(n < 0 || n > 1 || o->mode != _game_mode_vip) return FALSE;
+        o->reserved[0]=(boolean)n; return TRUE;
+    }
     if(!strcmp(key,"goal_radar")) {
         if(n < 0 || n > 2) return FALSE;
         v->universal_variant.goal_radar=n; return TRUE;

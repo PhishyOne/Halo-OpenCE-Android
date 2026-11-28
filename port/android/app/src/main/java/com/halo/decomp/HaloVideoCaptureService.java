@@ -121,6 +121,7 @@ public final class HaloVideoCaptureService extends Service {
             main.post(pollTask);
         } catch (Exception error) {
             Log.e(TAG, "Screen recording unavailable; Halo continues normally", error);
+            recordingStatus("Android could not start screen capture (" + error.getClass().getSimpleName() + ").");
             stopSession();
         }
         return START_NOT_STICKY;
@@ -154,7 +155,12 @@ public final class HaloVideoCaptureService extends Service {
         else startForeground(NOTIFICATION_ID, n);
     }
 
+    private void recordingStatus(String text) {
+        getSharedPreferences("reel_settings",MODE_PRIVATE).edit().putString("last_recording_status",text).apply();
+    }
+
     private void updateNotification(String title, String detail) {
+        recordingStatus(title + ". " + detail);
         if (!armed) return;
         try {
             getSystemService(NotificationManager.class).notify(NOTIFICATION_ID,
@@ -198,6 +204,7 @@ public final class HaloVideoCaptureService extends Service {
         if (virtualDisplay == null) throw new IOException("Cannot create video display");
         armedAt = SystemClock.uptimeMillis();
         armed = true;
+        recordingStatus("Recording armed. Waiting for the first multiplayer frames.");
         stopping = false;
         attemptedMatch = null;
         activeMatch = null;
@@ -277,7 +284,7 @@ public final class HaloVideoCaptureService extends Service {
                 updateNotification("Halo recording paused",
                     "Storage limit reached. Delete old recordings in Profile.");
             } else {
-                try { beginRecording(state); }
+                try { beginWithFallback(state); }
                 catch (Exception unavailable) {
                     Log.e(TAG, "Could not start this match recording", unavailable);
                     finishCapture(false);
@@ -291,6 +298,19 @@ public final class HaloVideoCaptureService extends Service {
     }
 
     /** Keep one encoder per match and do not consume a second consent. */
+    private void beginWithFallback(MatchVideoState state) throws IOException {
+        try {
+            beginRecording(state);
+        } catch (IOException | RuntimeException first) {
+            if (!visible() || capturedWidth <= 480) throw first;
+            finishCapture(false);
+            capturedHeight=Math.max(240,16*Math.round((capturedHeight*480f/capturedWidth)/16f));
+            capturedWidth=480;
+            virtualDisplay.resize(capturedWidth,capturedHeight,densityDpi);
+            beginRecording(state);
+        }
+    }
+
     private void beginRecording(MatchVideoState state) throws IOException {
         long proposed = System.currentTimeMillis();
         completed = new File(reels, "session-" + proposed + ".mp4");
@@ -353,6 +373,9 @@ public final class HaloVideoCaptureService extends Service {
                     }
             }
         } catch (RuntimeException ignored) { }
+        // Some Android builds filter the process list even for another process of
+        // this app. The consent-scoped foreground file is written by the game itself.
+        if (MatchVideoState.foreground(root,token)) present=true;
         if (!known) return true;
         if (present) { gameObserved = true; emptyGameChecks = 0; }
         else if (++emptyGameChecks >= 2 &&
@@ -411,6 +434,8 @@ public final class HaloVideoCaptureService extends Service {
         if (source != null && output != null && source.isFile() && !output.exists()) {
             try {
                 Files.move(source.toPath(), output.toPath());
+                recordingStatus(finalized ? "Match video saved. Open Highlights to see available clips." :
+                    "Android stopped the encoder before the video could be finalized.");
                 if (finalized && output.length() >= 2048 &&
                     output.length() <= ReelSessionIndex.SOURCE_LIMIT && finished != null) {
                     long duration = videoDuration(output);

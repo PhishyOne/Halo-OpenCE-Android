@@ -77,6 +77,65 @@ static boolean launcher_map_playable(char const *path)
         (build[0] || !strncmp(path, "custom_maps\\", 12));
 }
 
+static boolean launcher_decode_seat(const char *rows,size_t len,struct launcher_seat *seat)
+{
+    int i;
+    int team=rows[0]-'0', hi,lo;
+    if (len<7 || len>47 || (len-3)%4) return FALSE;
+    hi=launcher_hex(rows[1]);lo=launcher_hex(rows[2]);
+    if (team<0 || team>2 || hi<0 || lo<0 || hi*16+lo>=18 ||
+        (team!=2)!=(launcher_lan.variant.universal_variant.teams!=0)) return FALSE;
+    memset(seat,0,sizeof(*seat));
+    seat->team=team==2?NONE:team;seat->color=hi*16+lo;
+    for (i=3; i<(int)len; i+=4) {
+        int unit=0,j;
+        for (j=0;j<4;j++) {
+            int digit=launcher_hex(rows[i+j]);
+            if (digit<0) return FALSE;
+            unit=unit*16+digit;
+        }
+        if (unit<32 || (unit>=127 && unit<=159)) return FALSE;
+        seat->name[(i-3)/4]=(wchar_t)unit;
+    }
+    return TRUE;
+}
+
+/* Each authorization is bound to the active round, slot and peer address. */
+static boolean launcher_read_late_seat(int seat)
+{
+    char path[600],record[80];
+    const char *root=getenv("HALO_RATING_PRIVATE_ROOT");
+    FILE *file;
+    size_t n;
+    unsigned long address=0;
+    int i;
+    if (!launcher_lan.played || !root ||
+        snprintf(path,sizeof(path),"%s/lobby-seat-%d.txt",root,seat)>=(int)sizeof(path)) return FALSE;
+    file=fopen(path,"rb");
+    if (!file) return FALSE;
+    n=fread(record,1,sizeof(record),file);
+    fclose(file);
+    if (n<30 || n>=sizeof(record) || memcmp(record,launcher_lan.round,13) ||
+        record[13]!=' ' || record[22]!=' ') return FALSE;
+    for(i=14;i<22;i++) {
+        int digit=launcher_hex(record[i]);
+        if(digit<0)return FALSE;
+        address=(address<<4)|(unsigned)digit;
+    }
+    if(!address||!launcher_decode_seat(record+23,n-23,&launcher_lan.seats[seat]))return FALSE;
+    launcher_lan.seats[seat].address=address;
+    return TRUE;
+}
+
+static void launcher_publish_active(void)
+{
+    const char *root=getenv("HALO_RATING_PRIVATE_ROOT"),*local=getenv("HALO_NET_ADDRESS");
+    char path[600];
+    FILE *file;
+    if(!root||!local||snprintf(path,sizeof(path),"%s/lobby-active.txt",root)>=(int)sizeof(path))return;
+    file=fopen(path,"w");
+    if(file){fprintf(file,"%s %s",launcher_lan.round,local);fclose(file);}
+}
 static boolean launcher_lan_decode(void)
 {
     char const *round=getenv("HALO_LOBBY_ROUND"), *rows=getenv("HALO_LOBBY_ROSTER");
@@ -106,23 +165,9 @@ static boolean launcher_lan_decode(void)
         struct launcher_seat *seat;
         char const *end=strchr(rows,',');
         size_t len=end?(size_t)(end-rows):strlen(rows);
-        int team=rows[0]-'0', hi,lo;
-        if (launcher_lan.count>=LAUNCHER_LAN_SEATS || len<7 || len>47 || (len-3)%4) return FALSE;
-        hi=launcher_hex(rows[1]);lo=launcher_hex(rows[2]);
-        if (team<0 || team>2 || hi<0 || lo<0 || hi*16+lo>=18 ||
-            (team!=2)!=(launcher_lan.variant.universal_variant.teams!=0)) return FALSE;
+        if (launcher_lan.count>=LAUNCHER_LAN_SEATS) return FALSE;
         seat=&launcher_lan.seats[launcher_lan.count++];
-        seat->team=team==2?NONE:team;seat->color=hi*16+lo;
-        for (i=3; i<(int)len; i+=4) {
-            int unit=0,j;
-            for (j=0;j<4;j++) {
-                int digit=launcher_hex(rows[i+j]);
-                if (digit<0) return FALSE;
-                unit=unit*16+digit;
-            }
-            if (unit<32 || (unit>=127 && unit<=159)) return FALSE;
-            seat->name[(i-3)/4]=(wchar_t)unit;
-        }
+        if (!launcher_decode_seat(rows,len,seat)) return FALSE;
         if (!end) break;
         rows=end+1;
         if (!*rows) return FALSE;
@@ -168,7 +213,8 @@ static int launcher_lan_player_seat(struct network_game *game,struct network_pla
     for (i=0;i<LAUNCHER_ROUND_CHARS;i++) if (name[i]!=(wchar_t)launcher_lan.round[i]) return -1;
     if (name[i]!=L'-' || name[i+1]>127 || name[i+2]!=0) return -1;
     seat=launcher_hex((char)name[i+1]);
-    if (seat<0 || seat>=launcher_lan.count) return -1;
+    if (seat<0 || (seat>=launcher_lan.count && !launcher_lan.seats[seat].address &&
+        !launcher_read_late_seat(seat))) return -1;
     if (!seat) return machine==network_game_client_get_local_machine_index()?0:-1;
     return network_game_server_machine_address(machine)==launcher_lan.seats[seat].address?seat:-1;
 }
@@ -229,14 +275,15 @@ void launcher_lan_decline_next(void)
 static void launcher_lan_return(char const *reason)
 {
     char const *root=getenv("HALO_RATING_PRIVATE_ROOT"), *round=getenv("HALO_LOBBY_ROUND");
-    char path[600];
+    char path[600],tmp[610];
     if (root && round && strlen(round)==LAUNCHER_ROUND_CHARS &&
         snprintf(path,sizeof(path),"%s/lobby-return.txt",root)<(int)sizeof(path)) {
-        FILE *f=fopen(path,"w");
+        snprintf(tmp,sizeof(tmp),"%s.tmp",path);
+        FILE *f=fopen(tmp,"w");
         if (f) {
             fprintf(f,"%s\n%s\n%s\n",round,launcher_lan.completed&&!launcher_lan.declined?"complete":"stopped",
                 launcher_lan.declined?"Left at the scoreboard.":reason);
-            fclose(f);
+            if(fclose(f)==0) rename(tmp,path);
         }
     }
     platform_request_quit();
@@ -264,6 +311,7 @@ static void launcher_lan_update(boolean menu)
     }
     now=system_milliseconds();
     if (state>=wait_client && !menu && game_engine_running()) {
+        if (!launcher_lan.played && !launcher_lan.local) launcher_publish_active();
         launcher_lan.played=TRUE;
         if (!game_engine_in_play()) launcher_lan.completed=TRUE;
     }
@@ -273,6 +321,7 @@ static void launcher_lan_update(boolean menu)
         } else if (playlist && game_engine_showing_postgame()) {
             /* The engine finalizes scores before showing the scoreboard.
              * Use the same server transition as the host's Continue button. */
+            launcher_lan.completed=TRUE;
             if (!scoreboard) {scoreboard=TRUE;scoreboard_at=now;}
             if (!launcher_lan.local && !reset_sent && now-scoreboard_at>=8000UL && now-last_reset>=1000UL) {
                 server=global_network_game_server_get();
@@ -310,7 +359,7 @@ static void launcher_lan_update(boolean menu)
         player_ui_local_player_joined_multiplayer_game(0);
         launcher_lan_tag(tag,0);
         if (!launcher_lan.local) {
-            network_game_server_port_set_settings(tag,launcher_lan.count+launcher_lan.bots);
+            network_game_server_port_set_settings(tag,LAUNCHER_LAN_SEATS+launcher_lan.bots);
             player_ui_fast_setup_network_server();
             server=global_network_game_server_get();
             if (!server || !global_network_game_client_get()) {

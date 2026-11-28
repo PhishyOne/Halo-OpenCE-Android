@@ -26,6 +26,8 @@ final class LanUpdateClient {
     private static final String LOG = "HaloLanUpdate";
     private static final AtomicBoolean BUSY = new AtomicBoolean();
 
+    interface Status { void update(String label, int percent); }
+
     private LanUpdateClient() { }
 
     /** The optional manual check and automatic pre-join check share one path.
@@ -34,6 +36,11 @@ final class LanUpdateClient {
      * On errors or a declined update, the Play button is reenabled. */
     static void check(Activity activity, String host, boolean manual,
             Runnable continuePlay, Runnable reenablePlay) {
+        check(activity, host, manual, continuePlay, reenablePlay, null);
+    }
+
+    static void check(Activity activity, String host, boolean manual, Runnable continuePlay,
+            Runnable reenablePlay, Status status) {
         if (LanUpdateProtocol.privateAddress(host) == null) {
             if (reenablePlay != null)
                 reenablePlay.run();
@@ -125,6 +132,10 @@ final class LanUpdateClient {
                         continuePlay.run();
                     return;
                 }
+                if (status != null) {
+                    download(activity, host, found, reenablePlay, status);
+                    return;
+                }
                 new HaloDialog.Builder(activity)
                     .setTitle("Halo LAN update available")
                     .setMessage("Your Halo is v" + installed + ". The host has v" +
@@ -134,7 +145,7 @@ final class LanUpdateClient {
                         "Your maps and settings should be preserved.")
                     .setCancelable(false)
                     .setPositiveButton("Download update", (dialog, which) ->
-                        download(activity, host, found, reenablePlay))
+                        download(activity, host, found, reenablePlay, null))
                     .setNegativeButton("Not now", (dialog, which) ->
                         complete(reenablePlay))
                     .show();
@@ -183,7 +194,7 @@ final class LanUpdateClient {
     }
 
     private static void download(Activity activity, String host,
-            LanUpdateProtocol.Manifest offer, Runnable reset) {
+            LanUpdateProtocol.Manifest offer, Runnable reset, Status status) {
         LinearLayout container = new LinearLayout(activity);
         container.setOrientation(LinearLayout.VERTICAL);
         int pad = (int)(20 * activity.getResources().getDisplayMetrics().density);
@@ -195,11 +206,12 @@ final class LanUpdateClient {
         label.setText("Downloading from Halo host...");
         container.addView(label);
         container.addView(progress);
-        HaloDialog dialog = new HaloDialog.Builder(activity)
+        HaloDialog dialog = status != null ? null : new HaloDialog.Builder(activity)
             .setTitle("Halo LAN update")
             .setView(container)
             .setCancelable(false).show();
 
+        if (status != null) status.update("Downloading Halo v" + offer.version, 0);
         new Thread(() -> {
             File folder = new File(activity.getCacheDir(), UpdateProvider.DIRECTORY);
             File partial = new File(folder, "lan-update.pending.apk");
@@ -210,6 +222,11 @@ final class LanUpdateClient {
                 LanUpdateSocket.download(host, offer, partial,
                     (received, total) -> activity.runOnUiThread(() -> {
                         if (!activity.isFinishing()) {
+                            if (status != null) {
+                                int percent = (int)(received * 100 / total);
+                                status.update("Downloading Halo v" + offer.version + " · " + percent + "%", percent);
+                                return;
+                            }
                             progress.setProgress((int)(received * 1000 / total));
                             label.setText("From host: " + (received / 1048576) +
                                 " / " + (total / 1048576) + " MB");
@@ -224,7 +241,7 @@ final class LanUpdateClient {
                         StandardCopyOption.REPLACE_EXISTING);
                 }
                 activity.runOnUiThread(() -> {
-                    dialog.dismiss();
+                    if (dialog != null) dialog.dismiss();
                     complete(reset);
                     if (!activity.isFinishing()) {
                         try {
@@ -239,7 +256,7 @@ final class LanUpdateClient {
                 Log.w(LOG, "LAN update rejected", problem);
                 partial.delete();
                 activity.runOnUiThread(() -> {
-                    dialog.dismiss();
+                    if (dialog != null) dialog.dismiss();
                     complete(reset);
                     message(activity, "Halo update failed",
                         problem.getMessage() == null ? "The update couldn't be verified." :

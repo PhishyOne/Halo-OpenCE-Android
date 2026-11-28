@@ -124,6 +124,7 @@ final class MatchWorkshop {
         r.add(toggle("hardcore","Players","Hardcore","Disables the motion sensor and aim assist. Enemy kills restore health and shields.",null));
         r.add(toggle("radar","Indicators","Motion sensor","Show the motion sensor on the HUD.",null));
         r.add(enumeration("radar_players","Indicators","Players on radar","Choose which players appear on an active motion sensor.",null,"All","Friends","None"));
+        r.add(toggle("hide_enemy_vip","Indicators","Hide opposing VIP","Only the escort team sees its VIP marker.",Family.VIP));
         r.add(toggle("friend_indicators","Indicators","Friendly indicators","Show an indicator over friendly players.",null));
         r.add(enumeration("goal_radar","Indicators","Objective indicator","Choose how players locate the objective on their HUD.",null,"Motion tracker","Navigation marker","Hidden"));
         r.add(toggle("generic_equipment","Weapons","Generic starting equipment","Use standard starting gear in place of the map’s starting equipment.",null));

@@ -76,12 +76,13 @@ public final class LobbyPlaylistTest {
         back(m,g,round,false,3);
         check(m.hostSnapshot(30000).released,"guest leaving gameplay cannot reset a still-playing host");
         LobbyModel.Snapshot stopped=m.hostReturned(round,true,"Match complete.",30001);
-        check(stopped.nextIndex==0&&stopped.secondsToNext<0&&stopped.startMessage.contains("Guest"),"early guest return pauses the current entry");
+        check(stopped.nextIndex==1&&stopped.secondsToNext==5,"guest receipt does not veto host result");
+        m.resetStart("Paused",30001);
         round=prepare(m,30002).round;send(m,LobbyWire.Request.acknowledge(g,round,true),30003);
         m.hostReturned(round,true,"Match complete.",30004);
         LobbyModel.Snapshot timeout=m.hostSnapshot(90004);
-        check(timeout.round.isEmpty()&&timeout.nextIndex==0&&timeout.startMessage.contains("Guest"),"unreturned phone pauses playlist on timeout");
-        check(back(m,g,round,true,90005).secondsToNext<0,"late return cannot restart canceled round");
+        check(timeout.round.isEmpty()&&timeout.nextIndex==0&&timeout.members.size()==1&&timeout.secondsToNext==5,"missing guest is dropped and playlist continues");
+        m.resetStart("Paused",90005);g=m.join("Guest",4,90005).secret;
         round=prepare(m,90006).round;send(m,LobbyWire.Request.acknowledge(g,round,true),90007);
         m.hostReturned(round,true,"Match complete.",90008);back(m,g,round,true,90009);
         LobbyModel.StartReview due=m.dueStart(95009);
@@ -98,7 +99,7 @@ public final class LobbyPlaylistTest {
         m.leave(g,95020);
         check(m.hostSnapshot(95021).members.size()==2,"leaving while host plays preserves frozen native seats");
         LobbyModel.Snapshot departed=m.hostReturned(round,true,"Match complete.",95022);
-        check(departed.members.size()==1&&departed.secondsToNext<0&&departed.startMessage.contains("Guest"),"guest removed after host returns");
+        check(departed.members.size()==1&&departed.secondsToNext==5,"guest removed after host returns");
     }
     private static void shuffle(){
         MatchWorkshop.Entry duplicate=entry("bloodgulch","slayer");
@@ -162,8 +163,19 @@ public final class LobbyPlaylistTest {
             "ordinary team assignments survive FFA and the group swap");
         check(next.allocation().red==3&&next.allocation().blue==3,"last entry restores its own balanced bots");
     }
+    private static void lateSeat()throws Exception{
+        LobbyModel m=lobby(false,false,entry("bloodgulch","slayer"));
+        m.lateSeats=(snap,peer,local)->{if(!"192.168.1.8".equals(peer))throw new IllegalArgumentException("Wrong interface");};
+        String round=prepare(m,0).round;
+        try{m.join("Denied",1,1,"192.168.1.1","192.168.1.9");throw new AssertionError("Unpublished seat");}
+        catch(IllegalArgumentException expected){checks++;}
+        LobbyModel.Joined guest=m.join("Late",2,2,"192.168.1.1","192.168.1.8");
+        check(guest.snapshot.round.equals(round)&&guest.snapshot.released&&guest.snapshot.members.size()==2,"late seat sees live round");
+        try{m.join("Duplicate",1,3,"192.168.1.1","192.168.1.8");throw new AssertionError("Duplicate seat");}
+        catch(IllegalArgumentException expected){checks++;}
+    }
     public static void main(String[] args)throws Exception{
-        ordered();interruption();shuffle();mixedRoster();
+        lateSeat();ordered();interruption();shuffle();mixedRoster();
         System.out.println("LobbyPlaylistTest PASS ("+checks+" checks, real TCP loopback)");
     }
 }

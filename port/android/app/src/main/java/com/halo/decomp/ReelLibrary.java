@@ -33,7 +33,7 @@ final class ReelLibrary {
     static File[] finishedReels(File appRoot) {
         File root = new File(appRoot, ReelSessionIndex.REEL_DIRECTORY);
         File[] files = root.listFiles(file -> file.isFile() && !Files.isSymbolicLink(file.toPath()) &&
-            file.getName().matches("reel-[0-9a-f]{32}\\.mp4") &&
+            file.getName().matches("(?:reel|ending)-[0-9a-f]{32}\\.mp4") &&
             file.length() > 2048 && file.length() <= REEL_BYTES_LIMIT);
         if (files == null) return new File[0];
         java.util.Arrays.sort(files, (a,b) -> Long.compare(b.lastModified(), a.lastModified()));
@@ -115,12 +115,23 @@ final class ReelLibrary {
                 CareerRecords.Match match = null;
                 for (CareerRecords.Match candidate : career.matches)
                     if (timeline.id.equals(candidate.id)) { match = candidate; break; }
-                if (match == null || match.cooperative() || match.incomplete) continue;
+                if (match != null && match.cooperative()) continue;
+                MatchVideoTimeline.Plan plan = match == null ? null :
+                    timeline.plan(match, MatchHighlights.forMatch(match, moments));
+                if(plan == null || plan.windows.isEmpty()){
+                    if(!timeline.keepFull && timeline.durationMs>=2000 && timeline.points.size()>=2){
+                        File ending=new File(raw.getParentFile(),"ending-"+timeline.id+".mp4");
+                        if(!ending.exists() && !HaloVideoFiles.suppressed(root,ending.getName())){
+                            long end=Math.min(timeline.durationMs,timeline.points.get(timeline.points.size()-1).ms)*1000;
+                            if(end>=2000000 && ReelVideoMuxer.build(raw,ending,java.util.Collections.singletonList(
+                                    new ReelSessionIndex.Clip(Math.max(0,end-12000000),end)),true))built++;
+                        }
+                    }
+                    continue;
+                }
                 File reel = new File(raw.getParentFile(), ReelSessionIndex.reelName(match));
                 if (HaloVideoFiles.suppressed(root, reel.getName()) || reel.exists()) continue;
-                MatchVideoTimeline.Plan plan = timeline.plan(match,
-                    MatchHighlights.forMatch(match, moments));
-                if (plan.windows.isEmpty()) continue;
+
                 // Only a newly muxed, fully covered, verified reel can authorize
                 // automatic cleanup. Existing reels never authorize deletion.
                 if (!ReelVideoMuxer.build(raw, reel, plan.windows, true)) continue;

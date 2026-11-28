@@ -237,6 +237,8 @@ final class LobbyModel {
         this.plan=Objects.requireNonNull(plan);
         host=new Member(token(),name,color,RED,NO_TEAM,true,false);
     }
+    interface LateSeatPublisher { void publish(Snapshot snapshot,String peer,String local); }
+    LateSeatPublisher lateSeats;
     private StartTicket launch;
     private final Set<String> prepared=new HashSet<>();
     private final Set<String> returned=new HashSet<>(), departed=new HashSet<>();
@@ -290,7 +292,7 @@ final class LobbyModel {
     synchronized Snapshot guestReturned(String secret,String round,boolean completed,long now){
         Guest guest=require(secret,now);
         if(released&&launch.id.equals(round)&&returned.add(guest.row.id)){
-            if(!completed)interruption=guest.row.name+" did not confirm the match result.";
+            // Only the host can confirm the outcome of the shared round.
             finishReturns(now);
         }
         return snapshot(guest.row.id);
@@ -318,8 +320,8 @@ final class LobbyModel {
     synchronized void expire(long now){
         if(released){
             if(hostBack&&now-hostReturnTime>=RETURN_TIMEOUT_MS){
-                String waiting=waitingFor(returned);
-                resetStart("Timed out waiting for "+waiting+" to return.",now);
+                for(Guest guest:guests.values())if(returned.add(guest.row.id))departed.add(guest.row.id);
+                finishReturns(now);
             }
             return;
         }
@@ -350,6 +352,19 @@ final class LobbyModel {
         return new Joined(secret,snapshot(g.row.id));
     }
     synchronized Joined join(String name,int color,long now,String localAddress,String peerAddress){
+        expire(now);
+        if(released&&!hostBack&&lateSeats!=null){
+            if(guests.size()>=MAX_HUMANS-1)throw new IllegalArgumentException("Lobby is full");
+            for(Guest member:guests.values())if(peerAddress.equals(member.peerAddress))
+                throw new IllegalArgumentException("This phone already has a seat in the match.");
+            String secret=token();
+            Guest guest=new Guest(secret,new Member(token(),name,color,nextTeam(),NO_TEAM,false,false),now);
+            guest.peerAddress=peerAddress;guest.localAddress=localAddress;
+            guests.put(secret,guest);
+            try{lateSeats.publish(snapshot(guest.row.id),peerAddress,localAddress);}
+            catch(RuntimeException failure){guests.remove(secret);throw failure;}
+            changed();return new Joined(secret,snapshot(guest.row.id));
+        }
         Joined joined=join(name,color,now);
         guests.get(joined.secret).localAddress=localAddress;
         guests.get(joined.secret).peerAddress=peerAddress;
@@ -393,7 +408,7 @@ final class LobbyModel {
         if(released){
             // Keep native seats stable until the host returns, even if a guest leaves early.
             departed.add(g.row.id);returned.add(g.row.id);
-            interruption=g.row.name+" left the lobby.";finishReturns(now);return;
+            finishReturns(now);return;
         }
         guests.remove(secret);
         if(launch!=null||secondsToNext>=0)resetStart(g.row.name+" left before launch.",now);

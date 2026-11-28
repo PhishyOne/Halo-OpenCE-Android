@@ -40,6 +40,8 @@ final class LauncherLobbyUi implements AutoCloseable {
     private MatchWorkshopUi hostEditor;
     private LinearLayout summary,roster;
     private TextView status;
+    private android.widget.ProgressBar updateBar;
+    private LanUpdateServer updateServer;
     private int generation;
     private boolean busy,closed,visible,connectionLost;
     private long lastContact;
@@ -92,6 +94,8 @@ final class LauncherLobbyUi implements AutoCloseable {
         body.removeAllViews();hostEditor=null;summary=roster=null;
         body.addView(text("LOBBIES",14,HaloTheme.FOCUS_TEXT,true));
         status=text(notice.isEmpty()?"Choose an existing lobby or create one.":notice,11,HaloTheme.MUTED,false);body.addView(status);
+        updateBar=new android.widget.ProgressBar(activity,null,android.R.attr.progressBarStyleHorizontal);
+        updateBar.setVisibility(View.GONE);body.addView(updateBar,new LinearLayout.LayoutParams(-1,dp(5)));
         LinearLayout left=panel(),right=panel();
         left.addView(button("PLAYER NAME / COLOR",this::appearance));
         left.addView(button("MATCH RECORDING",this::recording));
@@ -169,11 +173,12 @@ final class LauncherLobbyUi implements AutoCloseable {
             try{
                 MatchWorkshop.Library lib=MatchWorkshop.read(activity.getFilesDir());
                 LobbyModel model=new LobbyModel(lobbyName,name,color,LobbyModel.Plan.from(lib));
+                model.lateSeats=(round,peer,local)->NativeLobbyMatch.publishLateSeat(activity.getFilesDir(),round,peer,local);
                 opened=new LanLobbyTransport.Host(model);opened.open();
                 LobbyModel.Snapshot s=model.hostSnapshot(LanLobbyTransport.now());
                 final LanLobbyTransport.Host result=opened;
                 List<WorkshopMapCatalog.MapItem> maps=WorkshopMapCatalog.installed(dataRoot);
-                ui.post(()->{if(closed||g!=generation){result.close();return;}host=result;snapshot=s;sessionMaps=maps;prefs.edit().putString("last_lobby_name",s.lobbyName).apply();busy=false;connectionLost=false;lastContact=LanLobbyTransport.now();showSession();schedule();});
+                ui.post(()->{if(closed||g!=generation){result.close();return;}host=result;snapshot=s;updateServer=LanUpdateServer.start(activity);sessionMaps=maps;prefs.edit().putString("last_lobby_name",s.lobbyName).apply();busy=false;connectionLost=false;lastContact=LanLobbyTransport.now();showSession();schedule();});
             }catch(IOException|RuntimeException error){
                 if(opened!=null)opened.close();failedOpen(g,"Couldn't create lobby: "+error.getMessage());
             }
@@ -182,6 +187,20 @@ final class LauncherLobbyUi implements AutoCloseable {
     private void join(String ip){
         if(!allowed()||snapshot!=null)return;
         busy=true;final int g=++generation;final String name=profileName();final int color=profileColor();
+        status.setText("Checking the host’s Halo version…");
+        updateBar.setIndeterminate(true);updateBar.setVisibility(View.VISIBLE);
+        LanUpdateClient.check(activity,ip,false,()->{
+            if(closed||g!=generation)return;
+            busy=true;joinChecked(ip,g,name,color);
+        },()->{
+            if(closed||g!=generation)return;
+            busy=false;updateBar.setVisibility(View.GONE);status.setText("Choose a lobby to join.");
+        },(label,percent)->{
+            if(closed||g!=generation)return;
+            status.setText(label);updateBar.setIndeterminate(false);updateBar.setProgress(percent);
+        });
+    }
+    private void joinChecked(String ip,int g,String name,int color){
         status.setText("Waiting for host acknowledgement…");
         work.execute(()->{
             LanLobbyTransport.Client opened=null;
@@ -193,7 +212,7 @@ final class LauncherLobbyUi implements AutoCloseable {
                 ui.post(()->{
                     if(closed||g!=generation){result.close();return;}
                     guest=result;snapshot=s;sessionMaps=maps;busy=false;connectionLost=false;lastContact=LanLobbyTransport.now();
-                    prefs.edit().putString("last_host",ip).apply();showSession();schedule();
+                    prefs.edit().putString("last_host",ip).apply();showSession();applySnapshot(s);schedule();
                 });
             }catch(IOException|RuntimeException error){if(opened!=null)opened.close();failedOpen(g,"Couldn't join lobby: "+error.getMessage());}
         });
@@ -462,6 +481,9 @@ final class LauncherLobbyUi implements AutoCloseable {
                     if(closed||g!=generation||snapshot==null||!snapshot.round.equals(next.round))return;
                     checkingRound="";
                     prepareLaunch(snapshot,error);
+                    if(snapshot.released&&launchArgs==null){
+                        leave(true,localFailure);return;
+                    }
                     applySnapshot(snapshot);
                 });
             });
@@ -546,6 +568,7 @@ final class LauncherLobbyUi implements AutoCloseable {
     void suspend(){openFinder=false;if(!inGame&&(snapshot!=null||busy))leave(false,"Lobby closed when launcher left foreground.");}
     private void leave(boolean notify,String message){
         generation++;checkingHost=false;checkingRound="";openFinder=false;discovered=Collections.emptyMap();ui.removeCallbacks(tick);busy=false;connectionLost=false;inGame=false;launchArgs=null;preparedRound=launchedRound=localFailure=returnRound="";
+        if(updateServer!=null){updateServer.stop();updateServer=null;}
         if(host!=null){host.close();host=null;}
         LanLobbyTransport.Client old=guest;guest=null;
         if(old!=null){

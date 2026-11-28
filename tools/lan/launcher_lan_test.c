@@ -72,7 +72,7 @@ static void player_ui_set_game_variant_options(struct game_variant_options *o){w
 static void network_game_server_change_game_variant(struct network_game_server *s,struct game_variant *v){(void)s;world.variant=*v;}
 static struct network_game *network_game_get_game(void){return &world;}
 static short network_game_client_get_local_machine_index(void){return (short)local_machine;}
-static unsigned long network_game_server_machine_address(long m){return m==8?0xc0a82b03:0;}
+static unsigned long network_game_server_machine_address(long m){return m==8?0xc0a82b03:(m==9?0xc0a82b04:0);}
 static void network_game_client_add_player(struct network_game_client *c,int n){(void)c;(void)n;added++;}
 static boolean launcher_lan_countdown_allowed(struct network_game *g);
 static int network_game_server_port_ok_to_countdown(struct network_game_server *s){(void)s;return launcher_lan_countdown_allowed(&world);}
@@ -146,6 +146,16 @@ int main(int argc,char **argv){
     countdown=6000; /* Stock pregame can leave an active but paused timer. */
     launcher_lan_update(1);launcher_lan_update(1);assert(starts==1&&countdown==3000&&!held);
     playing=1;launcher_lan_update(0);now=200000;launcher_lan_update(0);assert(!quit);
+    if(!strcmp(test,"host")){
+        struct network_player late={0};
+        char path[600];FILE *file;
+        snprintf(path,sizeof(path),"%s/lobby-seat-2.txt",getenv("HALO_RATING_PRIVATE_ROOT"));
+        world.machines[9].machine_index=9;launcher_lan_tag(world.machines[9].name,2);late.machine_index=9;
+        assert(!launcher_lan_admit(&world,&late));
+        file=fopen(path,"w");assert(file);fputs("0123456789abc c0a82b04 0050043",file);fclose(file);
+        assert(launcher_lan_admit(&world,&late)&&late.name[0]=='C'&&late.primary_color_index==5);
+        world.players[4]=late;assert(!launcher_lan_admit(&world,&late));
+    }
     if(playlist){
         postgame=1;launcher_lan_update(0);now+=16000;launcher_lan_update(0);assert(!resets);
         postgame=2;launcher_lan_update(0);now+=7999;launcher_lan_update(0);assert(!resets&&!quit);

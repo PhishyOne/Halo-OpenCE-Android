@@ -153,7 +153,8 @@ static void goals(void)
         /* Both teams can track the same living target. The VIP's own
          * marker is suppressed, leaving their extraction marker. */
         game_engine_set_goal_position(1,&u->object.position,0.5f,"default",NONE,state.escort_team,index);
-        game_engine_set_goal_position(2,&u->object.position,0.5f,"flag_blue",NONE,1-state.escort_team,index);
+        if(game_variant_options_get()->reserved[0]) game_engine_clear_goal_position(2);
+        else game_engine_set_goal_position(2,&u->object.position,0.5f,"flag_blue",NONE,1-state.escort_team,index);
     } else {
         game_engine_clear_goal_position(1);game_engine_clear_goal_position(2);
     }

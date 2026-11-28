@@ -50,6 +50,42 @@ final class NativeLobbyMatch {
         }
         return candidate;
     }
+    private static String encodeSeat(LobbyModel.Member member,Set<String> names){
+        StringBuilder roster=new StringBuilder();
+        int armor=member.color;
+        roster.append(member.team==LobbyModel.NO_TEAM?'2':(char)('0'+member.team))
+            .append(HEX.charAt(armor>>>4)).append(HEX.charAt(armor&15));
+        String name=uniqueName(member.name,names);
+        for(int j=0;j<name.length();j++){
+            char c=name.charAt(j);
+            for(int shift=12;shift>=0;shift-=4)roster.append(HEX.charAt((c>>>shift)&15));
+        }
+        return roster.toString();
+    }
+
+    static void publishLateSeat(File directory,LobbyModel.Snapshot snapshot,String peer,String local){
+        String round=snapshot.round.replace("-","").substring(0,13);
+        File active=new File(directory,"lobby-active.txt");
+        try{
+            String expected=round+" "+local;
+            if(active.length()!=expected.length() ||
+                    !expected.equals(new String(Files.readAllBytes(active.toPath()),StandardCharsets.US_ASCII)))
+                throw new IllegalArgumentException("Host is loading or finishing the match. Try again shortly.");
+            byte[] ip=LanUpdateProtocol.privateAddress(peer);
+            if(ip==null)throw new IllegalArgumentException("Invalid player address.");
+            Set<String> names=new HashSet<>();
+            String row="";
+            for(LobbyModel.Member m:snapshot.members)row=encodeSeat(m,names);
+            StringBuilder record=new StringBuilder(round).append(' ');
+            for(byte octet:ip)record.append(HEX.charAt((octet&255)>>>4)).append(HEX.charAt(octet&15));
+            record.append(' ').append(row);
+            File target=new File(directory,"lobby-seat-"+(snapshot.members.size()-1)+".txt");
+            File temp=new File(directory,target.getName()+".tmp");
+            Files.write(temp.toPath(),record.toString().getBytes(StandardCharsets.US_ASCII));
+            Files.move(temp.toPath(),target.toPath(),java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }catch(IOException e){throw new IllegalArgumentException("Host is loading or finishing the match. Try again shortly.",e);}
+    }
     static final class Result {
         final boolean completed;
         final String message;
@@ -84,14 +120,7 @@ final class NativeLobbyMatch {
             if(member.host!=(i==0))throw new IllegalArgumentException("Invalid host seat");
             if(member.id.equals(snapshot.self))seat=i;
             if(i!=0)roster.append(',');
-            int armor=member.color;
-            roster.append(member.team==LobbyModel.NO_TEAM?'2':(char)('0'+member.team))
-                .append(HEX.charAt(armor>>>4)).append(HEX.charAt(armor&15));
-            String name=uniqueName(member.name,names);
-            for(int j=0;j<name.length();j++){
-                char c=name.charAt(j);
-                for(int shift=12;shift>=0;shift-=4)roster.append(HEX.charAt((c>>>shift)&15));
-            }
+            roster.append(encodeSeat(member,names));
         }
         if(seat<0||(hosting!=(seat==0)))throw new IllegalArgumentException("Missing local seat");
         StringBuilder bindings=new StringBuilder();

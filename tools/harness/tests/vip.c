@@ -145,6 +145,8 @@ static int usprintf(wchar_t *buf,const wchar_t *fmt,...) {va_list ap;int n;va_st
 static boolean base_init(void) {base_inits++;return TRUE;}
 static boolean normal_pickup(long u,long w) {(void)u;(void)w;return TRUE;}
 #include "vip_policy.h"
+static struct { unsigned char reserved[1]; } test_options;
+#define game_variant_options_get() (&test_options)
 #include "vip_impl.inc"
 
 static void arm(int i) {
@@ -201,6 +203,8 @@ int main(void) {
     CHECK(!vip_allow_passenger(unit_ids[0],unit_ids[1],1));
     CHECK(vip_allow_passenger(unit_ids[0],unit_ids[1],2));
     CHECK(!vip_allow_passenger(unit_ids[0],unit_ids[1],99));
+    test_options.reserved[0]=1;goals();CHECK(marker[1]&&!marker[2]);
+    test_options.reserved[0]=0;goals();CHECK(marker[1]&&marker[2]);
     CHECK(vip_bot_goal(player_ids[0],&goal)&&goal.x==20.0f);
     CHECK(vip_bot_goal(player_ids[1],&goal)&&goal.x==0.0f);
     CHECK(marker[0]&&marker[1]&&marker[2]);

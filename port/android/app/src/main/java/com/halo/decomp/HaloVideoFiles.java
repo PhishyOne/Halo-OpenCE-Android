@@ -16,7 +16,7 @@ final class HaloVideoFiles {
 
     static boolean validName(String filename) {
         return filename != null &&
-            (filename.matches("reel-[0-9a-f]{32}\\.mp4") ||
+            (filename.matches("(?:reel|ending)-[0-9a-f]{32}\\.mp4") ||
              ReelSessionIndex.safeFileName(filename));
     }
 

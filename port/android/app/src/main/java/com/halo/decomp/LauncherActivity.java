@@ -1557,8 +1557,8 @@ public class LauncherActivity extends Activity {
             Intent game = new Intent(this, HaloActivity.class);
             game.putExtra(HaloActivity.LOBBY_MATCH, true);
             game.putExtra(HaloActivity.OFFLINE_BOT_ARGUMENTS, arguments);
-            game.putExtra(HaloActivity.LAN_DISCOVERY_HOST, hosting);
-            game.putExtra(HaloActivity.LAN_UPDATE_HOST, hosting && shareUpdates.isChecked());
+            // Keep the unified lobby discovery responder active during gameplay.
+            // The unified lobby owns its update listener across rounds.
             startGame(game);
         });
         backToLobby.setOnClickListener(view -> {
@@ -2529,6 +2529,8 @@ public class LauncherActivity extends Activity {
                         HaloNotice.LENGTH_LONG).show();
                 }
             } else {
+                getSharedPreferences("reel_settings",MODE_PRIVATE).edit().putString("last_recording_status",
+                    "Android screen capture permission was declined for the last game.").apply();
                 HaloNotice.makeText(this,
                     "Recording skipped; Halo starts normally.",
                     HaloNotice.LENGTH_SHORT).show();

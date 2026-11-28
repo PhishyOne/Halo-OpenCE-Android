@@ -35,7 +35,7 @@ final class ReelVideoMuxer {
         File parent = destination.getParentFile();
         if (parent == null || !parent.isDirectory())
             throw new IOException("Reel folder unavailable");
-        if (!destination.getName().matches("reel-[0-9a-f]{32}\\.mp4"))
+        if (!destination.getName().matches("(?:reel|ending)-[0-9a-f]{32}\\.mp4"))
             throw new IOException("Unsafe output reel name");
         File partial = new File(parent, destination.getName() + ".pending");
         if (partial.exists() && !partial.delete())

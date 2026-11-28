@@ -48,8 +48,8 @@ final class HaloReelGallery {
                     + "In game setup, enable RECORD MATCH VIDEO before Play "
                     + "and approve Android's screen capture prompt. Finish a "
                     + "match with highlight moments, then return here.\n\n"
-                    + "Videos are local, silent during this first version, "
-                    + "and are never uploaded.")
+                    + activity.getSharedPreferences("reel_settings",Activity.MODE_PRIVATE)
+                        .getString("last_recording_status","No recording status reported yet."))
                 .setNeutralButton("MANAGE VIDEOS", (d, which) -> manage(activity, appRoot))
                 .setPositiveButton("CLOSE", null)
                 .show();
@@ -58,7 +58,8 @@ final class HaloReelGallery {
         String[] titles = new String[reels.length + originals.length];
         File[] shown = new File[titles.length];
         for (int i = 0; i < reels.length; i++) {
-            titles[i] = String.format(Locale.US, "HIGHLIGHT REEL %d  •  %.1f MB",
+            titles[i] = String.format(Locale.US, reels[i].getName().startsWith("ending-") ?
+                "ROUND ENDING %d  •  %.1f MB" : "HIGHLIGHT REEL %d  •  %.1f MB",
                 i + 1, reels[i].length() / 1048576.0);
             shown[i] = reels[i];
         }

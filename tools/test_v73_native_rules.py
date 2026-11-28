@@ -46,7 +46,7 @@ class NativeMatchRuleTest(unittest.TestCase):
         self.assertEqual(len(names),26)
         for k,builder in names:self.assertIn(builder+"(",h)
         self.assertIn("game_modes_gametype_by_name(base,variant,options)",s)
-        self.assertEqual(len(re.findall(r'if\(!strcmp\(key,"[^"]+"\)\)',(G/"launcher_match_rules.h").read_text())),73)
+        self.assertEqual(len(re.findall(r'if\(!strcmp\(key,"[^"]+"\)\)',(G/"launcher_match_rules.h").read_text())),74)
         main=(ROOT/"source/main/main.c").read_text()
         self.assertIn('launcher_match_rules_apply(getenv("HALO_LAUNCHER_MATCH_RULES")',main)
         self.assertIn("launcher_match_preset_build(mode, &variant, &options)",main)

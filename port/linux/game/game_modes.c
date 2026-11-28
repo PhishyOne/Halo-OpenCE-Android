@@ -288,7 +288,7 @@ void game_modes_options_default(
 	options->gun_game_melee_demotes = TRUE;
 	options->gravity_percent = 100;
 	options->damage_percent = 100;
-	csmemset(options->reserved, 0, sizeof(options->reserved));
+	options->reserved[0] = FALSE;
 }
 
 /* a byte option within its range, else its default */
@@ -335,7 +335,7 @@ void game_modes_options_sanitize(
 		options->hardcore = FALSE;
 		options->time_limit = 0; /* VIP owns its per-round timer */
 	}
-	csmemset(options->reserved, 0, sizeof(options->reserved));
+	options->reserved[0] = options->mode == _game_mode_vip && options->reserved[0] == TRUE;
 }
 
 short game_modes_variant_mode(
