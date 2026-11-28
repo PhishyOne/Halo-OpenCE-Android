@@ -86,7 +86,7 @@ final class LanUpdateServer {
         return server;
     }
 
-    private static String hash(File apk) throws IOException {
+    static String hash(File apk) throws IOException {
         MessageDigest digest;
         try { digest = MessageDigest.getInstance("SHA-256"); }
         catch (NoSuchAlgorithmException failure) {

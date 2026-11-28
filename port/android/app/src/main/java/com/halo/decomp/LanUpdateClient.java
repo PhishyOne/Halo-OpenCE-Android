@@ -219,26 +219,31 @@ final class LanUpdateClient {
             try {
                 if (!folder.isDirectory() && !folder.mkdirs())
                     throw new IOException("Couldn't prepare APK download folder");
-                LanUpdateSocket.download(host, offer, partial,
-                    (received, total) -> activity.runOnUiThread(() -> {
-                        if (!activity.isFinishing()) {
-                            if (status != null) {
-                                int percent = (int)(received * 100 / total);
-                                status.update("Downloading Halo v" + offer.version + " · " + percent + "%", percent);
-                                return;
+                if (apk.isFile() && apk.length() == offer.size &&
+                        offer.sha256.equals(LanUpdateServer.hash(apk))) {
+                    verifyPackage(activity, apk, offer);
+                } else {
+                    LanUpdateSocket.download(host, offer, partial,
+                        (received, total) -> activity.runOnUiThread(() -> {
+                            if (!activity.isFinishing()) {
+                                if (status != null) {
+                                    int percent = (int)(received * 100 / total);
+                                    status.update("Downloading Halo v" + offer.version + " · " + percent + "%", percent);
+                                    return;
+                                }
+                                progress.setProgress((int)(received * 1000 / total));
+                                label.setText("From host: " + (received / 1048576) +
+                                    " / " + (total / 1048576) + " MB");
                             }
-                            progress.setProgress((int)(received * 1000 / total));
-                            label.setText("From host: " + (received / 1048576) +
-                                " / " + (total / 1048576) + " MB");
-                        }
-                    }));
-                verifyPackage(activity, partial, offer);
-                try {
-                    Files.move(partial.toPath(), apk.toPath(),
-                        StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-                } catch (AtomicMoveNotSupportedException crossFs) {
-                    Files.move(partial.toPath(), apk.toPath(),
-                        StandardCopyOption.REPLACE_EXISTING);
+                        }));
+                    verifyPackage(activity, partial, offer);
+                    try {
+                        Files.move(partial.toPath(), apk.toPath(),
+                            StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+                    } catch (AtomicMoveNotSupportedException crossFs) {
+                        Files.move(partial.toPath(), apk.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING);
+                    }
                 }
                 activity.runOnUiThread(() -> {
                     if (dialog != null) dialog.dismiss();

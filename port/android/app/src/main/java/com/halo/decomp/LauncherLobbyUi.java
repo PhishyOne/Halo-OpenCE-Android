@@ -516,6 +516,8 @@ final class LauncherLobbyUi implements AutoCloseable {
         NativeLobbyMatch.Result result=NativeLobbyMatch.result(activity.getFilesDir(),launchedRound);
         if(host!=null){
             applySnapshot(host.model.hostReturned(launchedRound,result.completed,result.message,lastContact));
+        }else if(!result.completed && result.message.equals("Left at the scoreboard.")){
+            leave(true,result.message);return;
         }else {
             returnRound=launchedRound;returnCompleted=result.completed;refreshStatus();
             if(!result.completed)msg(result.message);
