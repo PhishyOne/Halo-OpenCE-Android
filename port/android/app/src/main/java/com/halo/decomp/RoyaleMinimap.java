@@ -30,7 +30,9 @@ final class RoyaleMinimap {
     private final RectF panel = new RectF(), map = new RectF(), dest = new RectF();
     private final DashPathEffect dash = new DashPathEffect(new float[]{5, 4}, 0);
     private final AssetManager assets;
-    private boolean loaded, highlands, expanded;
+    private boolean loaded, highlands, expanded, pinned;
+    private float pinX, pinY;
+    private static final int PIN = 0xffff8bd0;
     private float unit = 3.048f, centerX, centerY, scale;
     static final float COMPACT_SIZE = 116;
     private float viewWidth, viewHeight, statusLeft, statusTop;
@@ -48,6 +50,25 @@ final class RoyaleMinimap {
     }
 
     void close() { expanded = false; }
+    boolean isExpanded() { return expanded; }
+    void clearPin() { pinned = false; }
+
+    // Invert the same transform that drew the expanded map. The padded atlas
+    // margins are outside the island bounds and cannot become destinations.
+    boolean mark(float px, float py) {
+        if (!expanded || !map.contains(px, py) || scale <= 0) return false;
+        float worldX = centerX + (px - map.centerX()) / scale;
+        float worldY = centerY - (py - map.centerY()) / scale;
+        if (worldX < data[7] || worldX > data[9] || worldY < data[8] || worldY > data[10])
+            return false;
+        if (pinned && Math.hypot(px - x(pinX), py - y(pinY)) <= 10) clearPin();
+        else {
+            pinX = worldX;
+            pinY = worldY;
+            pinned = true;
+        }
+        return true;
+    }
     boolean contains(float x, float y) { return panel.contains(x, y); }
     void toggle() { expanded = !expanded; }
 
@@ -60,7 +81,7 @@ final class RoyaleMinimap {
         float left = expanded ? (width - size) / 2 : width - Math.max(16, insetRight + 6) - size;
         float top = expanded ? (height - size - 53) / 2 : Math.max(12, insetTop + 6);
         map.set(left, top, left + size, top + size);
-        panel.set(left - 3, top - 3, left + size + 3, map.bottom + (expanded ? 28 : 3));
+        panel.set(left - 3, top - 3, left + size + 3, map.bottom + (expanded ? 42 : 3));
     }
 
     private void load() {
@@ -173,6 +194,28 @@ final class RoyaleMinimap {
         }
     }
 
+    private void waypoint(Canvas c) {
+        if (!pinned) return;
+        float dx = x(pinX) - map.centerX(), dy = y(pinY) - map.centerY();
+        float radius = map.width() * .5f - 8;
+        float span = Math.max(Math.abs(dx), Math.abs(dy));
+        boolean offscreen = span > radius;
+        float k = offscreen ? radius / span : 1;
+        c.save();
+        c.translate(map.centerX() + dx*k, map.centerY() + dy*k);
+        path.rewind();
+        if (offscreen) {
+            c.rotate((float)Math.toDegrees(Math.atan2(dy, dx)));
+            path.moveTo(6, 0); path.lineTo(-5, -5); path.lineTo(-2, 0); path.lineTo(-5, 5);
+        } else {
+            path.moveTo(0, -6); path.lineTo(5, 0); path.lineTo(0, 6); path.lineTo(-5, 0);
+        }
+        path.close();
+        fill(PIN); c.drawPath(path, paint);
+        stroke(0xff331d31, 1.5f, false); c.drawPath(path, paint);
+        c.restore();
+    }
+
     private void player(Canvas c) {
         c.save();
         c.translate(x(data[3]), y(data[4]));
@@ -232,6 +275,7 @@ final class RoyaleMinimap {
             c.drawLine(x(data[18]), y(data[19]), x(data[20]), y(data[21]), paint);
         }
         places(c);
+        waypoint(c);
         player(c);
         text(c,"N",map.left+4,map.top+12,11,NEXT);
         c.restore();
@@ -253,6 +297,14 @@ final class RoyaleMinimap {
         vital(c, "HP", statusTop + 22, data[23], data[23] < .25f ? 0xffff795b : 0xff91df96);
         text(c,title,zoneLeft,statusTop+15,13,outside ? 0xffffa075 : NEXT);
         text(c,guide,zoneLeft,statusTop+30,12,outside ? 0xffffa075 : 0xffbadce2);
+        if (pinned) {
+            long metres = Math.round(Math.hypot(data[3]-pinX, data[4]-pinY) * unit);
+            String distance = "◆  Pin  " + metres + " m";
+            paint.setTextSize(12);
+            fill(0xdc17272e);
+            c.drawRoundRect(statusLeft,statusTop+40,statusLeft+paint.measureText(distance)+16,statusTop+59,4,4,paint);
+            text(c,distance,statusLeft+7,statusTop+54,12,PIN);
+        }
         if (expanded) {
             float left = map.left + 3, base = map.bottom+18;
             text(c,"▲ You",left,base,12,YOU);
@@ -260,6 +312,8 @@ final class RoyaleMinimap {
                 text(c,"─ Current edge",left+55,base,12,CURRENT);
                 text(c,"- - Next zone",left+166,base,12,NEXT);
             }
+            text(c,pinned ? "Hold pin to clear • Hold elsewhere to move" : "Hold to mark a destination • Tap to close",
+                    left,base+17,12,PIN);
         }
     }
 }

@@ -221,6 +221,34 @@ public final class TouchControls extends View implements SensorEventListener, In
     private final RoyaleMinimap royale;
     private int royaleSerial;
     private boolean royaleVisible;
+    private int mapFinger = -1;
+    private boolean mapHoldHandled;
+    private final Runnable holdMap = this::markHeldPoint;
+
+    private void markHeldPoint() {
+        float[] origin = toolbarFingers.get(mapFinger);
+        if (royaleVisible && origin != null && royale.mark(logical(origin[0]), logical(origin[1]))) {
+            mapHoldHandled = true;
+            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+            invalidate();
+        }
+    }
+
+    private void beginMapPress(int id, float px, float py) {
+        if (mapFinger != -1) return;
+        mapFinger = id;
+        mapHoldHandled = false;
+        toolbarFingers.put(id, new float[]{px, py, ROYALE_MAP});
+        if (royale.isExpanded())
+            postDelayed(holdMap, android.view.ViewConfiguration.getLongPressTimeout());
+    }
+
+    private void cancelMapPress() {
+        removeCallbacks(holdMap);
+        if (mapFinger != -1) toolbarFingers.remove(mapFinger);
+        mapFinger = -1;
+        mapHoldHandled = false;
+    }
     private boolean controllerConnected;
     private boolean touchscreen;
     private boolean deviceInputActive;
@@ -245,10 +273,11 @@ public final class TouchControls extends View implements SensorEventListener, In
             boolean visible = royale.data[0] != RoyaleMinimap.INACTIVE && (scene & SCENE_KNOWN) != 0
                 && (scene & SCENE_MENUS) == 0 && !editing && openDialogs == 0;
             if (visible != royaleVisible || (visible && nextSerial != royaleSerial)) {
-                if (!visible) royale.close();
+                if (!visible) { cancelMapPress(); royale.close(); }
                 royaleVisible = visible;
                 invalidate();
             }
+            if (royale.data[0] == RoyaleMinimap.INACTIVE) royale.clearPin();
             royaleSerial = nextSerial;
             int nextCommanderStatus = nativeCommanderStatus();
             if (commanderStatus != nextCommanderStatus) {
@@ -500,6 +529,7 @@ public final class TouchControls extends View implements SensorEventListener, In
         dragControl = -1;
         owners.clear();
         buttonTouches.clear();
+        cancelMapPress();
         toolbarFingers.clear();
         lookPointer = -1;
         stickFloating = false;
@@ -639,12 +669,18 @@ public final class TouchControls extends View implements SensorEventListener, In
         int action = event.getActionMasked();
         if (!showing && !editing && openDialogs == 0) {
             // A connected controller can hide the touch buttons while the map stays usable.
-            if (royaleVisible && (toolbarFingers.size() > 0 ||
+            if (royaleVisible && (mapFinger != -1 ||
                     action == MotionEvent.ACTION_DOWN && royale.contains(logical(event.getX()), logical(event.getY())))) {
-                int id = event.getPointerId(event.getActionIndex());
-                if (action == MotionEvent.ACTION_DOWN) toolbarFingers.put(id, new float[]{event.getX(), event.getY(), ROYALE_MAP});
-                if (action == MotionEvent.ACTION_UP) fingerUp(id, event.getX(), event.getY());
-                if (action == MotionEvent.ACTION_CANCEL) toolbarFingers.clear();
+                int index = event.getActionIndex(), id = event.getPointerId(index);
+                if (action == MotionEvent.ACTION_DOWN) beginMapPress(id,event.getX(index),event.getY(index));
+                if (action == MotionEvent.ACTION_MOVE) {
+                    int held = event.findPointerIndex(mapFinger);
+                    if (held >= 0 && movedPastSlop(toolbarFingers.get(mapFinger),event.getX(held),event.getY(held)))
+                        cancelMapPress();
+                }
+                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP)
+                    fingerUp(id,event.getX(index),event.getY(index));
+                if (action == MotionEvent.ACTION_CANCEL) cancelMapPress();
                 invalidate();
                 return true;
             }
@@ -705,7 +741,9 @@ public final class TouchControls extends View implements SensorEventListener, In
             floatStick(x, y);
             target = stick;
         }
-        if (target == TOOLBAR_OPTIONS || target == TOOLBAR_TOGGLE || target == ROYALE_MAP) {
+        if (target == ROYALE_MAP) {
+            beginMapPress(id,px,py);
+        } else if (target == TOOLBAR_OPTIONS || target == TOOLBAR_TOGGLE) {
             toolbarFingers.put(id, new float[] {px, py, target});
         } else if (target != NOTHING) {
             owners.put(id, target);
@@ -737,7 +775,11 @@ public final class TouchControls extends View implements SensorEventListener, In
         float[] toolbar = toolbarFingers.get(id);
         if (toolbar != null && movedPastSlop(toolbar, px, py)) {
             // a swipe that began on the toolbar aims; the item does not act
-            toolbarFingers.remove(id);
+            if (id == mapFinger) {
+                boolean consumed = royale.isExpanded();
+                cancelMapPress();
+                if (consumed) return;
+            } else toolbarFingers.remove(id);
             if (!hidden && lookPointer < 0)
                 startLook(id, toolbar[0], toolbar[1]);
         }
@@ -762,6 +804,13 @@ public final class TouchControls extends View implements SensorEventListener, In
 
     private void fingerUp(int id, float px, float py) {
         float[] toolbar = toolbarFingers.get(id);
+        if (toolbar != null && id == mapFinger) {
+            boolean tap = !mapHoldHandled && !movedPastSlop(toolbar,px,py) && royaleVisible &&
+                    royale.contains(logical(px),logical(py));
+            cancelMapPress();
+            if (tap) toolbarAction(ROYALE_MAP);
+            return;
+        }
         if (toolbar != null) {
             toolbarFingers.remove(id);
             int item = (int) toolbar[2];
